@@ -1,0 +1,15 @@
+{
+  "name": "lia-loot",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "LiaScript gamification plugin with a configurable highscore, time penalties, and trophy popup",
+  "scripts": {
+    "build": "parcel build src/index.ts --dist-dir dist --no-scope-hoist",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "parcel": "^2.16.4",
+    "typescript": "^5.8.3"
+  }
+}
