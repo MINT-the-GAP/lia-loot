@@ -1,0 +1,1293 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Loot Browser-Stresstest</title>
+  <style>
+    html, body { margin: 0; min-height: 100%; font-family: sans-serif; }
+    body { padding: 90px 24px 24px; }
+    button { min-width: 80px; min-height: 34px; }
+    #global-tools {
+      align-items: flex-start;
+      display: flex;
+      gap: 18px;
+      left: 20px;
+      position: fixed;
+      top: 16px;
+      z-index: 20;
+    }
+    #lia-tff-panel-v2, #lia-hl-panel {
+      background: white;
+      border: 1px solid #777;
+      min-height: 70px;
+      padding: 8px;
+      position: absolute;
+      top: 40px;
+      width: 190px;
+    }
+    #lia-hl-panel { left: 100px; }
+    .lia-annot-toolbar {
+      align-items: center;
+      border: 1px solid #777;
+      display: flex;
+      gap: 4px;
+      height: 40px;
+      width: 210px;
+    }
+    #lia-toc, #lia-support-menu {
+      border: 1px solid #aaa;
+      display: inline-block;
+      margin: 8px;
+      min-height: 70px;
+      min-width: 230px;
+      padding: 8px;
+      vertical-align: top;
+    }
+    .lia-support-menu__nav {
+      display: flex;
+      gap: 18px;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .lia-support-menu__item {
+      display: flex;
+      flex-direction: column;
+      min-width: 230px;
+    }
+    .lia-support-menu__submenu {
+      display: none;
+      flex-direction: column;
+      max-width: 30rem;
+      padding: 1.4rem;
+      position: relative;
+      width: max-content;
+    }
+    .lia-support-menu__submenu.active { display: flex; }
+    .lia-support-menu__submenu svg { height: 15rem; }
+    .flow > * + * { margin-block-start: 1em; }
+    .lia-slide__content {
+      border: 1px solid #bbb;
+      margin-top: 16px;
+      min-height: 330px;
+      padding: 20px;
+    }
+    .dynFlex {
+      border: 2px solid #3867d6;
+      display: flex;
+      gap: 16px;
+      margin-top: 18px;
+      min-height: 160px;
+      padding: 18px;
+      position: relative;
+    }
+    .markerquiz {
+      border: 2px solid #a55eea;
+      min-height: 80px;
+      padding: 18px;
+      position: relative;
+    }
+    #loot-stress-result {
+      background: #111;
+      color: #fff;
+      margin-top: 24px;
+      padding: 12px;
+      white-space: pre-wrap;
+    }
+  </style>
+  <script>
+    sessionStorage.clear()
+
+    window.__LOOT_STRESS_COURSE__ = [
+      "# Global stress",
+      "@achievements",
+      "@Ressourcen(0, 0, 10)",
+      "@Schatztruhe(boardmode; marker; annotation; anker)",
+      "@Diamanttruhe(boardmode; marker; annotation; anker)",
+      "@Energiekiste(boardmode; marker; annotation; menu; anker)",
+      "@Energiekiste(toc; menu; mode)",
+      "@LootSchloss_(@uid,boardmodefontbutton,rot)",
+      "@LootSchloss_(@uid,textmarkerbutton,gelb)",
+      "@LootSchloss_(@uid,annotationsbar,orange; anker)",
+      "@Portal(2)",
+      "@Schloss(portal, gruen)",
+      "# Nested local stress",
+      "@Schatztruhe(dynflex; markerquiz; anker; 0.2s)",
+      "@Diamanttruhe(anker)",
+      "@Schloss(dynflex, lila)",
+      "@Schloss(markerquiz, blau)",
+      "# Secret portal stress",
+      "@Geheimfolie",
+    ].join("\n")
+
+    window.LIA = {
+      defaultCourseURL: "data:text/plain,loot-browser-stress",
+      fetch: async function () {
+        return new Response(window.__LOOT_STRESS_COURSE__, { status: 200 })
+      },
+    }
+    window.__LIA_TFF_REG_V2__ = {}
+    window.__LIA_TEXTMARKER_REG_V4__ = {}
+    window.__LIA_ANNOTATION__ = {}
+    window.__LIA_DYNFLEX_V1_0__ = {}
+  </script>
+</head>
+<body>
+  <div id="global-tools">
+    <div id="board-tool">
+      <button id="lia-tff-btn-v2" type="button" aria-expanded="false">Schrift</button>
+      <div id="lia-tff-panel-v2" hidden></div>
+    </div>
+    <div id="marker-tool">
+      <button id="lia-hl-btn" type="button" aria-expanded="false">Marker</button>
+      <div id="lia-hl-panel" hidden><div class="body"></div></div>
+    </div>
+    <div class="lia-annot-toolbar">
+      <button data-act="toggle" type="button" aria-pressed="true" data-active="1">Auge</button>
+      <button type="button">Zeichnen</button>
+    </div>
+  </div>
+
+  <nav id="lia-toc">
+    <div class="lia-toc__content">
+      <a class="lia-toc__link" id="focusedToc" href="#1">Global stress</a>
+      <a class="lia-toc__link" href="#2">Nested local stress</a>
+      <a class="lia-toc__link" href="#3">Secret portal stress</a>
+    </div>
+  </nav>
+  <nav id="lia-support-menu" class="lia-support-menu">
+    <div class="lia-support-menu__collapse">
+      <ul class="nav lia-support-menu__nav flow" role="menubar">
+        <li class="nav__item lia-support-menu__item lia-support-menu__item--mode"
+          role="menuitem">
+          <button id="lia-mode-menu-button" type="button"
+            data-group-id="mode" aria-expanded="true">Darstellung</button>
+          <div class="lia-support-menu__submenu flow active"
+            data-group-id="mode" role="radiogroup">
+            <button type="button">Lehrbuch</button>
+            <button type="button">Präsentation</button>
+            <button type="button">Folien</button>
+          </div>
+        </li>
+        <li class="nav__item lia-support-menu__item lia-support-menu__item--settings"
+          role="menuitem">
+          <button type="button" data-group-id="settings"
+            aria-expanded="true">Einstellungen</button>
+          <div class="lia-support-menu__submenu flow active"
+            data-group-id="settings" role="radiogroup">
+            <button type="button">Hellmodus</button>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="lia-slide__container">
+    <main class="lia-slide__content" data-test-slide="0">
+      <h1>Global stress</h1>
+      <lia-loot-key data-key-id="0_101" data-color="red; anker"></lia-loot-key>
+      <lia-loot-key data-key-id="0_102" data-color="yellow; anker"></lia-loot-key>
+      <lia-loot-key data-key-id="0_103" data-color="orange; anker"></lia-loot-key>
+      <lia-loot-key data-key-id="0_104" data-color="green; anker"></lia-loot-key>
+
+      <lia-loot-chest data-chest-id="0_201"
+        data-placement="boardmode; marker; annotation; anker"
+        data-reward="gold"></lia-loot-chest>
+      <lia-loot-chest data-chest-id="0_202"
+        data-placement="boardmode; marker; annotation; anker"
+        data-reward="diamonds"></lia-loot-chest>
+      <lia-loot-chest data-chest-id="0_203"
+        data-placement="toc; menu; mode"
+        data-reward="energy"></lia-loot-chest>
+      <lia-loot-chest data-chest-id="0_204"
+        data-placement="boardmode; marker; annotation; menu; anker"
+        data-reward="energy"></lia-loot-chest>
+
+      <lia-loot-lock data-lock-id="0_301"
+        data-target="boardmodefontbutton" data-color="red"></lia-loot-lock>
+      <lia-loot-lock data-lock-id="0_302"
+        data-target="textmarkerbutton" data-color="yellow"></lia-loot-lock>
+      <lia-loot-lock data-lock-id="0_303"
+        data-target="annotationsbar"
+        data-color="orange; anker"></lia-loot-lock>
+
+      <lia-loot-slide-portal data-portal-id="0_401"
+        data-options="2"></lia-loot-slide-portal>
+      <lia-loot-lock data-lock-id="0_304"
+        data-target="portal" data-color="green"></lia-loot-lock>
+      <lia-loot-slide-portal data-portal-id="0_402"
+        data-options="2"
+        data-default-mode="one-way"></lia-loot-slide-portal>
+      <lia-loot-slide-portal data-portal-id="0_403"
+        data-options="3"></lia-loot-slide-portal>
+      <lia-loot-slide-portal data-portal-id="0_404"
+        data-options="99"></lia-loot-slide-portal>
+    </main>
+
+    <main class="lia-slide__content" data-test-slide="1" hidden>
+      <h1>Nested local stress</h1>
+      <lia-loot-key data-key-id="1_101" data-color="purple; anker"></lia-loot-key>
+      <lia-loot-key data-key-id="1_102" data-color="blue; anker"></lia-loot-key>
+
+      <section class="dynFlex" id="stress-dynflex">
+        <div class="markerquiz" id="stress-markerquiz">
+          <span class="hlq-proxy">A</span>
+          <span class="hlq-proxy">B</span>
+          <lia-loot-slide-portal data-portal-id="1_401"
+            data-options="1"></lia-loot-slide-portal>
+        </div>
+      </section>
+
+      <lia-loot-chest data-chest-id="1_201"
+        data-placement="dynflex; markerquiz; anker; 0.2s"
+        data-reward="gold"></lia-loot-chest>
+      <lia-loot-chest data-chest-id="1_202"
+        data-placement="anker"
+        data-reward="diamonds"></lia-loot-chest>
+
+      <lia-loot-lock data-lock-id="1_301"
+        data-target="dynflex" data-color="purple"></lia-loot-lock>
+      <lia-loot-lock data-lock-id="1_302"
+        data-target="markerquiz" data-color="blue"></lia-loot-lock>
+    </main>
+
+    <main class="lia-slide__content" data-test-slide="2" hidden>
+      <h1>Secret portal stress</h1>
+      <lia-loot-secret-slide data-secret-id="2_001"></lia-loot-secret-slide>
+      <p>Nur ein freigegebenes Portal darf diese Geheimfolie öffnen.</p>
+    </main>
+  </div>
+
+  <pre id="loot-stress-result" data-status="running">Browser-Stresstest läuft …</pre>
+
+  <script>
+    const boardButton = document.getElementById("lia-tff-btn-v2")
+    const boardPanel = document.getElementById("lia-tff-panel-v2")
+    const markerButton = document.getElementById("lia-hl-btn")
+    const markerPanel = document.getElementById("lia-hl-panel")
+    const annotationToolbar = document.querySelector(".lia-annot-toolbar")
+    const annotationToggle = annotationToolbar.querySelector("button[data-act='toggle']")
+    const firstSlide = document.querySelector("[data-test-slide='0']")
+    const secondSlide = document.querySelector("[data-test-slide='1']")
+    const thirdSlide = document.querySelector("[data-test-slide='2']")
+    const mockSlides = [firstSlide, secondSlide, thirdSlide]
+
+    function syncMockSlideFromHash() {
+      const match = /^#([1-3])$/.exec(location.hash)
+      const activeIndex = match ? Number(match[1]) - 1 : 0
+      mockSlides.forEach(function (slide, index) {
+        slide.hidden = index !== activeIndex
+      })
+    }
+
+    window.addEventListener("hashchange", syncMockSlideFromHash)
+    syncMockSlideFromHash()
+
+    boardButton.addEventListener("click", function () {
+      if (boardButton.inert) return
+      const open = boardPanel.hidden
+      boardPanel.hidden = !open
+      boardButton.setAttribute("aria-expanded", String(open))
+    })
+    markerButton.addEventListener("click", function () {
+      if (markerButton.inert) return
+      const open = markerPanel.hidden
+      markerPanel.hidden = !open
+      markerButton.setAttribute("aria-expanded", String(open))
+    })
+    annotationToggle.addEventListener("click", function () {
+      if (annotationToolbar.inert) return
+      const active = annotationToggle.getAttribute("data-active") === "1"
+      annotationToggle.setAttribute("data-active", active ? "0" : "1")
+      annotationToggle.setAttribute("aria-pressed", active ? "false" : "true")
+    })
+  </script>
+  <script src="../dist/index.js"></script>
+  <script>
+    ;(async function runBrowserStress() {
+      const resultNode = document.getElementById("loot-stress-result")
+      const assertions = []
+      const runtimeErrors = []
+      window.addEventListener("error", function (event) {
+        runtimeErrors.push(String(event.error || event.message))
+      })
+      window.addEventListener("unhandledrejection", function (event) {
+        runtimeErrors.push(String(event.reason))
+      })
+
+      function sleep(milliseconds) {
+        return new Promise(function (resolve) {
+          setTimeout(resolve, milliseconds)
+        })
+      }
+
+      function settle() {
+        return new Promise(function (resolve) {
+          requestAnimationFrame(function () {
+            requestAnimationFrame(resolve)
+          })
+        })
+      }
+
+      function check(condition, message, details) {
+        if (!condition) {
+          const error = new Error(message)
+          error.details = details
+          throw error
+        }
+        assertions.push(message)
+      }
+
+      async function waitFor(predicate, message, timeout) {
+        const deadline = performance.now() + (timeout || 5000)
+        let lastError = null
+        while (performance.now() < deadline) {
+          try {
+            const value = predicate()
+            if (value) return value
+          } catch (error) {
+            lastError = error
+          }
+          await sleep(20)
+        }
+        const error = new Error("Timeout: " + message)
+        error.cause = lastError
+        error.details = {
+          keyButtons: [
+            ...document.querySelectorAll("[data-loot-key-button]"),
+          ].map(function (button) {
+            return {
+              color: button.dataset.lootKeyColor,
+              id: button.dataset.lootKeyButton,
+            }
+          }),
+          keyHosts: [
+            ...document.querySelectorAll("lia-loot-key"),
+          ].map(function (host) {
+            return {
+              color: host.getAttribute("data-color"),
+              id: host.getAttribute("data-key-id"),
+              children: host.childElementCount,
+            }
+          }),
+          hash: location.hash,
+        }
+        throw error
+      }
+
+      function storedState(property) {
+        for (let index = 0; index < sessionStorage.length; index += 1) {
+          const raw = sessionStorage.getItem(sessionStorage.key(index))
+          try {
+            const value = JSON.parse(raw)
+            if (value && Object.prototype.hasOwnProperty.call(value, property)) {
+              return value
+            }
+          } catch (_) {}
+        }
+        return null
+      }
+
+      function lockButton(target) {
+        return document.querySelector(
+          "[data-loot-lock-button][data-loot-lock-target='" + target + "']",
+        )
+      }
+
+      function portalButton(id) {
+        return document.querySelector(
+          "[data-loot-slide-portal-button='slide-portal:" + id + "']",
+        )
+      }
+
+      function returnPortalButton() {
+        return document.querySelector("[data-loot-slide-portal-return-button]")
+      }
+
+      async function waitForMockSlide(number, message) {
+        const activeIndex = number - 1
+        await waitFor(function () {
+          return (
+            location.hash === "#" + number &&
+            mockSlides.every(function (slide, index) {
+              return slide.hidden === (index !== activeIndex)
+            })
+          )
+        }, message)
+        await settle()
+      }
+
+      function achievementIds() {
+        const state = storedState("unlocked")
+        return state ? state.unlocked : []
+      }
+
+      function assertHorizontalTray(container, expectedCount, label) {
+        const trays = [
+          ...container.querySelectorAll(":scope > [data-loot-chest-tray]"),
+        ]
+        check(trays.length === 1, label + " besitzt genau eine Truhenleiste")
+        const tray = trays[0]
+        const portals = [
+          ...tray.querySelectorAll(":scope > [data-loot-chest-portal]"),
+        ]
+        check(
+          portals.length === expectedCount,
+          label + " bündelt alle Truhen in derselben Leiste",
+        )
+
+        const trayRect = tray.getBoundingClientRect()
+        const portalRects = portals.map(function (portal) {
+          return portal.getBoundingClientRect()
+        })
+        const buttonRects = portals.map(function (portal) {
+          return portal.querySelector("[data-loot-chest-button]")
+            .getBoundingClientRect()
+        })
+        const svgRects = portals.map(function (portal) {
+          return portal.querySelector(".loot-treasure-chest-graphic")
+            .getBoundingClientRect()
+        })
+        check(
+          portalRects.every(function (rect) {
+            return (
+              Math.abs(rect.width - 44) < 1 &&
+              Math.abs(rect.height - 44) < 1 &&
+              rect.left >= trayRect.left - 1 &&
+              rect.right <= trayRect.right + 1
+            )
+          }),
+          label + " hält jeden Portalplatz kompakt bei 44 × 44 px",
+          portalRects,
+        )
+        check(
+          buttonRects.every(function (rect) {
+            return Math.abs(rect.width - 44) < 1 && Math.abs(rect.height - 44) < 1
+          }),
+          label + " überschreibt die Truhengröße nicht erneut",
+          buttonRects,
+        )
+        check(
+          svgRects.every(function (rect, index) {
+            const buttonRect = buttonRects[index]
+            return (
+              Math.abs(rect.width - 44) < 1 &&
+              Math.abs(rect.height - 44) < 1 &&
+              rect.top >= buttonRect.top - 1 &&
+              rect.bottom <= buttonRect.bottom + 1
+            )
+          }),
+          label + " schützt die Truhengrafik vor LiaScripts 15-rem-SVG-Regel",
+          svgRects,
+        )
+        check(
+          portalRects.every(function (rect) {
+            return Math.abs(rect.top - portalRects[0].top) < 1
+          }),
+          label + " ordnet mehrere Truhen in genau einer Zeile an",
+          portalRects,
+        )
+        const sorted = portalRects.slice().sort(function (left, right) {
+          return left.left - right.left
+        })
+        check(
+          sorted.every(function (rect, index) {
+            return index === 0 || sorted[index - 1].right <= rect.left + 0.5
+          }),
+          label + " lässt die Truhen nicht überlappen",
+          sorted,
+        )
+        check(
+          tray.scrollHeight <= tray.clientHeight + 1,
+          label + " wächst nicht als vertikaler Truhenstapel",
+          {
+            clientHeight: tray.clientHeight,
+            scrollHeight: tray.scrollHeight,
+          },
+        )
+      }
+
+      async function unlock(target) {
+        const button = await waitFor(
+          function () { return lockButton(target) },
+          "Schloss " + target + " fehlt",
+        )
+        button.click()
+        await waitFor(
+          function () { return !lockButton(target) },
+          "Schloss " + target + " wurde nicht entfernt",
+          2000,
+        )
+        await settle()
+      }
+
+      async function collectVisibleKeys(expectedCount) {
+        const buttons = await waitFor(function () {
+          const found = [
+            ...document.querySelectorAll("[data-loot-key-button]"),
+          ]
+          return found.length === expectedCount ? found : null
+        }, expectedCount + " Schlüssel fehlen")
+        buttons.forEach(function (button) { button.click() })
+        await waitFor(function () {
+          const state = storedState("collectedKeys")
+          return state && state.collectedKeys.length >= expectedCount
+        }, "Schlüssel wurden nicht gespeichert")
+        await settle()
+      }
+
+      async function collectVisibleKey(color, expectedTotal) {
+        const button = await waitFor(function () {
+          return document.querySelector(
+            "[data-loot-key-button][data-loot-key-color='" + color + "']",
+          )
+        }, "Der " + color + "e Portalschlüssel fehlt")
+        button.click()
+        await waitFor(function () {
+          const state = storedState("collectedKeys")
+          return state && state.collectedKeys.length === expectedTotal
+        }, "Der Portalschlüssel wurde nicht gespeichert")
+        await settle()
+      }
+
+      try {
+        await waitFor(
+          function () { return window.__LIA_LOOT_HIGHSCORE__ },
+          "Loot-API wurde nicht gebootet",
+        )
+        const resources = await waitFor(function () {
+          const state = storedState("collectedChests")
+          return state && state.initialEnergy === 10 ? state : null
+        }, "Ressourcen wurden nicht aus der Kursquelle konfiguriert")
+        check(
+          resources.gold === 0 && resources.diamonds === 0 && resources.energy === 10,
+          "Ressourcen starten mit 0 Gold, 0 Diamanten und 10 Energie",
+          resources,
+        )
+
+        location.hash = "#1"
+        await waitForMockSlide(
+          1,
+          "Der Mock-Renderer aktiviert initial nicht exakt Folie 1",
+        )
+        await waitFor(function () {
+          const secretLink = document.querySelector("#lia-toc a[href='#3']")
+          return (
+            secretLink &&
+            secretLink.dataset.lootSecretSection === "2" &&
+            !document.documentElement.classList.contains(
+              "loot-secret-slide-discovering",
+            )
+          )
+        }, "Die dritte Mock-Folie wurde nicht als @Geheimfolie erkannt")
+
+        const portalButtons = await waitFor(function () {
+          const buttons = {
+            invalid: portalButton("0_404"),
+            nested: portalButton("1_401"),
+            oneWay: portalButton("0_402"),
+            secret: portalButton("0_403"),
+            twoWay: portalButton("0_401"),
+          }
+          return Object.values(buttons).every(Boolean) ? buttons : null
+        }, "Die fünf Portalgegenstände wurden nicht aufgebaut")
+
+        check(
+          portalButtons.twoWay.dataset.lootSlidePortalMode === "two-way" &&
+          portalButtons.twoWay.dataset.lootSlidePortalTarget === "2" &&
+          !portalButtons.twoWay.disabled,
+          "Das Standardportal ist als gültiges Zweiwegportal zu Folie 2 markiert",
+        )
+        check(
+          portalButtons.oneWay.dataset.lootSlidePortalMode === "one-way" &&
+          portalButtons.oneWay.dataset.lootSlidePortalTarget === "2" &&
+          !portalButtons.oneWay.disabled,
+          "data-default-mode erzeugt ein bedienbares Einwegportal zu Folie 2",
+        )
+        check(
+          portalButtons.secret.dataset.lootSlidePortalMode === "two-way" &&
+          portalButtons.secret.dataset.lootSlidePortalTarget === "3" &&
+          portalButtons.nested.dataset.lootSlidePortalMode === "two-way" &&
+          portalButtons.nested.dataset.lootSlidePortalTarget === "1",
+          "Geheimfolien- und verschachteltes Portal behalten Modus und Ziel",
+        )
+        check(
+          portalButtons.invalid.disabled &&
+          portalButtons.invalid.classList.contains("loot-slide-portal--broken"),
+          "Ein Portal zur fehlenden Folie 99 bleibt sichtbar, defekt und deaktiviert",
+        )
+        check(
+          /Zweiwegportal.*Folie 2/i.test(
+            portalButtons.twoWay.getAttribute("aria-label") || "",
+          ) &&
+          /Einwegportal.*Folie 2/i.test(
+            portalButtons.oneWay.getAttribute("aria-label") || "",
+          ) &&
+          /Defektes Portal.*99/i.test(
+            portalButtons.invalid.getAttribute("aria-label") || "",
+          ),
+          "Portaltyp, Ziel und Fehler sind über aria-label zugänglich",
+        )
+
+        const invalidDescription = document.getElementById(
+          portalButtons.invalid.getAttribute("aria-describedby") || "",
+        )
+        check(
+          invalidDescription &&
+            /Defektes Portal.*99/i.test(invalidDescription.textContent || "") &&
+            invalidDescription.getClientRects().length === 1,
+          "Der Fehlergrund des deaktivierten Portals bleibt sichtbar und per aria-describedby erreichbar",
+        )
+
+        const portalLock = await waitFor(function () {
+          return lockButton("portal")
+        }, "Das grüne Portalschloss wurde nicht aufgebaut")
+        check(
+          portalButtons.twoWay.inert &&
+            portalButtons.twoWay.getAttribute("tabindex") === "-1" &&
+            !portalButtons.oneWay.inert &&
+            !portalButtons.secret.inert,
+          "Das Portalschloss sperrt ausschließlich das unmittelbar vorherige Portal",
+        )
+        portalButtons.twoWay.scrollIntoView({ block: "center" })
+        await settle()
+        await waitFor(function () {
+          return !portalLock.hidden && portalLock.getClientRects().length === 1
+        }, "Das Portalschloss erscheint nicht beim sichtbaren Portal")
+        const lockedPortalRect = portalButtons.twoWay.getBoundingClientRect()
+        const portalLockRect = portalLock.getBoundingClientRect()
+        const portalLockStyle = getComputedStyle(portalLock)
+        check(
+          lockedPortalRect.width > 0 &&
+            lockedPortalRect.height > 0 &&
+            Math.abs(lockedPortalRect.left - portalLockRect.left) < 1 &&
+            Math.abs(lockedPortalRect.top - portalLockRect.top) < 1 &&
+            Math.abs(lockedPortalRect.width - portalLockRect.width) < 1 &&
+            Math.abs(lockedPortalRect.height - portalLockRect.height) < 1,
+          "Das Portalschloss deckt die sichtbare Portalgrafik exakt ab",
+          {
+            lockClass: portalLock.className,
+            lockComputedInset: portalLockStyle.inset,
+            lockComputedPosition: portalLockStyle.position,
+            lockInlineStyle: portalLock.getAttribute("style"),
+            lockedPortalRect,
+            portalLockRect,
+          },
+        )
+        const lockedPortalCenter = document.elementFromPoint(
+          lockedPortalRect.left + lockedPortalRect.width / 2,
+          lockedPortalRect.top + lockedPortalRect.height / 2,
+        )
+        check(
+          lockedPortalCenter &&
+            lockedPortalCenter.closest("[data-loot-lock-button]") === portalLock &&
+            getComputedStyle(portalButtons.twoWay).animationName === "none",
+          "Das Schloss liegt anklickbar über dem stillstehenden Portal",
+        )
+
+        portalButtons.twoWay.click()
+        await sleep(50)
+        check(
+          location.hash === "#1" &&
+            document.querySelectorAll(
+              "[data-loot-slide-portal-return]",
+            ).length === 0,
+          "Ein Klick auf das abgeschlossene Portal löst weder Sprung noch Rückweg aus",
+        )
+        portalLock.click()
+        await waitFor(function () {
+          return portalLock.classList.contains(
+            "loot-object-lock-button--missing",
+          )
+        }, "Das Portalschloss meldet den fehlenden grünen Schlüssel nicht")
+        const portalInventoryBeforeKey = storedState("unlockedLocks")
+        check(
+          !portalInventoryBeforeKey ||
+            portalInventoryBeforeKey.unlockedLocks.length === 0,
+          "Das Portal bleibt ohne passenden Schlüssel abgeschlossen",
+        )
+
+        await collectVisibleKey("green", 1)
+        await unlock("portal")
+        check(
+          !portalButtons.twoWay.inert &&
+            portalButtons.twoWay.getAttribute("tabindex") !== "-1",
+          "Das Zweiwegportal ist nach dem grünen Schlüssel wieder bedienbar",
+        )
+        const unlockedPortalRect = portalButtons.twoWay.getBoundingClientRect()
+        const unlockedPortalStack = document.elementsFromPoint(
+          unlockedPortalRect.left + unlockedPortalRect.width / 2,
+          unlockedPortalRect.top + unlockedPortalRect.height / 2,
+        )
+        check(
+          unlockedPortalStack.some(function (element) {
+            return (
+              element.closest("[data-loot-slide-portal-button]") ===
+              portalButtons.twoWay
+            )
+          }) &&
+            getComputedStyle(portalButtons.twoWay).pointerEvents !== "none",
+          "Nach dem Öffnen liegt die Portalgrafik wieder bedienbar im Elementstapel",
+        )
+        check(
+          !achievementIds().includes("all-locks-opened"),
+          "Ein geöffnetes Portalschloss löst den Gesamterfolg nicht vorzeitig aus",
+        )
+
+        const portalGraphics = [
+          ...firstSlide.querySelectorAll(".loot-slide-portal__graphic"),
+        ]
+        const portalGraphicRects = portalGraphics.map(function (graphic) {
+          return graphic.getBoundingClientRect()
+        })
+        check(
+          portalGraphics.length === 4 &&
+          portalGraphics.every(function (graphic) {
+            return graphic.getAttribute("viewBox") === "0 0 64 72"
+          }),
+          "Alle vier Portalgegenstände der ersten Folie rendern die Pixelgrafik",
+        )
+        check(
+          portalGraphicRects.every(function (rect) {
+            return (
+              rect.width >= 74 &&
+              rect.width <= 81 &&
+              rect.height >= 82 &&
+              rect.height <= 89
+            )
+          }),
+          "Portal-SVGs bleiben trotz globaler LiaScript-Regeln kompakt bei etwa 5 × 5,5 rem",
+          portalGraphicRects,
+        )
+
+        portalButtons.twoWay.click()
+        await waitForMockSlide(
+          2,
+          "Das Zweiwegportal navigiert nicht von Folie 1 zu Folie 2",
+        )
+        let returnButton = await waitFor(function () {
+          return (
+            document.querySelectorAll(
+              "[data-loot-slide-portal-return]",
+            ).length === 1 &&
+            secondSlide.querySelector("[data-loot-slide-portal-return-button]")
+          )
+        }, "Auf Folie 2 erscheint nicht genau ein Rückportal")
+        check(
+          /Folie 1/i.test(returnButton.getAttribute("aria-label") || ""),
+          "Das Rückportal benennt Folie 1 als zugängliches Ziel",
+        )
+        returnButton.click()
+        await waitForMockSlide(
+          1,
+          "Das Rückportal navigiert nicht von Folie 2 zu Folie 1",
+        )
+        await waitFor(function () {
+          return document.querySelectorAll(
+            "[data-loot-slide-portal-return]",
+          ).length === 0
+        }, "Das benutzte Rückportal wurde nicht entfernt")
+
+        for (let journey = 0; journey < 3; journey += 1) {
+          portalButton("0_401").click()
+          await waitForMockSlide(
+            2,
+            "Zweiweg-Pendelfahrt " + (journey + 1) + " erreicht Folie 2 nicht",
+          )
+          returnButton = await waitFor(function () {
+            const placements = document.querySelectorAll(
+              "[data-loot-slide-portal-return]",
+            )
+            return placements.length === 1 ? returnPortalButton() : null
+          }, "Zweiweg-Pendelfahrt erzeugt nicht exakt ein Rückportal")
+          returnButton.click()
+          await waitForMockSlide(
+            1,
+            "Zweiweg-Pendelfahrt " + (journey + 1) + " kehrt nicht zurück",
+          )
+          await waitFor(function () {
+            return document.querySelectorAll(
+              "[data-loot-slide-portal-return]",
+            ).length === 0
+          }, "Zweiweg-Pendelfahrt hinterlässt ein Portalduplikat")
+        }
+        check(
+          document.querySelectorAll("[data-loot-slide-portal-return]").length === 0,
+          "Dreimaliges Pendeln erzeugt keine Rückportalduplikate",
+        )
+
+        portalButton("0_402").click()
+        await waitForMockSlide(
+          2,
+          "Das Einwegportal navigiert nicht von Folie 1 zu Folie 2",
+        )
+        await sleep(50)
+        check(
+          document.querySelectorAll("[data-loot-slide-portal-return]").length === 0,
+          "Das Einwegportal erzeugt auf Folie 2 keinen Rückweg",
+        )
+
+        portalButton("1_401").click()
+        await sleep(50)
+        check(
+          location.hash === "#2" &&
+            !secondSlide.hidden &&
+            document.querySelectorAll(
+              "[data-loot-slide-portal-return]",
+            ).length === 0,
+          "Das verschachtelte Portal bleibt innerhalb des gesperrten Markerquiz inaktiv",
+        )
+
+        location.hash = "#1"
+        await waitForMockSlide(
+          1,
+          "Der Portaltest kehrt vor dem Geheimportal nicht zu Folie 1 zurück",
+        )
+        portalButton("0_403").click()
+        await waitForMockSlide(
+          3,
+          "Das Portal zur Geheimfolie navigiert nicht zu Folie 3",
+        )
+        await waitFor(function () {
+          return (
+            location.hash === "#3" &&
+            !thirdSlide.hidden &&
+            document.querySelectorAll(
+              "[data-loot-slide-portal-return]",
+            ).length === 1 &&
+            !document.documentElement.classList.contains(
+              "loot-secret-slide-blocked",
+            )
+          )
+        }, "Die Portalfreigabe hält die Geheimfolie offen und erzeugt den Rückweg")
+        returnButton = thirdSlide.querySelector(
+          "[data-loot-slide-portal-return-button]",
+        )
+        check(
+          Boolean(returnButton),
+          "Das Rückportal der Geheimfolie liegt innerhalb der dritten Folie",
+        )
+        returnButton.click()
+        await waitForMockSlide(
+          1,
+          "Das Rückportal der Geheimfolie kehrt nicht zu Folie 1 zurück",
+        )
+        await waitFor(function () {
+          return document.querySelectorAll(
+            "[data-loot-slide-portal-return]",
+          ).length === 0
+        }, "Der Rückweg von der Geheimfolie wird nicht sauber entfernt")
+        check(
+          !firstSlide.hidden && secondSlide.hidden && thirdSlide.hidden,
+          "Die Portalprüfungen hinterlassen den Browser sicher auf Folie 1",
+        )
+
+        await waitFor(function () {
+          return document.querySelectorAll("[data-loot-lock-button]").length === 3
+        }, "Die drei globalen Schlösser wurden nicht aufgebaut")
+        check(boardButton.inert, "Der Board-Mode-Button ist initial inert")
+        check(markerButton.inert, "Der Textmarkerbutton ist initial inert")
+        check(annotationToolbar.inert, "Die Annotationsleiste ist initial inert")
+
+        await waitFor(function () {
+          return (
+            boardPanel.querySelectorAll("[data-loot-chest-portal]").length === 3 &&
+            markerPanel.querySelectorAll("[data-loot-chest-portal]").length === 3 &&
+            document.querySelectorAll(
+              "[data-loot-chest-portal][data-loot-chest-location='toc']",
+            ).length === 1 &&
+            document.querySelectorAll(
+              "[data-loot-chest-portal][data-loot-chest-location='menu']",
+            ).length === 2 &&
+            document.querySelectorAll(
+              "[data-loot-chest-portal][data-loot-chest-location='mode']",
+            ).length === 1
+          )
+        }, "Mehrfachportale wurden nicht dedupliziert aufgebaut")
+        check(
+          document.querySelectorAll(
+            "[data-loot-chest-template-target='annotation']",
+          ).length === 0,
+          "Bei sichtbaren Annotationen existiert keine Annotationstruhe",
+        )
+
+        firstSlide.querySelectorAll("lia-loot-lock").forEach(function (host) {
+          host.remove()
+        })
+        await settle()
+        check(
+          document.querySelectorAll(
+            "[data-loot-lock-button][data-loot-lock-target='boardmode']",
+          ).length === 1 &&
+          document.querySelectorAll(
+            "[data-loot-lock-button][data-loot-lock-target='marker']",
+          ).length === 1,
+          "Unverankerte globale DOM-Schlösser überstehen das Entfernen ihrer Makrohosts",
+        )
+
+        firstSlide.hidden = true
+        secondSlide.hidden = false
+        location.hash = "#2"
+        await waitFor(function () {
+          return (
+            lockButton("boardmode") &&
+            lockButton("marker") &&
+            !lockButton("annotation")
+          )
+        }, "Globale und verankerte Schlösser reagieren nicht korrekt auf Folienwechsel")
+        check(
+          boardButton.inert && markerButton.inert,
+          "Board- und Markerschloss bleiben ohne anker auf der zweiten Folie aktiv",
+        )
+        check(
+          !annotationToolbar.inert,
+          "Das Annotationsschloss verschwindet mit anker außerhalb seiner Quellfolie",
+        )
+
+        secondSlide.hidden = true
+        firstSlide.hidden = false
+        location.hash = "#1"
+        await waitFor(function () {
+          return (
+            lockButton("boardmode") &&
+            lockButton("marker") &&
+            lockButton("annotation")
+          )
+        }, "Das verankerte Schloss kehrt auf seiner Quellfolie nicht zurück")
+        check(
+          annotationToolbar.inert,
+          "Das Annotationsschloss wird auf seiner Quellfolie wiederhergestellt",
+        )
+
+        const missingBoardLock = lockButton("boardmode")
+        missingBoardLock.click()
+        await waitFor(
+          function () {
+            return missingBoardLock.classList.contains(
+              "loot-object-lock-button--missing",
+            )
+          },
+          "Das Schloss meldet den fehlenden Schlüssel nicht",
+        )
+        const inventoryBeforeKeys = storedState("unlockedLocks")
+        check(
+          inventoryBeforeKeys &&
+            inventoryBeforeKeys.unlockedLocks.length === 1,
+          "Ein Schloss ohne Schlüssel bleibt geschlossen und verändert nur den bereits geöffneten Portal-Lock nicht",
+        )
+
+        await collectVisibleKeys(3)
+        await waitFor(function () {
+          const state = storedState("collectedKeys")
+          return state && state.collectedKeys.length === 4
+        }, "Portalschlüssel und drei globale Schlüssel fehlen im Inventar")
+
+        await unlock("boardmode")
+        check(!boardButton.inert, "Board-Mode wird nach dem roten Schlüssel bedienbar")
+        check(
+          !achievementIds().includes("all-locks-opened"),
+          "Der Gesamterfolg erscheint nicht nach dem ersten Schloss",
+        )
+
+        await unlock("marker")
+        check(!markerButton.inert, "Der Textmarker wird nach Gelb bedienbar")
+        check(
+          !achievementIds().includes("all-locks-opened"),
+          "Der Gesamterfolg erscheint nicht nach zwei globalen Schlössern",
+        )
+
+        await unlock("annotation")
+        check(
+          !annotationToolbar.inert,
+          "Die Annotationsleiste wird nach Orange bedienbar",
+        )
+        check(
+          !achievementIds().includes("all-locks-opened"),
+          "Verborgene lokale Schlösser verhindern den verfrühten Gesamterfolg",
+        )
+
+        boardButton.click()
+        markerButton.click()
+        annotationToggle.click()
+        await waitFor(function () {
+          return document.querySelectorAll(
+            "[data-loot-chest-template-target='annotation']",
+          ).length === 3
+        }, "Die drei Annotationstruhen erscheinen nicht nach dem Ausblenden")
+
+        const markerBody = markerPanel.querySelector(":scope > .body")
+        const settingsSubmenu = document.querySelector(
+          "#lia-support-menu .lia-support-menu__item--settings " +
+            ".lia-support-menu__submenu",
+        )
+        const modeSubmenu = document.querySelector(
+          "#lia-support-menu .lia-support-menu__item--mode " +
+            ".lia-support-menu__submenu",
+        )
+        assertHorizontalTray(boardPanel, 3, "Das Schriftgrößenmenü")
+        assertHorizontalTray(markerBody, 3, "Das Textmarkermenü")
+        assertHorizontalTray(settingsSubmenu, 2, "Das Einstellungsmenü")
+        assertHorizontalTray(modeSubmenu, 1, "Das Darstellungsmenü")
+        const annotationPortals = [
+          ...document.querySelectorAll(
+            "[data-loot-chest-template-target='annotation']",
+          ),
+        ]
+        const toolbarRect = annotationToolbar.getBoundingClientRect()
+        check(
+          annotationPortals.every(function (portal) {
+            const rect = portal.getBoundingClientRect()
+            return (
+              portal.dataset.lootChestTemplatePosition === "below" &&
+              Math.abs(rect.top - (toolbarRect.bottom + 8)) < 1
+            )
+          }),
+          "Alle Annotationstruhen liegen mit acht Pixel Abstand unter der Leiste",
+        )
+
+        for (let index = 0; index < 3; index += 1) {
+          boardButton.click()
+          boardButton.click()
+          markerButton.click()
+          markerButton.click()
+          annotationToggle.click()
+          annotationToggle.click()
+          await settle()
+        }
+        check(
+          boardPanel.querySelectorAll("[data-loot-chest-portal]").length === 3 &&
+          markerPanel.querySelectorAll("[data-loot-chest-portal]").length === 3 &&
+          document.querySelectorAll(
+            "[data-loot-chest-template-target='annotation']",
+          ).length === 3,
+          "Wiederholtes Öffnen und Schließen erzeugt keine Portalduplikate",
+        )
+
+        const globalChestButtons = [
+          ...document.querySelectorAll("[data-loot-chest-button]"),
+        ]
+        check(
+          globalChestButtons.length === 13,
+          "Auf der globalen Folie sind exakt dreizehn Truhen gleichzeitig registriert",
+          globalChestButtons.map(function (button) {
+            return button.dataset.lootChestButton
+          }),
+        )
+        globalChestButtons.forEach(function (button) { button.click() })
+        await waitFor(function () {
+          const state = storedState("collectedChests")
+          return state && state.collectedChests.length === 13
+        }, "Die dreizehn globalen Truhen wurden nicht gesammelt")
+        check(
+          !achievementIds().includes("all-chests-opened"),
+          "Der Truhenerfolg wartet auf die drei Funde der zweiten Folie",
+        )
+        await waitFor(function () {
+          return document.querySelectorAll("[data-loot-chest-button]").length === 0
+        }, "Gesammelte globale Truhen wurden nicht entfernt", 2500)
+
+        firstSlide.hidden = true
+        secondSlide.hidden = false
+        location.hash = "#2"
+        await settle()
+
+        await waitFor(function () {
+          return document.querySelectorAll("[data-loot-key-button]").length === 2
+        }, "Die beiden lokalen Schlüssel erschienen nicht")
+        await waitFor(function () {
+          return document.querySelectorAll(
+            "[data-loot-chest-button][data-loot-chest-location='inline']",
+          ).length === 1
+        }, "Die Inline-Diamanttruhe erschien nicht")
+        await waitFor(function () {
+          return document.querySelectorAll("[data-loot-chest-button]").length === 3
+        }, "Die beim ersten Besuch gestartete Verzögerung bleibt beim Wiederbesuch abgelaufen")
+        check(
+          document.querySelectorAll("[data-loot-chest-button]").length === 3,
+          "Ein Folienwechsel startet abgelaufene Truhenverzögerungen nicht neu",
+        )
+
+        const dynflex = document.getElementById("stress-dynflex")
+        const markerquiz = document.getElementById("stress-markerquiz")
+        await waitFor(function () {
+          return lockButton("dynflex") && lockButton("markerquiz")
+        }, "Die beiden verschachtelten Schlösser fehlen")
+        check(
+          dynflex.inert && markerquiz.inert,
+          "Äußeres und inneres Template-Ziel sind gleichzeitig gesperrt",
+        )
+
+        await collectVisibleKeys(2)
+        await waitFor(function () {
+          const state = storedState("collectedKeys")
+          return state && state.collectedKeys.length === 6
+        }, "Das vollständige Schlüssel-Inventar wurde nicht gespeichert")
+
+        await unlock("dynflex")
+        check(!dynflex.inert, "Das äußere DynFlex-Ziel wird wieder bedienbar")
+        check(
+          markerquiz.inert,
+          "Das innere Markerquiz bleibt nach dem äußeren Unlock gesperrt",
+        )
+        check(
+          !achievementIds().includes("all-locks-opened"),
+          "Vor dem letzten inneren Schloss gibt es keinen Gesamterfolg",
+        )
+
+        await unlock("markerquiz")
+        check(
+          !markerquiz.inert,
+          "Das innere Markerquiz wird erst mit dem blauen Schlüssel bedienbar",
+        )
+        await waitFor(function () {
+          return achievementIds().includes("all-locks-opened")
+        }, "Der Schlosserfolg fehlt nach exakt sechs Unlocks")
+        const inventoryAfterLocks = storedState("unlockedLocks")
+        check(
+          inventoryAfterLocks.unlockedLocks.length === 6,
+          "Der Browserlauf speichert exakt sechs eindeutige Locks",
+          inventoryAfterLocks,
+        )
+
+        portalButton("1_401").click()
+        await waitForMockSlide(
+          1,
+          "Das entsperrte verschachtelte Portal erreicht Folie 1 nicht",
+        )
+        returnButton = await waitFor(function () {
+          return (
+            document.querySelectorAll(
+              "[data-loot-slide-portal-return]",
+            ).length === 1 &&
+            firstSlide.querySelector(
+              "[data-loot-slide-portal-return-button]",
+            )
+          )
+        }, "Das entsperrte verschachtelte Portal erzeugt keinen Rückweg")
+        returnButton.click()
+        await waitForMockSlide(
+          2,
+          "Der verschachtelte Rückweg erreicht Folie 2 nicht",
+        )
+        await waitFor(function () {
+          return document.querySelectorAll(
+            "[data-loot-slide-portal-return]",
+          ).length === 0
+        }, "Der verschachtelte Rückweg hinterlässt ein Portalduplikat")
+
+        await waitFor(function () {
+          return document.querySelectorAll("[data-loot-chest-button]").length === 3
+        }, "Die verzögerten lokalen Truhen fehlen")
+        check(
+          document.querySelectorAll(
+            "[data-loot-chest-template-target='dynflex']",
+          ).length === 1 &&
+          document.querySelectorAll(
+            "[data-loot-chest-template-target='markerquiz']",
+          ).length === 1,
+          "Zwei Markerquiz-Proxies erzeugen nur ein Markerquiz-Portal",
+        )
+
+        let localChestButtons = [
+          ...document.querySelectorAll("[data-loot-chest-button]"),
+        ]
+        localChestButtons.slice(0, 2).forEach(function (button) { button.click() })
+        await waitFor(function () {
+          const state = storedState("collectedChests")
+          return state && state.collectedChests.length === 15
+        }, "Die ersten fünfzehn Truhen wurden nicht gespeichert")
+        check(
+          !achievementIds().includes("all-chests-opened"),
+          "Der Truhenerfolg erscheint nicht vor der sechzehnten Truhe",
+        )
+
+        localChestButtons = [
+          ...document.querySelectorAll(
+            "[data-loot-chest-button]:not(.loot-treasure-chest--opened)",
+          ),
+        ]
+        check(localChestButtons.length === 1, "Genau eine letzte Truhe bleibt übrig")
+        localChestButtons[0].click()
+        await waitFor(function () {
+          return achievementIds().includes("all-chests-opened")
+        }, "Der Truhenerfolg fehlt nach exakt sechzehn Funden")
+
+        const finalResources = storedState("collectedChests")
+        check(
+          finalResources.collectedChests.length === 16 &&
+          finalResources.gold === 5 &&
+          finalResources.diamonds === 4 &&
+          finalResources.energy === 17,
+          "Alle sechzehn Funde erhöhen die drei Ressourcen exakt",
+          finalResources,
+        )
+        check(
+          document.querySelector(
+            "[data-achievement-id='all-locks-opened']",
+          ) &&
+          document.querySelector(
+            "[data-achievement-id='all-chests-opened']",
+          ),
+          "Schloss- und Truhenerfolg werden unabhängig gestapelt",
+        )
+
+        await sleep(800)
+        for (let index = 0; index < 3; index += 1) {
+          secondSlide.hidden = true
+          firstSlide.hidden = false
+          location.hash = "#1"
+          await settle()
+          boardButton.click()
+          markerButton.click()
+          annotationToggle.click()
+          await settle()
+          firstSlide.hidden = true
+          secondSlide.hidden = false
+          location.hash = "#2"
+          await settle()
+        }
+        check(
+          document.querySelectorAll("[data-loot-chest-button]").length === 0 &&
+          document.querySelectorAll("[data-loot-chest-portal]").length === 0 &&
+          document.querySelectorAll("[data-loot-chest-tray]").length === 0,
+          "Gesammelte Truhen und leere Menüleisten kehren nach Folienwechseln nicht zurück",
+        )
+        check(
+          document.querySelectorAll("[data-loot-lock-button]").length === 0,
+          "Geöffnete Schlösser kehren nach Folienwechseln nicht zurück",
+        )
+        check(
+          document.querySelectorAll("[data-loot-key-button]").length === 0,
+          "Gesammelte Schlüssel werden nicht erneut gerendert",
+        )
+        check(runtimeErrors.length === 0, "Der Browserlauf erzeugt keine Runtimefehler", runtimeErrors)
+
+        const result = {
+          pass: true,
+          assertions: assertions.length,
+          chests: finalResources.collectedChests.length,
+          locks: inventoryAfterLocks.unlockedLocks.length,
+          achievements: achievementIds(),
+          runtimeErrors: runtimeErrors,
+        }
+        window.__LOOT_STRESS_RESULT__ = result
+        resultNode.dataset.status = "pass"
+        resultNode.textContent = JSON.stringify(result)
+      } catch (error) {
+        const result = {
+          pass: false,
+          message: String(error && error.message ? error.message : error),
+          details: error && error.details ? error.details : null,
+          stack: error && error.stack ? error.stack : null,
+          assertions: assertions,
+          runtimeErrors: runtimeErrors,
+        }
+        window.__LOOT_STRESS_RESULT__ = result
+        resultNode.dataset.status = "fail"
+        resultNode.textContent = JSON.stringify(result)
+      }
+    })()
+  </script>
+</body>
+</html>

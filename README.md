@@ -7,6 +7,19 @@ comment:  Loot ergänzt LiaScript-Kurse um konfigurierbare Gamification. Das ers
 
 script:   ./dist/index.js
 
+import: https://raw.githubusercontent.com/MINT-the-GAP/lia-DynFlex/refs/heads/main/README.md
+import: https://raw.githubusercontent.com/MINT-the-GAP/lia-timer/refs/heads/main/README.md
+import: https://raw.githubusercontent.com/MINT-the-GAP/lia-board-mode/refs/heads/main/README.md
+import: https://raw.githubusercontent.com/MINT-the-GAP/lia-marker/refs/heads/main/README.md
+import: https://raw.githubusercontent.com/MINT-the-GAP/lia-annotation/refs/heads/main/README.md
+import: https://raw.githubusercontent.com/MINT-the-GAP/lia-canvas-ocr/refs/heads/main/README.md
+import: https://raw.githubusercontent.com/MINT-the-GAP/lia-kachel/refs/heads/main/README.md
+import: https://raw.githubusercontent.com/MINT-the-GAP/lia-llm/refs/heads/main/README.md
+import: https://raw.githubusercontent.com/liaTemplates/JSXGraph/main/README.md
+import: https://raw.githubusercontent.com/MINT-the-GAP/lia-coordinate/refs/heads/main/README.md
+import: https://raw.githubusercontent.com/MINT-the-GAP/lia-freeze-v2/main/README.md
+import: https://raw.githubusercontent.com/MINT-the-GAP/lia-mathpath/refs/heads/master/README.md
+
 @Highscore
 <script run-once modify="false">
 (function waitForLoot(remaining) {
@@ -74,6 +87,12 @@ script:   ./dist/index.js
 @Diamanttruhe: @LootTruhe_(@uid,@0,diamonds)
 @Energiekiste: @LootTruhe_(@uid,@0,energy)
 @Schluessel: @LootSchluessel_(@uid,@0)
+@Lupe: @LootLupe_(@uid,@0)
+@Portal: @LootPortal_(@uid,@0,two-way)
+@Einwegportal: @LootPortal_(@uid,@0,one-way)
+@Einbahnportal: @LootPortal_(@uid,@0,one-way)
+@Unsichtbar: @LootVersteckt_(@uid,solid,@0)
+@Zauberstaub: @LootVersteckt_(@uid,dust,@0)
 @Schloss: @LootSchloss_(@uid,@0,@1)
 @Geheimfolie: @LootGeheimfolie_(@uid)
 
@@ -87,6 +106,22 @@ script:   ./dist/index.js
 <lia-keep>
 <lia-loot-key data-key-id="@0" data-color="@1"></lia-loot-key>
 </lia-keep>
+@end
+
+@LootLupe_
+<lia-keep>
+<lia-loot-magnifier data-magnifier-id="@0" data-options="@1"></lia-loot-magnifier>
+</lia-keep>
+@end
+
+@LootPortal_
+<lia-keep>
+<lia-loot-slide-portal data-portal-id="@0" data-options="@1" data-default-mode="@2"></lia-loot-slide-portal>
+</lia-keep>
+@end
+
+@LootVersteckt_
+<lia-loot-hidden data-secret-id="@0" data-loot-concealment="@1" inert aria-hidden="true">@2</lia-loot-hidden>
 @end
 
 @LootSchloss_
@@ -117,32 +152,53 @@ Das Template erkennt nach dem Start automatisch:
 - jeden erstmals geöffneten nativen Hinweis `[[?]]`,
 - eingesammelte farbige Schlüssel für das persönliche Inventar,
 - mit passenden Farbschlüsseln entsperrbare Bedienobjekte,
+- anklickbare Einweg- und Zweiwegportale zwischen Kursfolien,
 - das letzte native Quiz auf der letzten Kursseite als Abschlussaufgabe,
 - freigeschaltete Erfolge für Aufgaben, Highscore, Truhen, Schlösser und Geheimfolien.
 
            {{1}}
 Nach der Veröffentlichung kann das Template mit folgender URL getestet werden:
 
-`https://liascript.github.io/course/?https://raw.githubusercontent.com/MINT-the-GAP/Loot/main/README.md`
+`https://liascript.github.io/course/?https://raw.githubusercontent.com/MINT-the-GAP/lia-loot/main/README.md`
 
 Das vorgesehene Repository ist:
 
-`https://github.com/MINT-the-GAP/Loot`
+`https://github.com/MINT-the-GAP/lia-loot`
 
 ## Einbindung
 
           --{{0}}--
 Importiere das Template im Kopf deines LiaScript-Kurses:
 
-`import: https://raw.githubusercontent.com/MINT-the-GAP/Loot/main/README.md`
+`import: https://raw.githubusercontent.com/MINT-the-GAP/lia-loot/main/README.md`
 
-Für veröffentlichte Kurse sollte später eine feste Version verwendet werden:
+Aktuell ist noch kein Release-Tag veröffentlicht. Bis zur ersten Veröffentlichung
+wird deshalb `main` verwendet. Danach sollte `main` in produktiven Kursen durch den
+tatsächlich veröffentlichten Tag ersetzt werden.
 
-`import: https://raw.githubusercontent.com/MINT-the-GAP/Loot/0.0.1/README.md`
-
-Ein vollständiger, bewusst leicht lösbarer Testkurs liegt in
+Ein vollständiger, anspruchsvoller Spiel- und Akzeptanzkurs liegt in
 [`EscapeRoom.md`](./EscapeRoom.md). Er bindet das Template relativ mit
-`import: ./README.md` ein und eignet sich damit auch als Import-Smoke-Test.
+`import: ./README.md` ein und führt über zehn Folien durch eine knapp kalkulierte
+Ressourcenroute: zehn Energieprüfungen, ein geplanter Diamanteinsatz, begrenzte
+Hinweise, 16 Schlösser, 13 Truhen-Einheiten, beide Portalarten und eine nur per
+Einwegportal erreichbare Geheimfolie. Damit eignet er sich zugleich als
+Import-Smoke-Test und als nachvollziehbarer End-to-End-Beispielkurs.
+
+Der manuelle Integrationskurs [`TemplateTargets.md`](./TemplateTargets.md)
+importiert zusätzlich jedes hier aufgeführte Fremdtemplate direkt und prüft alle
+12 Template-Ziel-IDs mit echter Laufzeitoberfläche, Truhe und Schloss.
+JSXGraph bleibt dabei ausschließlich als direkte technische Laufzeitabhängigkeit
+von `lia-coordinate` im Dokumentkopf; eine Loot-Option `jsxgraph` gibt es nicht.
+
+Der Belastungskurs [`StressTest.md`](./StressTest.md) bleibt bewusst als
+deterministische QA-Fixture getrennt. Er kombiniert alle 12 Template-Ziele auf nur
+neun Folien: 23 Schlösser mit exakt passenden Schlüsseln, 26 Truhen-Einheiten,
+mehrere Quizze pro Folie, Mehrziel-Truhen, wiederholte Komponenten und ineinander
+verschachtelte Template-Flächen. `npm test` prüft diese Verträge direkt über
+`tests/stress-course.test.mjs`. `npm run test:stress` baut zusätzlich das aktuelle
+Bundle und testet die separate synthetische Browser-Fixture lokal in einem
+installierten Edge-, Chrome- oder Chromium-Browser gegen mehrere Zielkopien,
+verschachtelte Locks, Achievements und Folienwechsel.
 
 ## `@Ressourcen`
 
@@ -161,14 +217,16 @@ auf welcher Folie das Makro steht und ohne dass diese Folie zuerst besucht werde
 Kommentare, Makrodefinitionen und Markdown-Codebeispiele werden bei der Suche ignoriert.
 
 Der erste Wert ist die Zahl der Goldmünzen, der zweite die Zahl der Diamanten und
-der optionale dritte Wert die Zahl der verfügbaren Prüfungen. Jeder gültige Klick
-auf **Prüfen** kostet eine Energie. Bei `0` wird die Prüfung vollständig blockiert.
+der optionale dritte Wert der Energiebestand. Jeder gültige Klick auf **Prüfen**
+und jeder erfolgreiche Start über den manuellen `onclick`-Button von lia-timer
+kostet jeweils genau eine Energie. Bei `0` wird die betreffende Aktion vollständig
+blockiert.
 Jeder geöffnete Hinweis kostet weiterhin eine Goldmünze, jedes Auflösen einen Diamanten.
 Ohne ausreichenden Bestand wird die jeweilige Aktion nicht ausgeführt. Der verbleibende
 Bestand bleibt beim Neuladen innerhalb desselben Browser-Tabs erhalten.
 
-Für bestehende Kurse bleibt der Aufruf mit zwei Werten gültig. Dann ist Prüfen
-unbegrenzt möglich und das Energiesymbol wird nicht eingeblendet:
+Für bestehende Kurse bleibt der Aufruf mit zwei Werten gültig. Dann sind Prüfen
+und Timerstart unbegrenzt möglich und das Energiesymbol wird nicht eingeblendet:
 
 ```markdown
 @Ressourcen(10, 3)
@@ -207,6 +265,68 @@ Truhen in LiaScripts Bedienoberfläche:
 | `translator` | Übersetzungs- und Sprachauswahl |
 | `mode` | Auswahl der Darstellung: Lehrbuch, Präsentation oder Folien |
 
+<a id=ziele-aus-direkt-importierten-templates></a>
+
+**Zusätzliche Versteck- und Schlossoptionen durch importierte Templates**
+
+Die folgenden Ziel-IDs funktionieren für `@Schatztruhe`, `@Diamanttruhe`,
+`@Energiekiste` und `@Schloss`. Voraussetzung ist, dass das jeweilige Template
+**direkt im Kopf des verwendenden Kurses** importiert wurde. Ein nur mittelbar über
+ein anderes Template geladener Import reicht nicht zuverlässig aus. Loot prüft
+zusätzlich den echten Laufzeitmarker beziehungsweise das registrierte Custom Element;
+gleichnamiges, selbst geschriebenes HTML aktiviert kein Template-Ziel.
+
+Beispiel für den direkten Import eines Ziel-Templates zusammen mit Loot:
+
+```markdown
+<!--
+import: https://raw.githubusercontent.com/MINT-the-GAP/lia-canvas-ocr/refs/heads/main/README.md
+import: https://raw.githubusercontent.com/MINT-the-GAP/lia-loot/main/README.md
+-->
+```
+
+Bei folienlokalen Zielen stehen Fund oder Schloss auf derselben Quellfolie wie der
+Makroaufruf und verwenden dort das erste sichtbare passende Exemplar. Die globalen
+Werkzeugleisten von Board-Mode, Marker und Annotation werden dagegen unabhängig von
+der Folie im per Same-Origin erreichbaren Top-Dokument gesucht. In der Spalte
+„Versteck-Aufruf“ kann `@Schatztruhe` jeweils durch `@Diamanttruhe` oder
+`@Energiekiste` ersetzt werden. Diese Zielparameter gelten für die drei
+Truhenarten; Schlüssel und Lupe bleiben eigenständige Inline-Funde.
+
+| Template / Ziel-ID | Truhe dort verstecken | Schloss davor setzen | Tatsächlicher Zielort und Besonderheiten |
+|:--|:--|:--|:--|
+| lia-DynFlex · `dynflex` | `@Schatztruhe(dynflex)` | `@Schloss(dynflex, rot)` | Erster sichtbarer `.dynFlex`-Bereich der Folie; das Schloss umfasst den ganzen Bereich. |
+| lia-timer · `timer` | `@Schatztruhe(timer)` | `@Schloss(timer, rot)` | Die Truhe gehört zum sichtbaren Timer-Quiz und funktioniert auch bei `immediate` oder `oncheck`. Das Schloss sperrt im Modus `onclick` den echten manuellen Startbutton `.lia-sol-timer-startbtn[data-sol-timer-ui]`. Ein erfolgreicher manueller Start kostet bei aktivierter Energie genau eine Energie. |
+| lia-board-mode · `boardmode`, Schlossalias `boardmodefontbutton` | `@Schatztruhe(boardmode)` | `@Schloss(boardmodefontbutton, rot)` | Die Truhe ist ein Kind des geöffneten Schriftgrößenmenüs `#lia-tff-panel-v2` und bleibt bei geschlossenem Menü verborgen. Das Schloss sperrt den zugehörigen Fontbutton `#lia-tff-btn-v2`. |
+| lia-marker · `marker` / `textmarker`, Schlossalias `textmarkerbutton` | `@Schatztruhe(textmarker)` | `@Schloss(textmarkerbutton, rot)` | Die Truhe ist ein Kind von `#lia-hl-panel > .body` und erscheint nur im geöffneten Textmarkermenü. Das Schloss sperrt den globalen Markerbutton `#lia-hl-btn`. |
+| lia-marker · `markerquiz` | `@Schatztruhe(markerquiz)` | `@Schloss(markerquiz, rot)` | Gesamter lokaler `.markerquiz`-Bereich von `@TextmarkerQuiz`, einschließlich Markieren und nativer Quizinteraktion. |
+| lia-annotation · `annotation`, Schlossalias `annotationsbar` | `@Schatztruhe(annotation)` | `@Schloss(annotationsbar, rot)` | Die Truhe erscheint mit Abstand unterhalb der globalen `.lia-annot-toolbar`, und zwar nur dann, wenn die Annotationen über den Augenbutton ausgeblendet sind. Das Schloss sperrt die gesamte Leiste mit allen Buttons. |
+| lia-canvas-ocr · `canvasocr` | `@Schatztruhe(canvasocr)` | `@Schloss(canvasocr, rot)` | Nach dem Öffnen von `@canvas` liegt die Truhe innerhalb der tatsächlichen Zeichenfläche `canvas.lia-draw`, nie über dem Öffnerbutton. Das Schloss sperrt weiterhin die gesamte `.lia-canvas-pair`. |
+| lia-kachel · `kachel` | `@Schatztruhe(kachel)` | `@Schloss(kachel, rot)` | Ganze Kachelaufgabe von `@Kachelfolge`, `@KachelfolgeN` oder `div.Kachel`. |
+| lia-llm · `llm` | `@Schatztruhe(llm)` | `@Schloss(llm, rot)` | Gesamter zu `@LLMQuiz` gehörender Quizbereich. |
+| lia-coordinate · `coordinate` | `@Schatztruhe(coordinate)` | `@Schloss(coordinate, rot)` | Tatsächlich in `window.__boards` registrierter Board-Container `containerObj`; die abweichende Laufzeit-DOM-ID ist dabei unerheblich. |
+| lia-freeze-v2 · `freeze` | `@Schatztruhe(freeze)` | `@Schloss(freeze, rot)` | Abgabebox, Exam-Start, ADetails-Punktebereich oder Auswertungsleiste: Damit lässt sich beispielsweise ein Schloss direkt vor `@Abgabe` setzen. |
+| lia-mathpath · `mathpath` | `@Schatztruhe(mathpath)` | `@Schloss(mathpath, rot)` | Die Truhe gehört zum mit `@Explain` erweiterten Quiz. Das Schloss liegt ausschließlich über dem ersten sichtbaren `.lia-mathpath-explain-link`; weitere Explain-Links desselben Hinweises werden mitgesperrt, die übrige Quizbedienung bleibt frei. |
+
+Die [11 praktischen Beispielfolien](#template-live-beispiele) am Ende dieser README
+zeigen alle 12 Ziel-IDs mit sichtbarer Komponente, passendem Fundort, Schlüssel und
+Schloss. `lia-marker` zeigt seine beiden möglichen Ziele gemeinsam auf einer Folie.
+
+Ziele werden bei Truhen wie alle anderen Optionen mit Semikolons kombiniert; ein
+Schloss erhält genau eine Ziel-ID und eine Farbe, getrennt durch ein Komma:
+
+```markdown
+@Schatztruhe(canvasocr)
+@Schloss(canvasocr, blau)
+
+@Abgabe
+@Schatztruhe(freeze)
+@Schloss(freeze, rot)
+
+@Diamanttruhe(kachel; anker; 15s)
+@Energiekiste(boardmode)
+```
+
 Zusätzlich verstehen alle drei Truhenarten und Schlüssel zwei frei kombinierbare
 Optionen. Sie werden wie die Ziele durch Semikolons getrennt:
 
@@ -235,13 +355,16 @@ Unvollständige oder vertippte Anker- und Zeitangaben lassen den Fund fail-close
 verborgen und erzeugen eine Warnung in der Browserkonsole. Die bisherigen
 Schreibweisen bleiben zur Kompatibilität mit vorhandenen Kursen weiterhin gültig.
 
-Die Ziele können einzeln oder kombiniert angegeben werden. Oberflächen-Truhen werden
-bereits beim Kursstart aus der Kursquelle registriert. Sie erscheinen deshalb im ToC
-und in den Menüs, auch wenn die Folie mit dem Makro noch nie geöffnet wurde. Kommentare
-und Markdown-Codebeispiele werden dabei ignoriert. Eine Truhe ohne Ziel folgt weiterhin
-dem jeweiligen Inhalt und erscheint zum Beispiel erst, wenn ein Hinweis oder eine
-Musterlösung tatsächlich angezeigt wird. Zum Einsammeln muss `@Ressourcen(...)` den
-Bestand aktiviert haben; andernfalls zeigt die Truhe einen entsprechenden Hinweis.
+Die Ziele können einzeln oder kombiniert angegeben werden. Globale Oberflächen-Truhen
+werden bereits beim Kursstart aus der Kursquelle registriert. Sie erscheinen deshalb
+im ToC, in den Menüs oder an einer globalen Werkzeugleiste, auch wenn die Folie mit
+dem Makro noch nie geöffnet wurde. Folienlokale Template-Ziele werden dagegen nur am
+ersten sichtbaren passenden Exemplar ihrer Quellfolie eingesetzt. Kommentare und
+Markdown-Codebeispiele werden bei der Quelltextsuche ignoriert. Eine Truhe ohne Ziel
+folgt weiterhin dem jeweiligen Inhalt und erscheint zum Beispiel erst, wenn ein
+Hinweis oder eine Musterlösung tatsächlich angezeigt wird. Zum Einsammeln muss
+`@Ressourcen(...)` den Bestand aktiviert haben; andernfalls zeigt die Truhe einen
+entsprechenden Hinweis.
 
 Direkte Beispieltruhe:
 
@@ -374,11 +497,158 @@ Vier gezielt vorbereitete, sofort erkennbare Schlüssel – darunter zwei grüne
 @Schluessel(gruen)
 @Schluessel(gruen)
 
+## `@Lupe`, `@Unsichtbar` und `@Zauberstaub`
+
+          --{{0}}--
+Mit `@Lupe` setzt du einen einmalig findbaren Gegenstand direkt in den Kurs. Nach
+dem Anklicken verschwindet die Pixelart-Lupe von der Fundstelle und erscheint als
+Button in der Ressourcenleiste. Sie funktioniert auch ohne `@Ressourcen(...)`.
+
+```markdown
+@Lupe
+```
+
+Wie Schlüssel und Kisten kann die Lupe an ihre Ursprungsfolie gebunden oder
+zeitverzögert eingeblendet werden:
+
+```markdown
+@Lupe(anker; 12s)
+@Lupe(2min)
+```
+
+Ein Klick auf die Lupe in der Leiste aktiviert den kreisförmigen Suchausschnitt am
+Mauszeiger. Ein weiterer Klick oder die Escape-Taste deaktiviert ihn. Auf Touchgeräten
+kann der Ausschnitt durch Berühren positioniert werden.
+
+`@Unsichtbar(...)` lässt den Platz eines Inhalts bestehen, verdeckt ihn aber
+vollständig. Erst innerhalb des aktiven Lupenkreises wird der jeweilige Ausschnitt
+richtig sichtbar und bedienbar:
+
+```markdown
+@Unsichtbar(Das geheime Lösungswort lautet MOND.)
+```
+
+Die beiden Textmakros sind für einzeiligen Inline-Text gedacht. Für Fundobjekte
+werden die Modi direkt als Option angegeben.
+
+Das funktioniert bei
+Schlüsseln und bei allen Münz-, Diamant- und Energietruhen und lässt sich mit
+`anker`, einer Zeitangabe oder einer Zieloberfläche kombinieren:
+
+```markdown
+@Schluessel(blau; unsichtbar)
+@Schatztruhe(zauberstaub)
+@Energiekiste(menu; anker; 12s; zauberstaub)
+```
+
+`@Zauberstaub(...)` verbirgt den Inhalt ebenfalls, hinterlässt außerhalb der Lupe
+aber ein sehr schwaches, flimmerndes Pixelmuster als Suchhinweis:
+
+```markdown
+@Zauberstaub(Hier funkelt eine kaum sichtbare Nachricht.)
+@Schluessel(lila; zauberstaub)
+```
+
+Bei Inhalten mit Kommas gelten die üblichen LiaScript-Makroregeln; der komplette
+Parameter kann dafür in Backticks gesetzt werden. Die Verbergung ist ein visueller
+Spieleffekt und keine Zugriffssperre: Der Inhalt bleibt im Kursquelltext und im DOM
+vorhanden.
+
+Sammle zuerst diese Lupe ein und aktiviere sie anschließend in der Leiste:
+
+@Lupe
+
+Vollständig verdeckter Text:
+
+@Unsichtbar(Diese geheime Zeile wird nur im Lupenkreis sichtbar.)
+
+Ein Schlüssel mit kaum sichtbarem Zauberstaub:
+
+@Schluessel(lila; zauberstaub)
+
+## `@Portal`, `@Einwegportal` und `@Einbahnportal`
+
+          --{{0}}--
+Portale sind anklickbare Gegenstände, die direkt zu einer anderen Kursfolie führen.
+Die Zielnummer ist **1-basiert**: `1` bezeichnet die erste Kursfolie, `5` die fünfte.
+Folientitel werden nicht als Ziel ausgewertet.
+
+| Syntax | Verhalten |
+|:--|:--|
+| `@Portal(5)` | Zweiwegportal zur Folie 5 |
+| `@Portal(5; hinundher)` | ausdrückliche Schreibweise desselben Zweiwegportals |
+| `@Portal(5; einweg)` | Einwegportal zur Folie 5 |
+| `@Einwegportal(5)` | Kurzform für `@Portal(5; einweg)` |
+| `@Einbahnportal(5)` | gleichbedeutender Alias für `@Einwegportal(5)` |
+
+Ein Zweiwegportal merkt sich die Folie, von der es betreten wurde. Nach dem Sprung
+erscheint auf der Zielfolie automatisch ein temporäres Rückportal. Ein Klick darauf
+führt genau zur Ausgangsfolie zurück. Das Rückportal gehört nur zu dieser aktuellen
+Portalreise: Wird die Zielfolie auf einem anderen Weg verlassen, wird es entfernt.
+Ein erneut angeklicktes Ausgangsportal kann jederzeit eine neue Hin- und Rückreise
+beginnen.
+
+```markdown
+## Eingangshalle
+
+@Portal(5)
+```
+
+Ein Einwegportal erzeugt auf der Zielfolie kein Rückportal und ersetzt beim Sprung
+den aktuellen Eintrag im Browser-Verlauf. Der Zurück-Button des Browsers stellt die
+Ausgangsfolie daher nicht als Portalschritt wieder her. Das normale
+Inhaltsverzeichnis sowie die Vor-/Zurück-Pfeile von LiaScript bleiben jedoch
+unverändert nutzbar. Ein Einwegportal ist damit eine Spielmechanik und keine absolute
+Zugriffssperre.
+
+```markdown
+@Einwegportal(8)
+
+<!-- identisch: -->
+@Einbahnportal(8)
+@Portal(8; einweg)
+```
+
+Auch eine mit `@Geheimfolie` verborgene Folie darf absichtlich Ziel eines Portals
+sein. Der Portal-Klick erteilt nur für diesen Sprung die nötige Freigabe; die
+Geheimfolie bleibt im Inhaltsverzeichnis und für gewöhnliche direkte Aufrufe
+weiterhin verborgen. Bei einem Zweiwegportal erscheint dort ebenfalls das
+automatische Rückportal.
+
+Fehlt die Zielnummer, ist sie nicht positiv und ganzzahlig, bezeichnet sie die
+aktuelle oder eine nicht vorhandene Folie oder enthält der Aufruf unbekannte bzw.
+widersprüchliche Modi, bleibt ein sichtbar als defekt gekennzeichnetes Portal
+deaktiviert. Es führt dann keinen Folienwechsel aus und zeigt den Grund als Hinweis.
+
+Die folgenden Gegenstände sind echte Live-Beispiele. Der blaue Schlüssel öffnet
+das Schloss auf dem Zweiwegportal zur nächsten Folie:
+
+@Schluessel(blau; anker)
+
+@Portal(10)
+@Schloss(portal, blau)
+
+Dieses Einwegportal führt zurück zur Lupenfolie und erzeugt dort keinen Rückweg:
+
+@Einwegportal(8)
+
+Portale selbst vergeben und verbrauchen weder Gold, Diamanten, Energie noch
+Schlüssel und werden nicht als Fundgegenstände gezählt. Ein Portalschloss ist
+dagegen eine normale Schlossaufgabe und zählt für den Schlosserfolg.
+
+`@Schloss(portal, farbe)` sperrt das zuletzt davor stehende, selbst gesetzte Portal
+auf derselben Folie. Das Schlossmakro sollte deshalb direkt auf den Portalaufruf
+folgen. Mehrere Portal-Schloss-Paare auf einer Folie bleiben unabhängig; mehrere
+Schlösser direkt hinter demselben Portal werden nacheinander geöffnet. Portalschlösser
+sind immer folienlokal, `anker` ist hier nicht nötig. Das automatisch erzeugte
+Rückportal eines Zweiwegportals bleibt ungesperrt.
+
 ## `@Schloss`
 
           --{{0}}--
-Mit `@Schloss` lässt sich ein globales Bedienobjekt oder eine lokale Quiz-Aktion
-mit einem farbigen Pixelart-Schloss sperren:
+Mit `@Schloss` lässt sich ein globales Bedienobjekt, eine Fläche aus einem direkt
+importierten Template, eine lokale Quiz-Aktion oder ein direkt davor stehendes
+Portal mit einem farbigen Pixelart-Schloss sperren:
 
 ```markdown
 @Schloss(info, gruen)
@@ -389,6 +659,20 @@ Schlösser stehen alle sechs Schlüsselfarben `rot`, `blau`, `gruen`, `gelb`, `l
 und `orange` zur Verfügung.
 
 Globale Ziele sperren Elemente der LiaScript-Oberfläche:
+
+Bei globalen Zielen gilt das Schloss ohne weitere Option kursweit und bleibt auch
+nach einem Folienwechsel aktiv. Nur `anker` im zweiten Parameter bindet es an die
+Folie des Aufrufs:
+
+```markdown
+@Schloss(boardmodefontbutton, gruen)
+@Schloss(boardmodefontbutton, gruen; anker)
+```
+
+Der erste Aufruf sperrt den Board-Mode-Button auf allen Folien, der zweite nur auf
+seiner Quellfolie. Das gilt ebenso für globale LiaScript-Menüs sowie Marker und
+Annotation. Bereits von sich aus folienlokale Template- und Quizziele bleiben
+unabhängig davon lokal.
 
 | Ziel | Gesperrtes Bedienobjekt |
 |:--|:--|
@@ -405,6 +689,15 @@ Kursstart aus der Kursquelle registriert; das Schloss ist also sichtbar, bevor d
 Folie mit dem Makro besucht wurde. `@Schloss(seitenwechsel, orange)` sperrt Zurück
 und Weiter gemeinsam. Ein orangefarbener Schlüssel entsperrt beide Schaltflächen.
 
+Die Template-Ziele und ihre lokale oder globale Bindung stehen in der
+[Tabelle der direkt importierten Templates](#ziele-aus-direkt-importierten-templates).
+Ein folienlokales Schloss steht auf derselben Folie wie sein Ziel. Insbesondere
+`@Schloss(timer, rot)` ist nur für einen Timer mit Startmodus `onclick` sinnvoll;
+bei `immediate` und `oncheck` gibt es keinen sichtbaren Startbutton zum Sperren.
+Bei aktivierter Energie kostet der erste erfolgreiche Klick auf diesen Startbutton
+genau eine Energie; ein gesperrter oder wegen Energiemangel blockierter Klick startet
+den Countdown nicht.
+
 Für Quizze gibt es drei lokale Ziele:
 
 | Ziel | Gesperrte Quiz-Aktion |
@@ -412,6 +705,17 @@ Für Quizze gibt es drei lokale Ziele:
 | `check` | Prüfen |
 | `resolve` | Auflösen |
 | `hint` | Hinweis |
+
+Für ein Portal gibt es ein weiteres folienlokales Ziel:
+
+| Ziel | Gesperrter Gegenstand |
+|:--|:--|
+| `portal` | das zuletzt davor stehende `@Portal`, `@Einwegportal` oder `@Einbahnportal` derselben Folie |
+
+```markdown
+@Portal(7)
+@Schloss(portal, gruen)
+```
 
 Lokale Schlossmakros stehen direkt nach dem Quiz, zu dem sie gehören. Sollen mehrere
 Aktionen desselben Quiz gesperrt werden, folgen die Makros unmittelbar aufeinander:
@@ -497,16 +801,17 @@ Mit einem einzelnen Makro aktivierst du die Erfolgsmeldungen für den gesamten K
 Kursquelle; das System ist deshalb schon beim Kursstart aktiv, auch wenn das Makro
 auf einer späteren Folie steht.
 
-Beim ersten Erreichen erscheint unten rechts ein kleines, nichtmodales Overlay. Es
-bleibt sichtbar, bis es über **×** geschlossen wird. Werden mehrere Erfolge zugleich
-freigeschaltet, erscheinen sie danach einzeln in einer Warteschlange.
+Beim ersten Erreichen erscheint unten rechts ein kleines, nichtmodales Overlay. Jede
+Meldung blendet sich nach **12 Sekunden** automatisch aus und kann vorher über **×**
+oder mit `Escape` geschlossen werden. Weitere Erfolge erscheinen sofort unten im
+Stapel und schieben ältere Meldungen nach oben; jede Meldung hat ihren eigenen Timer.
 
 | Erfolg | Bedingung |
 |:--|:--|
 | Aufgaben-Meister | Die automatische Abschlussaufgabe ist korrekt gelöst und alle dabei geladenen bewertbaren LiaScript-Quizze sind gelöst. |
 | Perfekter Highscore | Der endgültige Highscore entspricht exakt der konfigurierten Maximalpunktzahl. |
-| Schatzjäger | Jede im Kurs deklarierte Schatz-, Diamant- und Energiekiste wurde geöffnet. Mehrere Ziele eines Kistenmakros zählen als einzelne Truhen. |
-| Schlossknacker | Alle gültig deklarierten globalen und quizlokalen Schlösser wurden mit passenden Schlüsseln geöffnet. |
+| Schatzjäger | Jede im Kurs deklarierte Schatz-, Diamant- und Energiekiste wurde geöffnet. Mehrere Ziele eines Kistenmakros und die Live-Beispiele dieser README zählen als einzelne Truhen. |
+| Schlossknacker | Alle gültig deklarierten globalen, Template-, gegenstands- und quizlokalen Schlösser einschließlich der Live-Beispiele dieser README wurden mit passenden Schlüsseln geöffnet. |
 | Geheimnis entdeckt | Eine Geheimfolie wurde nach exakter Suche tatsächlich geöffnet. |
 
 Als bewertbare Aufgaben zählen native Quizze mit **Prüfen** und **Auflösen**;
@@ -550,7 +855,8 @@ Ein neuer Tab beginnt einen neuen Versuch.
 Nach `@Highscore(...)` funktionieren normale LiaScript-Quizze und Hinweise unverändert.
 Jede falsche Prüfung und jeder tatsächlich aufgedeckte Hinweis werden automatisch erfasst.
 Ist Energie über den dritten Wert von `@Ressourcen(...)` aktiviert, kostet jeder
-gültige Klick auf **Prüfen** genau eine Energie. Bei `0` bleibt der Klick ohne Wirkung.
+gültige Klick auf **Prüfen** und jeder erfolgreiche manuelle lia-timer-Start genau
+eine Energie. Bei `0` bleibt die jeweilige Aktion ohne Wirkung.
 
 Berechne $2 + 2$.
 
@@ -580,11 +886,11 @@ und eine Aufschlüsselung der Abzüge werden nicht angezeigt.
 ## Implementierung
 
           --{{0}}--
-Wenn du das Template nicht importieren möchtest, kannst du nach einer Veröffentlichung
-die gebaute Datei direkt einbinden und das Makro in deinen LiaScript-Kopf kopieren:
+Wenn du das Template nicht importieren möchtest, kannst du die gebaute Datei aus dem
+aktuellen `main`-Stand direkt einbinden und das Makro in deinen LiaScript-Kopf kopieren:
 
 ```markdown
-script: https://cdn.jsdelivr.net/gh/MINT-the-GAP/Loot@0.0.1/dist/index.js
+script: https://cdn.jsdelivr.net/gh/MINT-the-GAP/lia-loot@main/dist/index.js
 
 @Highscore
 <script run-once modify="false">
@@ -607,6 +913,10 @@ Das letzte native LiaScript-Quiz auf der letzten Kursseite ist automatisch die
 Abschlussaufgabe. Dafür ist kein weiteres Makro nötig. Sobald diese Aufgabe korrekt
 gelöst wurde, stoppt die Zeit und der Highscore-Dialog öffnet sich.
 
+In dieser README ist das die Rechenaufgabe auf der abschließenden
+`lia-mathpath`-Beispielfolie. Der folgende Block ist deshalb nur ein kopierbares
+Minimalbeispiel und kein zweites Live-Quiz:
+
 ```markdown
 Wie heißt dieses Template?
 
@@ -614,7 +924,301 @@ Wie heißt dieses Template?
 [[?]] Der Name bedeutet auf Englisch unter anderem Beute oder Fundstücke.
 ```
 
-Wie heißt dieses Template?
+<a id=template-live-beispiele></a>
 
-[[Loot]]
-[[?]] Der Name bedeutet auf Englisch unter anderem Beute oder Fundstücke.
+# Template-Verstecke und -Schlösser live
+
+Die folgenden 11 Folien decken in der Reihenfolge der unterstützten Zieltemplates
+alle zwölf Ziel-IDs ab; `marker` und `markerquiz` teilen sich eine Folie. Jede
+Folie zeigt die öffentliche, kopierbare Loot-Syntax und direkt darunter die
+zugehörige Template-Komponente als Beispiel. Die Live-Instanzen verwenden intern
+`@LootTruhe_` und `@LootSchloss_`. Bei Board-Mode, Marker und Annotation tragen
+auch die internen Schlösser ausdrücklich `anker`; deshalb erscheinen sie nur auf
+ihrer Beispielfolie. Ohne `anker` blieben diese globalen Schlösser kursweit aktiv.
+Im vollständigen Achievement-Katalog werden alle Live-Instanzen trotzdem
+mitgezählt. In eigenen Kursen werden ausschließlich die öffentlichen Makros aus den
+Codeblöcken verwendet.
+
+Board-Mode, der globale Marker und Annotation sind kursweite Werkzeugleisten. Ihre
+foliengebundene Truhe und ihr Schloss sind live und folgen dem Zustand des jeweiligen
+Menüs: Board-Mode und Marker müssen nach dem Entsperren geöffnet, Annotationen nach
+dem Entsperren ausgeblendet sein. Alle Schlösser lassen sich mit dem Schlüssel auf
+derselben Folie öffnen.
+
+## lia-DynFlex – `dynflex`
+
+Die Truhe und das Schloss beziehen sich auf den ganzen sichtbaren
+`.dynFlex`-Bereich:
+
+```markdown
+@Schluessel(rot)
+@Schatztruhe(dynflex)
+@Schloss(dynflex, rot)
+```
+
+@Schluessel(rot)
+
+<section class="dynFlex">
+
+<div class="flex-child">
+
+Welche Zahl folgt auf 2?
+
+[[3]]
+
+</div>
+
+<div class="flex-child">
+
+Auch dieser zweite Baustein gehört zum gesperrten Bereich.
+
+</div>
+
+</section>
+
+@LootTruhe_(@uid,dynflex; anker,gold)
+@LootSchloss_(@uid,dynflex,rot)
+
+## lia-timer – `timer`
+
+Der Modus `onclick` erzeugt einen sichtbaren Startbutton. Die Truhe gehört zum
+Timer-Quiz; das Schloss liegt genau um diesen extern erzeugten Startbutton. Ein
+erfolgreicher manueller Start kostet bei aktivierter Energie genau eine Energie:
+
+```markdown
+@Schluessel(blau)
+@Diamanttruhe(timer)
+@Schloss(timer, blau)
+```
+
+@Schluessel(blau)
+
+<!-- data-solution-timer="10s" data-solution-timer-start="onclick" -->
+Wie viel ist 9 + 6?
+
+[[15]]
+
+@LootTruhe_(@uid,timer; anker,diamonds)
+@LootSchloss_(@uid,timer,blau)
+
+## lia-board-mode – `boardmode`
+
+Der Fontbutton `#lia-tff-btn-v2` öffnet die globale Schriftsteuerung. Die
+Energiekiste ist nur im geöffneten Menü sichtbar und wird als Kind von
+`#lia-tff-panel-v2` eingesetzt. Das Schlossbeispiel verwendet den eindeutigen Alias
+`boardmodefontbutton` für den Fontbutton:
+
+```markdown
+@Schluessel(gruen)
+@Energiekiste(boardmode; anker)
+@Schloss(boardmodefontbutton, gruen; anker)
+```
+
+@Schluessel(gruen)
+
+@LootTruhe_(@uid,boardmode; anker,energy)
+@LootSchloss_(@uid,boardmodefontbutton,gruen; anker)
+
+## lia-marker – `marker` und `markerquiz`
+
+Dieses Template besitzt zwei sinnvolle Fundorte: das geöffnete globale
+Textmarkermenü und den lokalen Bereich einer Textmarker-Aufgabe. Die globale Truhe
+liegt als Kind von `#lia-hl-panel > .body`; `textmarkerbutton` sperrt den
+Markerbutton, mit dem dieses Menü geöffnet wird.
+
+```markdown
+@Schluessel(gelb)
+@Schatztruhe(textmarker; anker)
+@Schloss(textmarkerbutton, gelb; anker)
+
+@Schluessel(lila)
+@Diamanttruhe(markerquiz)
+@Schloss(markerquiz, lila)
+```
+
+Öffne das Textmarkermenü über den Markerbutton. Erst dann ist die
+foliengebundene Schatztruhe innerhalb des Menüs sichtbar:
+
+@Schluessel(gelb)
+
+@LootTruhe_(@uid,marker; anker,gold)
+@LootSchloss_(@uid,textmarkerbutton,gelb; anker)
+
+Das lokale Markerquiz ist einschließlich Schlüssel, Diamanttruhe und Schloss live:
+
+@Schluessel(lila)
+
+<div class="markerquiz">
+
+Markiere das Wort @markred(Rot) mit dem roten Textmarker.
+
+@TextmarkerQuiz
+
+</div>
+
+@LootTruhe_(@uid,markerquiz; anker,diamonds)
+@LootSchloss_(@uid,markerquiz,lila)
+
+## lia-annotation – `annotation`
+
+Blende die Annotationen über den Augenbutton aus. Nur in diesem Zustand erscheint
+die foliengebundene Energiekiste mit Abstand unterhalb der globalen Werkzeugleiste.
+Der Alias `annotationsbar` sperrt die gesamte Leiste mit allen ihren Buttons:
+
+```markdown
+@Schluessel(orange)
+@Energiekiste(annotation; anker)
+@Schloss(annotationsbar, orange; anker)
+```
+
+@Schluessel(orange)
+
+@LootTruhe_(@uid,annotation; anker,energy)
+@LootSchloss_(@uid,annotationsbar,orange; anker)
+
+## lia-canvas-ocr – `canvasocr`
+
+`@canvas` erzeugt zunächst den Öffnerbutton. Nach dem Öffnen erscheint die Truhe
+innerhalb der tatsächlichen Zeichenfläche `canvas.lia-draw` und nie über diesem
+Button. Das Schloss sperrt weiterhin die gesamte Canvas-/OCR-Komponente:
+
+```markdown
+@Schluessel(rot)
+@Schatztruhe(canvasocr)
+@Schloss(canvasocr, rot)
+```
+
+@Schluessel(rot)
+
+Wie viel ist 10 + 5?
+
+[[15]]
+
+@canvas
+
+@LootTruhe_(@uid,canvasocr; anker,gold)
+@LootSchloss_(@uid,canvasocr,rot)
+
+## lia-kachel – `kachel`
+
+Die offiziell unterstützte, skriptfreie `<div class="Kachel">`-Region ist
+das Ziel. Sie kommt ohne zusätzliche sichtbare Skriptausgabe aus:
+
+```markdown
+@Schluessel(gelb)
+
+<div class="Kachel">
+
+Ordne die beiden richtigen Grundfarben zu.
+
+<!-- data-randomize="true" -->
+[->[(Rot)|Orange]] [->[(Blau)|Grün]].
+
+</div>
+
+@Schatztruhe(kachel)
+@Schloss(kachel, gelb)
+```
+
+@Schluessel(gelb)
+
+<div class="Kachel">
+
+Ordne die beiden richtigen Grundfarben zu.
+
+<!-- data-randomize="true" -->
+[->[(Rot)|Orange]] [->[(Blau)|Grün]].
+
+</div>
+
+@LootTruhe_(@uid,kachel; anker,gold)
+@LootSchloss_(@uid,kachel,gelb)
+
+## lia-llm – `llm`
+
+Das Schloss umfasst den vollständigen von `@LLMQuiz` erzeugten Quizbereich.
+Beim Öffnen der Folie kann das Template Modellgewichte laden und WebGPU oder seinen
+dokumentierten Fallback verwenden.
+
+```markdown
+@Schluessel(lila)
+@Diamanttruhe(llm)
+@Schloss(llm, lila)
+```
+
+@Schluessel(lila)
+
+Erkläre in einem Satz, warum Eis auf Wasser schwimmt.
+
+<!-- data-solution-button="off" data-llm-textarea="3" -->
+[[Antwort]]
+```text @LLMQuiz(0.66;solution=0;feedback=0;operator=erklaeren)
+Eis besitzt eine geringere Dichte als flüssiges Wasser und schwimmt deshalb an
+der Oberfläche.
+```
+
+@LootTruhe_(@uid,llm; anker,diamonds)
+@LootSchloss_(@uid,llm,lila)
+
+## lia-coordinate – `coordinate`
+
+Loot verwendet direkt den `containerObj` des tatsächlich registrierten
+Koordinatensystems. Dadurch funktioniert das Schloss auch dann, wenn Registry-ID
+und automatisch vergebene Laufzeit-DOM-ID verschieden sind:
+
+```markdown
+@Schluessel(rot)
+@Diamanttruhe(coordinate)
+@Schloss(coordinate, rot)
+```
+
+@Schluessel(rot)
+
+@CoordinateSystem(`xmin=-4;xmax=4;ymin=-3;ymax=3;width=520;id=loot_coord_readme_demo`)
+
+@LootTruhe_(@uid,coordinate; anker,diamonds)
+@LootSchloss_(@uid,coordinate,rot)
+
+## lia-freeze-v2 – `freeze`
+
+`@Abgabe` erzeugt eine klar erkennbare Freeze-Abgabebox. Für die vollständige
+Linkerzeugung muss der Kurs über eine erreichbare URL in LiaScript geladen sein.
+
+```markdown
+@Schluessel(gelb)
+@Schatztruhe(freeze)
+@Schloss(freeze, gelb)
+```
+
+@Schluessel(gelb)
+
+@Abgabe
+
+@LootTruhe_(@uid,freeze; anker,gold)
+@LootSchloss_(@uid,freeze,gelb)
+
+## lia-mathpath – `mathpath`
+
+Freeze ist im Dokumentkopf vor MathPath importiert. Gib zuerst absichtlich `0`
+ein und prüfe die falsche Antwort; danach lässt sich der Hinweis öffnen. Die
+Truhe gehört weiterhin zum Quiz, das Schloss erscheint dagegen ausschließlich
+über dem von `@Explain` erzeugten Erklärlink. Prüfen, Antwort und Hint-Button
+bleiben frei bedienbar. Diese letzte Aufgabe bleibt zugleich die automatische
+Abschlussaufgabe der README.
+
+```markdown
+@Schluessel(gruen)
+@Diamanttruhe(mathpath)
+@Schloss(mathpath, gruen)
+```
+
+@Schluessel(gruen)
+
+<!-- data-hint-button="1" -->
+Wie viel ist $\frac{1}{2}+\frac{1}{2}$? [[1]]
+[[?]] @Explain
+
+@ADetails(1=BE; Bruchrechnung, Einheiten)
+
+@LootTruhe_(@uid,mathpath; anker,diamonds)
+@LootSchloss_(@uid,mathpath,gruen)

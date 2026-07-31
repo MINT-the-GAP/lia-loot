@@ -48,6 +48,10 @@ function normalizeToken(value: string): string {
     .toLocaleLowerCase("de-DE")
 }
 
+export function isOnlyOnSlideOption(value: string): boolean {
+  return ONLY_ON_SLIDE_TOKENS.has(normalizeToken(value))
+}
+
 function durationMilliseconds(
   normalizedToken: string,
 ): { matched: boolean; value: number | null } {

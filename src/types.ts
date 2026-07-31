@@ -49,6 +49,11 @@ export interface KeyInventoryState {
   unlockedLocks: string[]
 }
 
+export interface MagnifierState {
+  version: 1
+  collected: boolean
+}
+
 export interface AchievementState {
   version: 1
   unlocked: AchievementId[]

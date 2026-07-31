@@ -4,6 +4,7 @@ import type {
   AchievementState,
   HighscoreState,
   KeyInventoryState,
+  MagnifierState,
   ResourceState,
 } from "./types"
 import { ACHIEVEMENT_IDS } from "./types.ts"
@@ -11,6 +12,7 @@ import { ACHIEVEMENT_IDS } from "./types.ts"
 const STORAGE_PREFIX = "lia-loot:highscore:v1:"
 const RESOURCES_STORAGE_PREFIX = "lia-loot:resources:v1:"
 const KEY_INVENTORY_STORAGE_PREFIX = "lia-loot:key-inventory:v1:"
+const MAGNIFIER_STORAGE_PREFIX = "lia-loot:magnifier:v1:"
 const ACHIEVEMENTS_STORAGE_PREFIX = "lia-loot:achievements:v1:"
 
 function storageKey(): string {
@@ -26,6 +28,11 @@ function resourcesStorageKey(): string {
 function keyInventoryStorageKey(): string {
   const course = `${window.location.origin}${window.location.pathname}${window.location.search}`
   return `${KEY_INVENTORY_STORAGE_PREFIX}${encodeURIComponent(course)}`
+}
+
+function magnifierStorageKey(): string {
+  const course = `${window.location.origin}${window.location.pathname}${window.location.search}`
+  return `${MAGNIFIER_STORAGE_PREFIX}${encodeURIComponent(course)}`
 }
 
 function achievementsStorageKey(): string {
@@ -249,6 +256,43 @@ export function saveKeyInventory(state: KeyInventoryState): void {
     )
   } catch {
     // The key inventory still works in memory when browser storage is unavailable.
+  }
+}
+
+function normalizeMagnifierState(value: unknown): MagnifierState | null {
+  if (!value || typeof value !== "object") return null
+  const state = value as Record<string, unknown>
+  if (
+    state.version !== 1 ||
+    typeof state.collected !== "boolean"
+  ) {
+    return null
+  }
+  return {
+    version: 1,
+    collected: state.collected,
+  }
+}
+
+export function loadMagnifier(): MagnifierState | null {
+  try {
+    const raw = window.sessionStorage.getItem(magnifierStorageKey())
+    if (!raw) return null
+    const value: unknown = JSON.parse(raw)
+    return normalizeMagnifierState(value)
+  } catch {
+    return null
+  }
+}
+
+export function saveMagnifier(state: MagnifierState): void {
+  try {
+    window.sessionStorage.setItem(
+      magnifierStorageKey(),
+      JSON.stringify(state),
+    )
+  } catch {
+    // The magnifier still works in memory when browser storage is unavailable.
   }
 }
 

@@ -57,7 +57,7 @@ export function installResourceBar(): HTMLElement {
   const bar = document.createElement("aside")
   bar.id = BAR_ID
   bar.className = "loot-resource-bar loot-resource-bar--empty"
-  bar.setAttribute("aria-label", "Ressourcen und Schlüsselinventar")
+  bar.setAttribute("aria-label", "Ressourcen und Inventar")
   bar.append(
     resourceItem("coins", "Goldmünzen"),
     resourceItem("gems", "Diamanten"),
@@ -81,7 +81,12 @@ export function refreshResourceBarVisibility(): void {
     (item) => !item.classList.contains("loot-resource--hidden"),
   )
   const hasKeys = bar.querySelector("[data-loot-key-color]") !== null
-  bar.classList.toggle("loot-resource-bar--empty", !hasVisibleResource && !hasKeys)
+  const hasMagnifier =
+    bar.querySelector("[data-loot-magnifier-tool]") !== null
+  bar.classList.toggle(
+    "loot-resource-bar--empty",
+    !hasVisibleResource && !hasKeys && !hasMagnifier,
+  )
 }
 
 export function renderResources(
@@ -141,7 +146,7 @@ export function showInsufficientResource(kind: ResourceBarKind): void {
       ? "Nicht genug Gold für einen Hinweis."
       : kind === "gems"
         ? "Nicht genug Diamanten zum Auflösen."
-        : "Keine Energie mehr zum Prüfen."
+        : "Keine Energie mehr zum Prüfen oder Starten."
 }
 
 export function announceResource(message: string): void {

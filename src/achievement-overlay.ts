@@ -1,9 +1,10 @@
 import type { AchievementDefinition } from "./achievements.ts"
 
 const OVERLAY_ID = "lia-loot-achievement-overlay"
+export const ACHIEVEMENT_AUTO_HIDE_MS = 12_000
 
-const queue: AchievementDefinition[] = []
-let current: AchievementDefinition | null = null
+const visibleAchievementIds = new Set<string>()
+const autoHideTimers = new WeakMap<HTMLElement, number>()
 
 function achievementGraphic(): SVGSVGElement {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
@@ -27,10 +28,17 @@ function ensureOverlay(): HTMLElement {
   overlay.id = OVERLAY_ID
   overlay.className = "loot-achievement"
   overlay.hidden = true
-  overlay.setAttribute("aria-label", "Erfolgsmeldung")
+  overlay.setAttribute("aria-label", "Erfolgsmeldungen")
+  ;(document.body ?? document.documentElement).append(overlay)
+  return overlay
+}
 
+function createAchievementCard(
+  achievement: AchievementDefinition,
+): HTMLElement {
   const card = document.createElement("div")
   card.className = "loot-achievement__card"
+  card.dataset.achievementId = achievement.id
 
   const content = document.createElement("div")
   content.className = "loot-achievement__content"
@@ -45,8 +53,10 @@ function ensureOverlay(): HTMLElement {
   eyebrow.textContent = "Erfolg freigeschaltet"
   const title = document.createElement("p")
   title.className = "loot-achievement__title"
+  title.textContent = achievement.title
   const message = document.createElement("p")
   message.className = "loot-achievement__message"
+  message.textContent = achievement.message
   text.append(eyebrow, title, message)
   content.append(achievementGraphic(), text)
 
@@ -55,57 +65,53 @@ function ensureOverlay(): HTMLElement {
   close.className = "loot-achievement__close"
   close.setAttribute("aria-label", "Erfolgsmeldung schließen")
   close.textContent = "×"
-  close.addEventListener("click", closeAchievement)
+  close.addEventListener("click", () => closeAchievement(card, achievement.id))
 
   card.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return
     event.preventDefault()
-    closeAchievement()
+    closeAchievement(card, achievement.id)
   })
   card.append(content, close)
-  overlay.append(card)
-  ;(document.body ?? document.documentElement).append(overlay)
-  return overlay
+  return card
 }
 
-function showNext(): void {
-  if (current || queue.length === 0) return
+function closeAchievement(card: HTMLElement, achievementId: string): void {
+  const timer = autoHideTimers.get(card)
+  if (timer !== undefined) {
+    globalThis.clearTimeout(timer)
+    autoHideTimers.delete(card)
+  }
   const overlay = ensureOverlay()
-  current = queue.shift() ?? null
-  if (!current) return
-
-  const title = overlay.querySelector<HTMLElement>(".loot-achievement__title")
-  const message = overlay.querySelector<HTMLElement>(
-    ".loot-achievement__message",
-  )
-  if (title) title.textContent = current.title
-  if (message) message.textContent = current.message
-  overlay.dataset.achievementId = current.id
-  overlay.hidden = false
-  overlay.classList.remove("loot-achievement--visible")
-  void overlay.offsetWidth
-  overlay.classList.add("loot-achievement--visible")
+  card.remove()
+  visibleAchievementIds.delete(achievementId)
+  overlay.hidden = overlay.childElementCount === 0
+  if (!overlay.hidden) overlay.scrollTop = overlay.scrollHeight
 }
 
-function closeAchievement(): void {
-  if (!current) return
-  const overlay = ensureOverlay()
-  overlay.classList.remove("loot-achievement--visible")
-  overlay.hidden = true
-  delete overlay.dataset.achievementId
-  current = null
-  showNext()
+function scheduleAutoHide(
+  card: HTMLElement,
+  achievementId: string,
+): void {
+  const timer = globalThis.setTimeout(() => {
+    autoHideTimers.delete(card)
+    closeAchievement(card, achievementId)
+  }, ACHIEVEMENT_AUTO_HIDE_MS)
+  autoHideTimers.set(card, timer)
 }
 
 export function showAchievement(
   achievement: AchievementDefinition,
 ): void {
-  if (
-    current?.id === achievement.id ||
-    queue.some((queued) => queued.id === achievement.id)
-  ) {
-    return
-  }
-  queue.push(achievement)
-  showNext()
+  if (visibleAchievementIds.has(achievement.id)) return
+
+  const overlay = ensureOverlay()
+  const card = createAchievementCard(achievement)
+  overlay.append(card)
+  visibleAchievementIds.add(achievement.id)
+  overlay.hidden = false
+  void card.offsetWidth
+  card.classList.add("loot-achievement__card--visible")
+  overlay.scrollTop = overlay.scrollHeight
+  scheduleAutoHide(card, achievement.id)
 }

@@ -11,6 +11,11 @@ import {
   type CollectibleVisibilityRule,
 } from "./collectible-visibility.ts"
 import {
+  extractConcealmentOptions,
+  setHostConcealment,
+  type ConcealmentMode,
+} from "./concealment.ts"
+import {
   observeLiaSlideActivity,
   sectionFromLootId,
   sourceSlideIsActive,
@@ -26,6 +31,7 @@ interface KeyPickupController {
 }
 
 interface KeyRequest {
+  concealment: ConcealmentMode | null
   errors: string[]
   requestedColor: string | null
   sourceSection: number | null
@@ -103,6 +109,7 @@ function createKeyButton(
     window.setTimeout(() => {
       collectingIds.delete(keyId)
       button.remove()
+      syncAllKeys()
       if (keyboardActivated) controller?.focusInventory()
     }, COLLECT_DURATION)
   })
@@ -113,23 +120,32 @@ function createKeyButton(
 function readKeyRequest(host: HTMLElement, keyId: string): KeyRequest {
   const authored = host.getAttribute("data-color")?.trim() ?? ""
   const parsed = parseCollectibleOptions(authored === "@0" ? "" : authored)
-  const errors = [...parsed.errors]
-  if (parsed.values.length > 1) {
+  const concealment = extractConcealmentOptions(parsed.values)
+  const errors = [...parsed.errors, ...concealment.errors]
+  if (concealment.values.length > 1) {
     errors.push("Für einen Schlüssel darf höchstens eine Farbe angegeben werden.")
   } else if (
-    parsed.values.length === 1 &&
-    !isKeyColorRequest(parsed.values[0])
+    concealment.values.length === 1 &&
+    !isKeyColorRequest(concealment.values[0])
   ) {
-    errors.push(`Unbekannte Schlüsselfarbe oder Option: ${parsed.values[0]}`)
+    errors.push(
+      `Unbekannte Schlüsselfarbe oder Option: ${concealment.values[0]}`,
+    )
   }
 
   return {
+    concealment: concealment.mode,
     errors,
-    requestedColor: parsed.values[0] ?? null,
+    requestedColor: concealment.values[0] ?? null,
     sourceSection: sectionFromLootId(keyId),
     valid: errors.length === 0,
     visibility: parsed.rule,
   }
+}
+
+function clearKeyHost(host: HTMLElement): void {
+  setHostConcealment(host, null)
+  if (host.childNodes.length > 0) host.replaceChildren()
 }
 
 function warnInvalidSpecification(
@@ -149,7 +165,7 @@ function syncKey(host: HTMLElement): void {
   if (controller.collected(keyId) && !collectingIds.has(keyId)) {
     eligibleKeyIds.delete(keyId)
     visibilityGate.forget(`pickup:${keyId}`)
-    if (host.childElementCount > 0) host.replaceChildren()
+    clearKeyHost(host)
     return
   }
 
@@ -157,7 +173,7 @@ function syncKey(host: HTMLElement): void {
   if (!request.valid) {
     eligibleKeyIds.delete(keyId)
     warnInvalidSpecification(keyId, request.errors)
-    if (host.childElementCount > 0) host.replaceChildren()
+    clearKeyHost(host)
     return
   }
 
@@ -172,7 +188,7 @@ function syncKey(host: HTMLElement): void {
   )
   if (!visible) {
     eligibleKeyIds.delete(keyId)
-    if (host.childElementCount > 0) host.replaceChildren()
+    clearKeyHost(host)
     return
   }
   eligibleKeyIds.add(keyId)
@@ -180,9 +196,14 @@ function syncKey(host: HTMLElement): void {
   const existingButton = [
     ...host.querySelectorAll<HTMLButtonElement>("[data-loot-key-button]"),
   ].find((button) => button.dataset.lootKeyButton === keyId)
-  if (existingButton?.dataset.lootKeyColor === color) return
+  if (existingButton?.dataset.lootKeyColor === color) {
+    setHostConcealment(host, request.concealment)
+    return
+  }
 
+  setHostConcealment(host, null)
   host.replaceChildren(createKeyButton(keyId, color))
+  setHostConcealment(host, request.concealment)
 }
 
 function syncAllKeys(): void {

@@ -1,20 +1,36 @@
 import {
-  discoverCourseLockDeclarations,
+  discoverCourseLocks,
   type CourseLockDeclaration,
 } from "./course-chests.ts"
-import { requestedKeyColor } from "./key-colors.ts"
 import type { KeyColor } from "./key-colors.ts"
+import { parseLockOptions } from "./lock-options.ts"
 import {
   isGlobalLockTarget,
+  isItemLockTarget,
   isLocalLockTarget,
+  isTemplateLockTarget,
   resolveLockTarget,
   type GlobalLockTarget,
   type LocalLockTarget,
   type LockTarget,
 } from "./lock-targets.ts"
+import {
+  findTemplateTarget,
+  templateDocumentCandidates,
+  templateTargetDefinition,
+  TEMPLATE_TARGET_LABELS,
+  type TemplateTarget,
+} from "./template-targets.ts"
+import {
+  observeLiaSlideActivity,
+  sectionFromLootId,
+  sourceSlideIsActive,
+} from "./slide-activity.ts"
 import type { UnlockResult } from "./inventory-store.ts"
 
 const LOCK_TAG = "lia-loot-lock"
+const PORTAL_TAG = "lia-loot-slide-portal"
+const PORTAL_BUTTON_SELECTOR = "[data-loot-slide-portal-button]"
 const QUIZ_SELECTOR = ".lia-quiz"
 const STATUS_ID = "lia-loot-lock-status"
 const UNLOCK_DURATION = 620
@@ -30,7 +46,10 @@ interface LockRequest {
   baseId: string
   target: LockTarget
   color: KeyColor
+  onlyOnSlide: boolean
   scope: "global" | "local"
+  sourceSection: number | null
+  sourceHost?: HTMLElement
   quiz?: HTMLElement
 }
 
@@ -121,6 +140,8 @@ const TARGET_NAMES: Record<LockTarget, string> = {
   check: "Prüfen",
   resolve: "Auflösen",
   hint: "Hinweis",
+  portal: "Portal",
+  ...TEMPLATE_TARGET_LABELS,
 }
 
 const LOCK_COLOR_NAMES: Record<KeyColor, string> = {
@@ -152,21 +173,25 @@ const KEY_NOMINATIVE_NAMES: Record<KeyColor, string> = {
 
 const decorations = new Map<string, Decoration>()
 const sourceRequests: LockRequest[] = []
+const persistentHostRequests = new Map<string, LockRequest>()
 const unlockingIds = new Set<string>()
 const quizIds = new WeakMap<HTMLElement, string>()
+const portalIds = new WeakMap<HTMLElement, string>()
 const pendingControlTabIndices = new WeakMap<
   HTMLElement,
   { value: string | null }
 >()
 
 let controller: ObjectLockController | null = null
-let observer: MutationObserver | null = null
+const observers: MutationObserver[] = []
 let anchorResizeObserver: ResizeObserver | null = null
 let syncTimer: number | null = null
 let runtimeId = 0
 let quizRuntimeId = 0
+let portalRuntimeId = 0
 let sourceDiscovery: "idle" | "pending" | "complete" = "idle"
 let captureInstalled = false
+let slideActivityInstalled = false
 let viewportListenersInstalled = false
 
 function resolveBaseId(host: HTMLElement): string {
@@ -183,9 +208,18 @@ function resolveBaseId(host: HTMLElement): string {
 }
 
 function requestLockId(request: LockRequest): string {
-  return request.scope === "global"
-    ? `lock:${request.target}:${request.color}`
-    : `lock:${request.baseId}:${request.target}:${request.color}`
+  if (request.scope === "global") {
+    if (request.onlyOnSlide) {
+      return request.sourceSection !== null
+        ? `lock:${request.target}:section-${request.sourceSection}:${request.color}`
+        : `lock:${request.baseId}:${request.target}:${request.color}`
+    }
+    return `lock:${request.target}:${request.color}`
+  }
+  if (isTemplateLockTarget(request.target) && request.sourceSection !== null) {
+    return `lock:${request.target}:section-${request.sourceSection}:${request.color}`
+  }
+  return `lock:${request.baseId}:${request.target}:${request.color}`
 }
 
 function quizRuntimeKey(quiz: HTMLElement): string {
@@ -195,6 +229,27 @@ function quizRuntimeKey(quiz: HTMLElement): string {
   const id = `quiz-${quizRuntimeId}`
   quizIds.set(quiz, id)
   return id
+}
+
+function portalRuntimeKey(portal: HTMLElement): string {
+  const existing = portalIds.get(portal)
+  if (existing) return existing
+  portalRuntimeId += 1
+  const id = `portal-${portalRuntimeId}`
+  portalIds.set(portal, id)
+  return id
+}
+
+function portalForHost(host: HTMLElement): HTMLElement | null {
+  const slide = host.closest<HTMLElement>("main.lia-slide__content")
+  if (!slide) return null
+
+  let nearest: HTMLElement | null = null
+  for (const portal of slide.querySelectorAll<HTMLElement>(PORTAL_TAG)) {
+    // DOCUMENT_POSITION_FOLLOWING (4): the lock host follows this portal.
+    if ((portal.compareDocumentPosition(host) & 4) !== 0) nearest = portal
+  }
+  return nearest
 }
 
 function topLevelSlideChild(
@@ -236,10 +291,22 @@ function quizForHost(host: HTMLElement): HTMLElement | null {
     : null
 }
 
+function retainHostRequest(request: LockRequest): LockRequest {
+  if (request.scope !== "global") {
+    persistentHostRequests.delete(request.baseId)
+    return request
+  }
+
+  const retained = { ...request }
+  if (!request.onlyOnSlide) delete retained.sourceHost
+  persistentHostRequests.set(request.baseId, retained)
+  return request
+}
+
 function registerHost(host: HTMLElement): LockRequest | null {
   const baseId = resolveBaseId(host)
   const target = resolveLockTarget(host.getAttribute("data-target"))
-  const color = requestedKeyColor(host.getAttribute("data-color"))
+  const options = parseLockOptions(host.getAttribute("data-color") ?? "")
 
   host.classList.add("loot-object-lock-host")
   if (host.getAttribute("aria-hidden") !== "true") {
@@ -248,51 +315,99 @@ function registerHost(host: HTMLElement): LockRequest | null {
   if (host.childElementCount > 0) host.replaceChildren()
   delete host.dataset.lootLockError
 
-  if (!target || !color) return null
+  if (!target || !options.valid || !options.color) {
+    persistentHostRequests.delete(baseId)
+    return null
+  }
+  const sourceSection = sectionFromLootId(baseId)
+  const requestBase = {
+    baseId,
+    target,
+    color: options.color,
+    onlyOnSlide: options.onlyOnSlide,
+    sourceSection,
+    sourceHost: host,
+  }
+  if (isTemplateLockTarget(target)) {
+    const scope =
+      templateTargetDefinition(target).scope === "global" ? "global" : "local"
+    return retainHostRequest({ ...requestBase, scope })
+  }
   if (isGlobalLockTarget(target)) {
-    return { baseId, target, color, scope: "global" }
+    return retainHostRequest({ ...requestBase, scope: "global" })
+  }
+  if (isItemLockTarget(target)) {
+    return retainHostRequest({ ...requestBase, scope: "local" })
   }
 
   const quiz = quizForHost(host)
   if (!quiz) {
+    persistentHostRequests.delete(baseId)
     host.dataset.lootLockError = "quiz-not-adjacent"
     return null
   }
-  return { baseId, target, color, scope: "local", quiz }
+  return retainHostRequest({
+    ...requestBase,
+    scope: "local",
+    quiz,
+  })
 }
 
 function normalizedDeclaration(
   declaration: CourseLockDeclaration,
 ): LockRequest | null {
   const target = resolveLockTarget(declaration.target)
+  if (target && isTemplateLockTarget(target)) {
+    return {
+      baseId: declaration.baseId,
+      target,
+      color: declaration.color,
+      onlyOnSlide: declaration.onlyOnSlide,
+      scope:
+        templateTargetDefinition(target).scope === "global"
+          ? "global"
+          : "local",
+      sourceSection: declaration.section,
+    }
+  }
   if (!target || !isGlobalLockTarget(target)) return null
   return {
     baseId: declaration.baseId,
     target,
     color: declaration.color,
+    onlyOnSlide: declaration.onlyOnSlide,
     scope: "global",
+    sourceSection: declaration.section,
   }
 }
 
 export function courseLockUnitCount(
   declarations: readonly CourseLockDeclaration[],
+  templateAvailable: (target: TemplateTarget) => boolean = () => true,
 ): number {
   const catalogIds = new Set<string>()
   for (const declaration of declarations) {
     const target = resolveLockTarget(declaration.target)
     if (!target) continue
-    const scope = isGlobalLockTarget(target)
-      ? "global"
-      : isLocalLockTarget(target)
-        ? "local"
-        : null
+    if (isTemplateLockTarget(target) && !templateAvailable(target)) continue
+    const scope = isTemplateLockTarget(target)
+      ? templateTargetDefinition(target).scope === "global"
+        ? "global"
+        : "local"
+      : isGlobalLockTarget(target)
+        ? "global"
+        : isLocalLockTarget(target) || isItemLockTarget(target)
+          ? "local"
+          : null
     if (!scope) continue
     catalogIds.add(
       requestLockId({
         baseId: declaration.baseId,
         target,
         color: declaration.color,
+        onlyOnSlide: declaration.onlyOnSlide,
         scope,
+        sourceSection: declaration.section,
       }),
     )
   }
@@ -301,6 +416,7 @@ export function courseLockUnitCount(
 
 function registerSourceDeclarations(
   declarations: readonly CourseLockDeclaration[],
+  catalog: readonly CourseLockDeclaration[],
 ): void {
   sourceRequests.length = 0
   for (const declaration of declarations) {
@@ -308,16 +424,18 @@ function registerSourceDeclarations(
     if (request) sourceRequests.push(request)
   }
   sourceDiscovery = "complete"
-  controller?.catalogReady(courseLockUnitCount(declarations))
+  controller?.catalogReady(courseLockUnitCount(catalog))
   scheduleSync()
 }
 
 function discoverSourceLocks(): void {
   if (sourceDiscovery !== "idle") return
   sourceDiscovery = "pending"
-  void discoverCourseLockDeclarations()
-    .then(registerSourceDeclarations)
-    .catch(() => registerSourceDeclarations([]))
+  void discoverCourseLocks()
+    .then(({ declarations, catalog }) =>
+      registerSourceDeclarations(declarations, catalog),
+    )
+    .catch(() => registerSourceDeclarations([], []))
 }
 
 function statusRegion(): HTMLElement {
@@ -470,14 +588,73 @@ function localBinding(request: LockRequest): TargetBinding | null {
   }
 }
 
+function portalBinding(request: LockRequest): TargetBinding | null {
+  if (!isItemLockTarget(request.target) || !request.sourceHost?.isConnected) {
+    return null
+  }
+  if (!sourceSlideIsActive(request.sourceSection, request.sourceHost)) return null
+
+  const portal = portalForHost(request.sourceHost)
+  const button = portal?.querySelector<HTMLElement>(PORTAL_BUTTON_SELECTOR)
+  if (!portal || !button) return null
+
+  return {
+    slotKey: `item:portal:${portalRuntimeKey(portal)}`,
+    root: portal,
+    anchor: button,
+    controls: [button],
+    contents: [],
+    mode: "floating",
+    focusCandidates: [button],
+  }
+}
+
+function templateBinding(request: LockRequest): TargetBinding | null {
+  if (!isTemplateLockTarget(request.target)) return null
+
+  const definition = templateTargetDefinition(request.target)
+  const match = findTemplateTarget(request.target, "lock", document)
+  if (!match) return null
+  if (
+    definition.scope === "slide" &&
+    !sourceSlideIsActive(request.sourceSection, match.root)
+  ) {
+    return null
+  }
+
+  return {
+    slotKey:
+      definition.scope === "global"
+        ? `template:global:${request.target}`
+        : `template:${request.target}:section-${request.sourceSection ?? request.baseId}`,
+    root: match.root,
+    anchor: match.lockAnchor!,
+    controls: match.lockControls,
+    contents: [],
+    mode: "floating",
+    focusCandidates: match.focusCandidates,
+  }
+}
+
 function bindingFor(request: LockRequest): TargetBinding | null {
+  if (
+    request.onlyOnSlide &&
+    !sourceSlideIsActive(request.sourceSection, request.sourceHost)
+  ) {
+    return null
+  }
+  if (isItemLockTarget(request.target)) return portalBinding(request)
+  if (isTemplateLockTarget(request.target)) return templateBinding(request)
   return request.scope === "global"
     ? globalBinding(request.target as GlobalLockTarget)
     : localBinding(request)
 }
 
 function collectRequests(): LockRequest[] {
-  const combined = [...sourceRequests]
+  const combined = [
+    ...sourceRequests,
+    ...persistentHostRequests.values(),
+  ]
   document.querySelectorAll<HTMLElement>(LOCK_TAG).forEach((host) => {
     const request = registerHost(host)
     if (request) combined.push(request)
@@ -498,8 +675,9 @@ function createLockButton(
   request: LockRequest,
   id: string,
   slotKey: string,
+  ownerDocument: Document = document,
 ): HTMLButtonElement {
-  const button = document.createElement("button")
+  const button = ownerDocument.createElement("button")
   button.type = "button"
   button.className = `loot-object-lock-button loot-object-lock-button--${request.scope} loot-key-color--${request.color}`
   button.dataset.lootLockButton = id
@@ -667,14 +845,15 @@ function setStyleIfNeeded(
 function positionFloating(decoration: Decoration): void {
   if (decoration.binding.mode !== "floating") return
   const rect = decoration.binding.anchor.getBoundingClientRect()
+  const view = decoration.binding.anchor.ownerDocument.defaultView ?? window
   const visible =
     decoration.binding.anchor.isConnected &&
     rect.width > 0 &&
     rect.height > 0 &&
     rect.right > 0 &&
     rect.bottom > 0 &&
-    rect.left < window.innerWidth &&
-    rect.top < window.innerHeight
+    rect.left < view.innerWidth &&
+    rect.top < view.innerHeight
   if (decoration.button.hidden === visible) {
     decoration.button.hidden = !visible
   }
@@ -706,7 +885,12 @@ function createDecoration(
 ): Decoration {
   closeExpandedControls(binding)
   const id = requestLockId(request)
-  const button = createLockButton(request, id, binding.slotKey)
+  const button = createLockButton(
+    request,
+    id,
+    binding.slotKey,
+    binding.anchor.ownerDocument,
+  )
   button.classList.add(`loot-object-lock-button--${binding.mode}`)
   const decoration: Decoration = {
     binding,
@@ -722,7 +906,7 @@ function createDecoration(
     binding.root.classList.add("loot-object-lock-target")
     binding.root.appendChild(button)
   } else {
-    document.body.appendChild(button)
+    binding.anchor.ownerDocument.body.appendChild(button)
   }
   anchorResizeObserver?.observe(binding.anchor)
   enforceDecoration(decoration)
@@ -792,7 +976,7 @@ function focusAfterUnlock(binding: TargetBinding): void {
   for (const focusTarget of binding.focusCandidates) {
     if (!isFocusable(focusTarget)) continue
     focusTarget.focus({ preventScroll: true })
-    if (document.activeElement === focusTarget) return
+    if (focusTarget.ownerDocument.activeElement === focusTarget) return
   }
 
   const previousTabIndex = binding.root.getAttribute("tabindex")
@@ -907,8 +1091,9 @@ function scheduleSync(): void {
 }
 
 function eventElement(target: EventTarget | null): Element | null {
-  if (target instanceof Element) return target
-  if (target instanceof Node) return target.parentElement
+  const node = target as (Node & { nodeType?: number }) | null
+  if (node?.nodeType === 1) return node as unknown as Element
+  if (node && typeof node.nodeType === "number") return node.parentElement
   return null
 }
 
@@ -965,24 +1150,36 @@ export function installObjectLocks(nextController: ObjectLockController): void {
 
   if (!captureInstalled) {
     captureInstalled = true
-    document.addEventListener("click", blockNativeLockedClick, true)
+    for (const candidate of templateDocumentCandidates(document)) {
+      candidate.addEventListener("click", blockNativeLockedClick, true)
+    }
   }
 
-  if (!observer) {
-    observer = new MutationObserver(scheduleSync)
-    observer.observe(document.documentElement, {
-      attributeFilter: [
-        "aria-hidden",
-        "class",
-        "disabled",
-        "hidden",
-        "style",
-        "tabindex",
-      ],
-      attributes: true,
-      childList: true,
-      subtree: true,
-    })
+  if (observers.length === 0) {
+    for (const candidate of templateDocumentCandidates(document)) {
+      const Observer = candidate.defaultView?.MutationObserver ?? MutationObserver
+      const candidateObserver = new Observer(scheduleSync)
+      candidateObserver.observe(candidate.documentElement, {
+        attributeFilter: [
+          "aria-hidden",
+          "class",
+          "data-open",
+          "disabled",
+          "hidden",
+          "style",
+          "tabindex",
+        ],
+        attributes: true,
+        childList: true,
+        subtree: true,
+      })
+      observers.push(candidateObserver)
+    }
+  }
+
+  if (!slideActivityInstalled) {
+    slideActivityInstalled = true
+    observeLiaSlideActivity(scheduleSync)
   }
 
   if (!viewportListenersInstalled) {
@@ -993,19 +1190,26 @@ export function installObjectLocks(nextController: ObjectLockController): void {
         anchorResizeObserver.observe(decoration.binding.anchor)
       }
     }
-    window.addEventListener("resize", scheduleSync, { passive: true })
-    window.addEventListener("scroll", scheduleSync, {
-      capture: true,
-      passive: true,
-    })
-    window.visualViewport?.addEventListener("resize", scheduleSync, {
-      passive: true,
-    })
-    window.visualViewport?.addEventListener("scroll", scheduleSync, {
-      passive: true,
-    })
-    document.addEventListener("load", scheduleSync, true)
-    void document.fonts?.ready.then(scheduleSync)
+    const views = new Set<Window>()
+    for (const candidate of templateDocumentCandidates(document)) {
+      const view = candidate.defaultView
+      if (view && !views.has(view)) {
+        views.add(view)
+        view.addEventListener("resize", scheduleSync, { passive: true })
+        view.addEventListener("scroll", scheduleSync, {
+          capture: true,
+          passive: true,
+        })
+        view.visualViewport?.addEventListener("resize", scheduleSync, {
+          passive: true,
+        })
+        view.visualViewport?.addEventListener("scroll", scheduleSync, {
+          passive: true,
+        })
+      }
+      candidate.addEventListener("load", scheduleSync, true)
+      void candidate.fonts?.ready.then(scheduleSync)
+    }
   }
 
   refreshObjectLocks()

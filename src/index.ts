@@ -9,6 +9,8 @@ import {
   renderKeyInventory,
 } from "./key-inventory-bar"
 import { installKeyPickups } from "./key-pickup"
+import { installMagnifier } from "./magnifier"
+import { MagnifierStore } from "./magnifier-store"
 import { installObjectLocks } from "./object-lock"
 import {
   discoverCourseAchievementsDeclaration,
@@ -27,8 +29,10 @@ import {
 import { ResourceStore } from "./resource-store"
 import { createConfig } from "./score"
 import { installSecretSlides } from "./secret-slides"
+import { installSlidePortals } from "./slide-portal"
 import { injectStyles } from "./style"
 import { HighscoreStore } from "./store"
+import { installTimerEventTracking } from "./timer-events"
 import {
   installTreasureChests,
   refreshTreasureChests,
@@ -43,6 +47,7 @@ function boot(): void {
   const store = new HighscoreStore()
   const resourceStore = new ResourceStore()
   const keyInventoryStore = new KeyInventoryStore()
+  const magnifierStore = new MagnifierStore()
   const achievementStore = new AchievementStore()
   const achievements = new AchievementManager(
     achievementStore,
@@ -177,6 +182,7 @@ function boot(): void {
   installSecretSlides({
     found: () => achievements.secretSlideFound(),
   })
+  installSlidePortals()
 
   void discoverCourseAchievementsDeclaration()
     .then((enabled) => {
@@ -226,6 +232,11 @@ function boot(): void {
     collect: collectTreasureChest,
   })
 
+  installMagnifier({
+    collected: () => magnifierStore.isCollected(),
+    collect: () => magnifierStore.collect(),
+  })
+
   const savedKeys = keyInventoryStore.state()
   if (Object.values(savedKeys.keys).some((count) => count > 0)) {
     renderKeyInventory(savedKeys.keys)
@@ -259,6 +270,10 @@ function boot(): void {
       }
       return result
     },
+  })
+
+  installTimerEventTracking({
+    useStart: () => spendResource("energy"),
   })
 
   installQuizEventTracking({

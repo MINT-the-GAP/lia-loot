@@ -1,6 +1,6 @@
 import type { ResourceKind } from "./types.ts"
 import {
-  discoverCourseChestDeclarations,
+  discoverCourseChests,
   type CourseChestDeclaration,
 } from "./course-chests.ts"
 import {
@@ -10,24 +10,40 @@ import {
   type CollectibleVisibilityRule,
 } from "./collectible-visibility.ts"
 import {
+  extractConcealmentOptions,
+  setHostConcealment,
+  type ConcealmentMode,
+} from "./concealment.ts"
+import {
   observeLiaSlideActivity,
   sectionFromLootId,
   sourceSlideIsActive,
 } from "./slide-activity.ts"
+import {
+  findTemplateTarget,
+  isTemplateTarget,
+  resolveTemplateTarget,
+  templateDocumentCandidates,
+  templateTargetDefinition,
+  type TemplateChestPosition,
+  type TemplateTarget,
+} from "./template-targets.ts"
 
 const CHEST_TAG = "lia-loot-chest"
 const LEGACY_CHEST_ID = "lia-loot-treasure-chest"
 const PORTAL_ATTRIBUTE = "data-loot-chest-portal"
+const TRAY_ATTRIBUTE = "data-loot-chest-tray"
 const SVG_NS = "http://www.w3.org/2000/svg"
 const OPENING_DURATION = 650
 
-type ChestPlacement =
+type CoreChestPlacement =
   | "toc"
   | "menu"
   | "classroom"
   | "info"
   | "translator"
   | "mode"
+type ChestPlacement = CoreChestPlacement | TemplateTarget
 type ChestLocation = ChestPlacement | "inline"
 
 interface TreasureChestController {
@@ -39,6 +55,7 @@ interface TreasureChestController {
 
 interface HostRequest {
   baseId: string
+  concealment: ConcealmentMode | null
   errors: string[]
   inline: boolean
   placements: ChestPlacement[]
@@ -50,6 +67,7 @@ interface HostRequest {
 }
 
 interface PortalRequest {
+  concealment: ConcealmentMode | null
   placements: Set<ChestPlacement>
   reward: ResourceKind
   sourceHost?: HTMLElement
@@ -57,7 +75,16 @@ interface PortalRequest {
   visibility: CollectibleVisibilityRule
 }
 
-const PLACEMENT_ALIASES: Readonly<Record<string, ChestPlacement>> = {
+interface PortalDestination {
+  anchor: HTMLElement
+  container: HTMLElement
+  grouped: boolean
+  template: boolean
+  templateLayout: "floating" | "inside" | null
+  templatePosition: TemplateChestPosition | null
+}
+
+const PLACEMENT_ALIASES: Readonly<Record<string, CoreChestPlacement>> = {
   toc: "toc",
   menu: "menu",
   classroom: "classroom",
@@ -74,7 +101,7 @@ const PLACEMENT_ALIASES: Readonly<Record<string, ChestPlacement>> = {
   darstellung: "mode",
 }
 
-const TARGET_SELECTORS: Record<ChestPlacement, string> = {
+const TARGET_SELECTORS: Record<CoreChestPlacement, string> = {
   toc: "#lia-toc .lia-toc__content",
   menu:
     "#lia-support-menu .lia-support-menu__item--settings .lia-support-menu__submenu",
@@ -98,14 +125,34 @@ const eligibleChestIds = new Set<string>()
 const warnedInvalidSpecs = new Set<string>()
 const visibilityGate = new CollectibleVisibilityGate()
 let controller: TreasureChestController | null = null
-let observer: MutationObserver | null = null
+const observers: MutationObserver[] = []
 let syncTimer: number | null = null
 let runtimeId = 0
 let sourceDiscovery: "idle" | "pending" | "complete" = "idle"
 let slideActivityInstalled = false
+let viewportListenersInstalled = false
 
-function chestGraphic(reward: ResourceKind): SVGSVGElement {
-  const svg = document.createElementNS(SVG_NS, "svg")
+function removeEmptyPortalTray(candidate: HTMLElement | null): void {
+  if (
+    candidate?.hasAttribute(TRAY_ATTRIBUTE) &&
+    !candidate.querySelector(`[${PORTAL_ATTRIBUTE}]`)
+  ) {
+    candidate.remove()
+  }
+}
+
+function removePortal(portal: HTMLElement | null | undefined): void {
+  if (!portal) return
+  const tray = portal.parentElement
+  portal.remove()
+  removeEmptyPortalTray(tray)
+}
+
+function chestGraphic(
+  reward: ResourceKind,
+  ownerDocument: Document = document,
+): SVGSVGElement {
+  const svg = ownerDocument.createElementNS(SVG_NS, "svg")
   svg.setAttribute("viewBox", "0 0 64 56")
   svg.setAttribute("shape-rendering", "crispEdges")
   svg.setAttribute("aria-hidden", "true")
@@ -164,8 +211,11 @@ function chestGraphic(reward: ResourceKind): SVGSVGElement {
   return svg
 }
 
-function rewardBadge(rewardKind: ResourceKind): HTMLSpanElement {
-  const reward = document.createElement("span")
+function rewardBadge(
+  rewardKind: ResourceKind,
+  ownerDocument: Document = document,
+): HTMLSpanElement {
+  const reward = ownerDocument.createElement("span")
   reward.className = "loot-treasure-reward"
   if (rewardKind === "diamonds") {
     reward.classList.add("loot-treasure-reward--diamonds")
@@ -188,7 +238,7 @@ function showResourceRequirement(
 ): void {
   button.querySelector(".loot-treasure-requirement")?.remove()
 
-  const requirement = document.createElement("span")
+  const requirement = button.ownerDocument.createElement("span")
   requirement.className = "loot-treasure-requirement"
   requirement.setAttribute("role", "status")
   requirement.textContent =
@@ -211,8 +261,9 @@ function createChestButton(
   chestId: string,
   location: ChestLocation,
   reward: ResourceKind,
+  ownerDocument: Document = document,
 ): HTMLButtonElement {
-  const button = document.createElement("button")
+  const button = ownerDocument.createElement("button")
   button.type = "button"
   button.className = "loot-treasure-chest"
   if (reward === "diamonds") {
@@ -231,7 +282,10 @@ function createChestButton(
         ? "Energiekiste öffnen und einen Energiepunkt erhalten"
         : "Schatztruhe öffnen und eine Goldmünze erhalten",
   )
-  button.append(chestGraphic(reward), rewardBadge(reward))
+  button.append(
+    chestGraphic(reward, ownerDocument),
+    rewardBadge(reward, ownerDocument),
+  )
 
   button.addEventListener("click", () => {
     if (!controller || openingIds.has(chestId)) return
@@ -261,7 +315,7 @@ function createChestButton(
     window.setTimeout(() => {
       openingIds.delete(chestId)
       const portal = button.closest<HTMLElement>(`[${PORTAL_ATTRIBUTE}]`)
-      if (portal) portal.remove()
+      if (portal) removePortal(portal)
       else button.remove()
       scheduleSync()
     }, OPENING_DURATION)
@@ -303,12 +357,11 @@ function readPlacements(values: readonly string[]): ChestPlacement[] {
   return [
     ...new Set(
       values
-        .map(
-          (placement) =>
-            PLACEMENT_ALIASES[placement.trim().toLowerCase()],
+        .map((placement) =>
+          resolveChestPlacement(placement),
         )
         .filter(
-          (placement): placement is ChestPlacement => placement !== undefined,
+          (placement): placement is ChestPlacement => placement !== null,
         ),
     ),
   ]
@@ -316,27 +369,64 @@ function readPlacements(values: readonly string[]): ChestPlacement[] {
 
 function invalidPlacementErrors(values: readonly string[]): string[] {
   return values
-    .filter(
-      (placement) =>
-        PLACEMENT_ALIASES[placement.trim().toLowerCase()] === undefined,
-    )
+    .filter((placement) => resolveChestPlacement(placement) === null)
     .map((placement) => `Unbekanntes Truhenziel oder Option: ${placement}`)
+}
+
+function resolveChestPlacement(value: string): ChestPlacement | null {
+  return (
+    PLACEMENT_ALIASES[value.trim().toLowerCase()] ??
+    resolveTemplateTarget(value)
+  )
+}
+
+export function parseTreasureChestOptions(rawSpecification: string): {
+  concealment: ConcealmentMode | null
+  errors: string[]
+  inline: boolean
+  placements: ChestPlacement[]
+  valid: boolean
+  visibility: CollectibleVisibilityRule
+} {
+  const parsed = parseCollectibleOptions(rawSpecification)
+  const concealment = extractConcealmentOptions(parsed.values)
+  const errors = [
+    ...parsed.errors,
+    ...concealment.errors,
+    ...invalidPlacementErrors(concealment.values),
+  ]
+  const placements = readPlacements(concealment.values)
+  const hasOptions = parsed.hasOptions || concealment.mode !== null
+  const inline =
+    rawSpecification.trim() === "" ||
+    (hasOptions && concealment.values.length === 0)
+
+  return {
+    concealment: concealment.mode,
+    errors,
+    inline,
+    placements,
+    valid: errors.length === 0,
+    visibility: parsed.rule,
+  }
 }
 
 export function courseChestUnitCount(
   declarations: readonly CourseChestDeclaration[],
+  templateAvailable: (target: TemplateTarget) => boolean = () => true,
 ): number {
   let total = 0
   for (const declaration of declarations) {
-    const parsed = parseCollectibleOptions(declaration.placement)
-    const errors = [...parsed.errors, ...invalidPlacementErrors(parsed.values)]
-    if (errors.length > 0) continue
-
-    const placements = new Set(readPlacements(parsed.values))
-    const inline =
-      declaration.placement === "" ||
-      (parsed.hasOptions && parsed.values.length === 0)
-    total += inline ? 1 : placements.size
+    const parsed = parseTreasureChestOptions(declaration.placement)
+    if (!parsed.valid) continue
+    total += parsed.inline
+      ? 1
+      : new Set(
+          parsed.placements.filter(
+            (placement) =>
+              !isTemplateTarget(placement) || templateAvailable(placement),
+          ),
+        ).size
   }
   return total
 }
@@ -346,30 +436,26 @@ function readHostRequest(host: HTMLElement): HostRequest {
   const reward = readReward(host)
   const authoredPlacement = host.getAttribute("data-placement")?.trim() ?? ""
   const rawPlacement = authoredPlacement === "@0" ? "" : authoredPlacement
-  const parsed = parseCollectibleOptions(rawPlacement)
-  const errors = [...parsed.errors, ...invalidPlacementErrors(parsed.values)]
-  const placements = readPlacements(parsed.values)
-  const inline =
-    rawPlacement === "" ||
-    (parsed.hasOptions && parsed.values.length === 0)
+  const parsed = parseTreasureChestOptions(rawPlacement)
 
   return {
     baseId,
-    errors,
-    inline,
-    placements,
+    concealment: parsed.concealment,
+    errors: parsed.errors,
+    inline: parsed.inline,
+    placements: parsed.placements,
     reward,
     sourceHost: host,
     sourceSection: sectionFromLootId(baseId),
-    valid: errors.length === 0,
-    visibility: parsed.rule,
+    valid: parsed.valid,
+    visibility: parsed.visibility,
   }
 }
 
 function portalSignature(request: PortalRequest): string {
   return `${request.reward}:${[
     ...request.placements,
-  ].sort().join(";")}:${collectibleVisibilitySignature(request.visibility)}`
+  ].sort().join(";")}:${collectibleVisibilitySignature(request.visibility)}:${request.concealment ?? "none"}`
 }
 
 function sourceMatchKey(
@@ -417,6 +503,7 @@ function registerDomPortal(baseId: string, request: PortalRequest): void {
 
 function registerSourceDeclarations(
   declarations: readonly CourseChestDeclaration[],
+  catalog: readonly CourseChestDeclaration[],
 ): void {
   for (const requestId of sourceRequestIds) portalRequests.delete(requestId)
   sourceRequestIds.clear()
@@ -424,19 +511,19 @@ function registerSourceDeclarations(
   matchedSourceHosts.clear()
 
   for (const declaration of declarations) {
-    const parsed = parseCollectibleOptions(declaration.placement)
-    const errors = [...parsed.errors, ...invalidPlacementErrors(parsed.values)]
-    if (errors.length > 0) {
-      warnInvalidSpecification(declaration.baseId, errors)
+    const parsed = parseTreasureChestOptions(declaration.placement)
+    if (!parsed.valid) {
+      warnInvalidSpecification(declaration.baseId, parsed.errors)
       continue
     }
-    const placements = new Set(readPlacements(parsed.values))
+    const placements = new Set(parsed.placements)
     if (placements.size === 0) continue
     const request: PortalRequest = {
+      concealment: parsed.concealment,
       placements,
       reward: declaration.reward,
       sourceSection: declaration.section,
-      visibility: parsed.rule,
+      visibility: parsed.visibility,
     }
     portalRequests.set(declaration.baseId, request)
     sourceRequestIds.add(declaration.baseId)
@@ -448,7 +535,7 @@ function registerSourceDeclarations(
   }
 
   sourceDiscovery = "complete"
-  controller?.catalogReady(courseChestUnitCount(declarations))
+  controller?.catalogReady(courseChestUnitCount(catalog))
   for (const [baseId, request] of pendingPortalRequests) {
     registerDomPortal(baseId, request)
   }
@@ -459,9 +546,11 @@ function registerSourceDeclarations(
 function discoverSourcePortals(): void {
   if (sourceDiscovery !== "idle") return
   sourceDiscovery = "pending"
-  void discoverCourseChestDeclarations()
-    .then(registerSourceDeclarations)
-    .catch(() => registerSourceDeclarations([]))
+  void discoverCourseChests()
+    .then(({ declarations, catalog }) =>
+      registerSourceDeclarations(declarations, catalog),
+    )
+    .catch(() => registerSourceDeclarations([], []))
 }
 
 function registerHost(host: HTMLElement): HostRequest {
@@ -472,6 +561,7 @@ function registerHost(host: HTMLElement): HostRequest {
     pendingPortalRequests.delete(request.baseId)
     portalRequests.delete(request.baseId)
     matchedSourceHosts.delete(request.baseId)
+    setHostConcealment(host, null)
     host.classList.add("loot-treasure-host--portal-source")
     host.setAttribute("aria-hidden", "true")
     if (host.childElementCount > 0) host.replaceChildren()
@@ -480,9 +570,10 @@ function registerHost(host: HTMLElement): HostRequest {
     portalRequests.delete(request.baseId)
     matchedSourceHosts.delete(request.baseId)
     host.classList.remove("loot-treasure-host--portal-source")
-    host.removeAttribute("aria-hidden")
+    if (request.concealment === null) setHostConcealment(host, null)
   } else {
     const portalRequest: PortalRequest = {
+      concealment: request.concealment,
       placements: new Set(request.placements),
       reward: request.reward,
       sourceHost: request.sourceHost,
@@ -494,6 +585,7 @@ function registerHost(host: HTMLElement): HostRequest {
     } else {
       pendingPortalRequests.set(request.baseId, portalRequest)
     }
+    setHostConcealment(host, null)
     host.classList.add("loot-treasure-host--portal-source")
     host.setAttribute("aria-hidden", "true")
     if (host.childElementCount > 0) host.replaceChildren()
@@ -521,14 +613,28 @@ function buttonIn(
 }
 
 function portalFor(chestId: string): HTMLElement | null {
-  const portals = document.querySelectorAll<HTMLElement>(
-    `[${PORTAL_ATTRIBUTE}]`,
-  )
-  return (
-    [...portals].find(
-      (portal) => portal.dataset.lootChestPortal === chestId,
-    ) ?? null
-  )
+  for (const candidate of templateDocumentCandidates(document)) {
+    const portals = candidate.querySelectorAll<HTMLElement>(
+      `[${PORTAL_ATTRIBUTE}]`,
+    )
+    const portal = [...portals].find(
+      (element) => element.dataset.lootChestPortal === chestId,
+    )
+    if (portal) return portal
+  }
+  return null
+}
+
+function allPortals(): HTMLElement[] {
+  const portals: HTMLElement[] = []
+  for (const candidate of templateDocumentCandidates(document)) {
+    for (const portal of candidate.querySelectorAll<HTMLElement>(
+      `[${PORTAL_ATTRIBUTE}]`,
+    )) {
+      if (!portals.includes(portal)) portals.push(portal)
+    }
+  }
+  return portals
 }
 
 function syncInline(
@@ -544,6 +650,7 @@ function syncInline(
   if (unavailable) {
     eligibleChestIds.delete(chestId)
     visibilityGate.forget(`chest:${request.baseId}`)
+    setHostConcealment(host, null)
     if (host.childElementCount > 0) host.replaceChildren()
     return
   }
@@ -559,40 +666,232 @@ function syncInline(
 
   if (!visible && !opening) {
     if (host.childElementCount > 0) host.replaceChildren()
+    setHostConcealment(host, null)
     return
   }
-  if (opening || buttonIn(host, chestId, request.reward)) return
-  host.replaceChildren(createChestButton(chestId, "inline", request.reward))
+  if (!opening && !buttonIn(host, chestId, request.reward)) {
+    host.replaceChildren(createChestButton(chestId, "inline", request.reward))
+  }
+  setHostConcealment(host, request.concealment)
 }
 
-function portalTarget(placement: ChestPlacement): Element | null {
-  return document.querySelector(TARGET_SELECTORS[placement])
+function portalDestination(
+  placement: ChestPlacement,
+  request: PortalRequest,
+): PortalDestination | null {
+  if (isTemplateTarget(placement)) {
+    const match = findTemplateTarget(placement, "chest", document)
+    if (!match) return null
+    if (
+      templateTargetDefinition(placement).scope === "slide" &&
+      !sourceSlideIsActive(request.sourceSection, match.root)
+    ) {
+      return null
+    }
+    return {
+      anchor: match.chestAnchor,
+      container:
+        match.chestContainer ?? match.chestAnchor.ownerDocument.body,
+      grouped: Boolean(match.chestContainer),
+      template: true,
+      templateLayout: match.chestContainer ? "inside" : "floating",
+      templatePosition: match.chestContainer
+        ? null
+        : (match.chestPosition ?? "overlay"),
+    }
+  }
+
+  const target = document.querySelector<HTMLElement>(TARGET_SELECTORS[placement])
+  return target
+    ? {
+        anchor: target,
+        container: target,
+        grouped: placement !== "toc",
+        template: false,
+        templateLayout: null,
+        templatePosition: null,
+      }
+    : null
+}
+
+function setPortalStyle(
+  wrapper: HTMLElement,
+  property: "height" | "left" | "top" | "width",
+  value: string,
+): void {
+  if (wrapper.style[property] !== value) wrapper.style[property] = value
+}
+
+export function templatePortalGeometry(
+  rect: Pick<DOMRectReadOnly, "bottom" | "left" | "right" | "top" | "width">,
+  viewportWidth: number,
+  viewportHeight: number,
+  position: TemplateChestPosition = "overlay",
+): { height: number; left: number; top: number; width: number } {
+  const width = Math.min(58, Math.max(44, rect.width))
+  const height = Math.min(51, Math.max(40, width * 0.875))
+  const maxLeft = Math.max(4, viewportWidth - width - 4)
+  const maxTop = Math.max(4, viewportHeight - height - 4)
+  const preferredLeft =
+    position === "below"
+      ? rect.left + (rect.width - width) / 2
+      : rect.right - width - 4
+  const preferredTop =
+    position === "below" ? rect.bottom + 8 : rect.bottom - height - 4
+
+  return {
+    height,
+    left: Math.max(4, Math.min(preferredLeft, maxLeft)),
+    top: Math.max(4, Math.min(preferredTop, maxTop)),
+    width,
+  }
+}
+
+function positionTemplatePortal(
+  wrapper: HTMLElement,
+  anchor: HTMLElement,
+  position: TemplateChestPosition,
+): void {
+  const rect = anchor.getBoundingClientRect()
+  const view = anchor.ownerDocument.defaultView ?? window
+  const visible =
+    anchor.isConnected &&
+    rect.width > 0 &&
+    rect.height > 0 &&
+    rect.right > 0 &&
+    rect.bottom > 0 &&
+    rect.left < view.innerWidth &&
+    rect.top < view.innerHeight
+  if (wrapper.hidden === visible) wrapper.hidden = !visible
+  if (!visible) return
+
+  const geometry = templatePortalGeometry(
+    rect,
+    view.innerWidth,
+    view.innerHeight,
+    position,
+  )
+
+  setPortalStyle(wrapper, "left", `${geometry.left}px`)
+  setPortalStyle(wrapper, "top", `${geometry.top}px`)
+  setPortalStyle(wrapper, "width", `${geometry.width}px`)
+  setPortalStyle(wrapper, "height", `${geometry.height}px`)
+}
+
+function ensurePortalTray(
+  destination: PortalDestination,
+  placement: ChestPlacement,
+): HTMLElement {
+  const selector = `:scope > [${TRAY_ATTRIBUTE}="${placement}"]`
+  const existing =
+    destination.container.querySelector<HTMLElement>(selector)
+  if (existing) return existing
+
+  const ownerDocument = destination.container.ownerDocument
+  const listTarget = destination.container.matches("ul, ol")
+  const tray = ownerDocument.createElement(listTarget ? "li" : "div")
+  tray.className = [
+    "loot-chest-tray",
+    destination.template
+      ? "loot-chest-tray--template"
+      : "loot-chest-tray--support",
+  ].join(" ")
+  tray.dataset.lootChestTray = placement
+  tray.setAttribute("role", "group")
+  tray.setAttribute("aria-label", "Versteckte Funde")
+  destination.container.appendChild(tray)
+  return tray
+}
+
+function portalMount(
+  destination: PortalDestination,
+  placement: ChestPlacement,
+): HTMLElement {
+  return destination.grouped
+    ? ensurePortalTray(destination, placement)
+    : destination.container
 }
 
 function ensurePortal(
   chestId: string,
   placement: ChestPlacement,
-  reward: ResourceKind,
+  request: PortalRequest,
 ): void {
-  const existingPortal = portalFor(chestId)
-  if (existingPortal?.dataset.lootChestReward === reward) return
-  existingPortal?.remove()
-
-  const target = portalTarget(placement)
-  if (!target) return
-
-  const listTarget = target.matches("ul, ol")
-  const wrapper = document.createElement(listTarget ? "li" : "div")
-  wrapper.className = `loot-chest-placement loot-chest-placement--${placement}`
-  wrapper.dataset.lootChestPortal = chestId
-  wrapper.dataset.lootChestLocation = placement
-  wrapper.dataset.lootChestReward = reward
-  if (listTarget) {
-    wrapper.classList.add("nav__item", "lia-support-menu__item")
-    wrapper.setAttribute("role", "none")
+  const destination = portalDestination(placement, request)
+  let wrapper = portalFor(chestId)
+  if (!destination) {
+    removePortal(wrapper)
+    return
   }
-  wrapper.append(createChestButton(chestId, placement, reward))
-  target.appendChild(wrapper)
+
+  if (wrapper?.dataset.lootChestReward !== request.reward) {
+    removePortal(wrapper)
+    wrapper = null
+  }
+
+  const mount = portalMount(destination, placement)
+  if (!wrapper) {
+    const ownerDocument = mount.ownerDocument
+    const listTarget = !destination.template &&
+      mount.matches("ul, ol")
+    wrapper = ownerDocument.createElement(listTarget ? "li" : "div")
+    wrapper.className = `loot-chest-placement loot-chest-placement--${placement}`
+    wrapper.dataset.lootChestPortal = chestId
+    wrapper.dataset.lootChestLocation = placement
+    wrapper.dataset.lootChestReward = request.reward
+    if (destination.template) {
+      wrapper.dataset.lootChestTemplateTarget = placement
+    }
+    if (listTarget) {
+      wrapper.classList.add("nav__item", "lia-support-menu__item")
+      wrapper.setAttribute("role", "none")
+    }
+    wrapper.append(
+      createChestButton(
+        chestId,
+        placement,
+        request.reward,
+        ownerDocument,
+      ),
+    )
+  }
+
+  if (wrapper.parentElement !== mount) {
+    const previousParent = wrapper.parentElement
+    mount.appendChild(wrapper)
+    removeEmptyPortalTray(previousParent)
+  }
+  wrapper.classList.toggle(
+    "loot-chest-placement--template",
+    destination.templateLayout === "floating",
+  )
+  wrapper.classList.toggle(
+    "loot-chest-placement--template-inside",
+    destination.templateLayout === "inside",
+  )
+  wrapper.classList.toggle(
+    "loot-chest-placement--template-below",
+    destination.templateLayout === "floating" &&
+      destination.templatePosition === "below",
+  )
+  if (destination.templatePosition) {
+    wrapper.dataset.lootChestTemplatePosition = destination.templatePosition
+  } else {
+    delete wrapper.dataset.lootChestTemplatePosition
+  }
+  setHostConcealment(wrapper, request.concealment)
+  if (destination.templateLayout === "floating") {
+    positionTemplatePortal(
+      wrapper,
+      destination.anchor,
+      destination.templatePosition ?? "overlay",
+    )
+  } else if (destination.templateLayout === "inside") {
+    wrapper.hidden = false
+    for (const property of ["height", "left", "top", "width"] as const) {
+      setPortalStyle(wrapper, property, "")
+    }
+  }
 }
 
 function syncPortals(): void {
@@ -614,7 +913,7 @@ function syncPortals(): void {
 
       if (!visible && !opening) {
         eligibleChestIds.delete(chestId)
-        portalFor(chestId)?.remove()
+        removePortal(portalFor(chestId))
         continue
       }
 
@@ -623,20 +922,21 @@ function syncPortals(): void {
       else eligibleChestIds.delete(chestId)
 
       if (unavailable) {
-        portalFor(chestId)?.remove()
+        removePortal(portalFor(chestId))
       } else if (!opening) {
-        ensurePortal(chestId, placement, request.reward)
+        ensurePortal(
+          chestId,
+          placement,
+          request,
+        )
       }
     }
   }
 
-  const portals = document.querySelectorAll<HTMLElement>(
-    `[${PORTAL_ATTRIBUTE}]`,
-  )
-  for (const portal of portals) {
+  for (const portal of allPortals()) {
     const chestId = portal.dataset.lootChestPortal
     if (!chestId || (!activeIds.has(chestId) && !openingIds.has(chestId))) {
-      portal.remove()
+      removePortal(portal)
     }
   }
 }
@@ -663,6 +963,16 @@ function scheduleSync(): void {
     syncTimer = null
     syncAll()
   }, 0)
+}
+
+function observedDocumentMutations(mutations: MutationRecord[]): void {
+  const needsSync = mutations.some((mutation) => {
+    const target = mutation.target as Node & { nodeType?: number }
+    if (target.nodeType !== 1) return true
+    const element = target as unknown as Element
+    return !element.closest(`${CHEST_TAG}, [${PORTAL_ATTRIBUTE}]`)
+  })
+  if (needsSync) scheduleSync()
 }
 
 class LootTreasureChestElement extends HTMLElement {
@@ -699,6 +1009,9 @@ export function installTreasureChests(
     observeLiaSlideActivity(() => {
       eligibleChestIds.clear()
       scheduleSync()
+      for (const delay of [80, 250, 650]) {
+        window.setTimeout(scheduleSync, delay)
+      }
     })
   }
 
@@ -706,12 +1019,47 @@ export function installTreasureChests(
     customElements.define(CHEST_TAG, LootTreasureChestElement)
   }
 
-  if (!observer) {
-    observer = new MutationObserver(scheduleSync)
-    observer.observe(document.documentElement, {
-      childList: true,
-      subtree: true,
-    })
+  if (observers.length === 0) {
+    for (const candidate of templateDocumentCandidates(document)) {
+      const Observer = candidate.defaultView?.MutationObserver ?? MutationObserver
+      const candidateObserver = new Observer(observedDocumentMutations)
+      candidateObserver.observe(candidate.documentElement, {
+        attributeFilter: [
+          "aria-hidden",
+          "aria-pressed",
+          "class",
+          "data-active",
+          "data-open",
+          "hidden",
+          "style",
+        ],
+        attributes: true,
+        childList: true,
+        subtree: true,
+      })
+      observers.push(candidateObserver)
+    }
+  }
+
+  if (!viewportListenersInstalled) {
+    viewportListenersInstalled = true
+    const views = new Set<Window>()
+    for (const candidate of templateDocumentCandidates(document)) {
+      const view = candidate.defaultView
+      if (!view || views.has(view)) continue
+      views.add(view)
+      view.addEventListener("resize", scheduleSync, { passive: true })
+      view.addEventListener("scroll", scheduleSync, {
+        capture: true,
+        passive: true,
+      })
+      view.visualViewport?.addEventListener("resize", scheduleSync, {
+        passive: true,
+      })
+      view.visualViewport?.addEventListener("scroll", scheduleSync, {
+        passive: true,
+      })
+    }
   }
 
   refreshTreasureChests()

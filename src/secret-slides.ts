@@ -2,12 +2,14 @@ import {
   requireCourseSecretSlideDeclarations,
   type CourseSecretSlideDeclaration,
 } from "./course-chests.ts"
+import { liaCourseIdentity } from "./course-identity.ts"
 import {
   activeLiaSection,
   refreshLiaSlideActivity,
   sectionFromLootId,
   setLiaSlideAccessGuard,
 } from "./slide-activity.ts"
+import { navigateToLiaSection } from "./slide-navigation.ts"
 
 const SECRET_TAG = "lia-loot-secret-slide"
 const SEARCH_ID = "lia-input-search"
@@ -122,13 +124,7 @@ export function publicFallbackSection(
 }
 
 function courseIdentity(): string {
-  try {
-    const url = new URL(window.location.href)
-    url.hash = ""
-    return url.href
-  } catch {
-    return `${window.location.pathname}${window.location.search}`
-  }
+  return liaCourseIdentity()
 }
 
 function removeStoredPermit(): void {
@@ -353,19 +349,6 @@ function syncTocLinks(): { links: HTMLAnchorElement[]; totalSections: number } {
   return { links, totalSections: highestSection + 1 }
 }
 
-function navigateToSection(section: number, replaceHistory = true): void {
-  const hash = `#${section + 1}`
-  if (!replaceHistory) {
-    window.location.hash = hash
-    return
-  }
-  try {
-    window.location.replace(hash)
-  } catch {
-    window.location.hash = hash
-  }
-}
-
 function enforceRootClasses(): void {
   const root = document.documentElement
   root.classList.toggle(
@@ -450,7 +433,7 @@ function guardActiveSection(totalSections: number): void {
   setRouteBlocked(true)
   if (redirectingFromSection === section) return
   redirectingFromSection = section
-  navigateToSection(fallback)
+  navigateToLiaSection(fallback, "replace")
 }
 
 function syncAll(): void {
@@ -559,8 +542,20 @@ function handleSearchEnter(event: KeyboardEvent): void {
   }
   const section = sectionFromLink(matches[0])
   if (section !== null && authorizeLink(matches[0])) {
-    navigateToSection(section, false)
+    navigateToLiaSection(section, "push")
   }
+}
+
+export function permitPortalSlideNavigation(section: number): boolean {
+  if (
+    discoveryState !== "complete" ||
+    !Number.isInteger(section) ||
+    section < 0
+  ) {
+    return false
+  }
+  if (secretSections.has(section)) storePermit(section)
+  return true
 }
 
 function startDiscoveryGesture(event: TouchEvent | MouseEvent): void {

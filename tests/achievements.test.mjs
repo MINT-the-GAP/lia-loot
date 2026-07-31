@@ -105,6 +105,34 @@ test("schaltet Gesamtfortschritte erst mit fertigem, nichtleerem Katalog frei", 
   })
 })
 
+test("vergibt README-Gesamterfolge nicht nach dem ersten internen Liveobjekt", () => {
+  withWindow("?readme-catalog", () => {
+    const notifications = []
+    const manager = new AchievementManager(
+      new AchievementStore(),
+      (achievement) => notifications.push(achievement.id),
+    )
+    manager.enable()
+    manager.chestCatalogReady(30, 0)
+    manager.lockCatalogReady(13, 0)
+
+    manager.chestCollected(1)
+    manager.lockUnlocked(1)
+    assert.deepEqual(notifications, [])
+
+    manager.chestCollected(29)
+    manager.lockUnlocked(12)
+    assert.deepEqual(notifications, [])
+
+    manager.chestCollected(30)
+    manager.lockUnlocked(13)
+    assert.deepEqual(notifications, [
+      "all-chests-opened",
+      "all-locks-opened",
+    ])
+  })
+})
+
 test("vergibt den Highscore-Erfolg nur für die exakte Maximalpunktzahl", () => {
   withWindow("?score", () => {
     const notifications = []

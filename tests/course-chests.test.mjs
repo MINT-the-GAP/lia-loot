@@ -7,11 +7,58 @@ import {
   discoverCourseResourceDeclaration,
   discoverCourseSecretSlideDeclarations,
   parseCourseAchievementsDeclaration,
+  parseCourseChestCatalogDeclarations,
   parseCourseChestDeclarations,
+  parseCourseLockCatalogDeclarations,
   parseCourseLockDeclarations,
   parseCourseResourceDeclaration,
   parseCourseSecretSlideDeclarations,
 } from "../src/course-chests.ts"
+
+test("katalogisiert interne Live-Demos ohne sie als Source-Aufrufe zu aktivieren", () => {
+  const markdown = [
+    "<!--",
+    "@LootSchloss_(@uid,annotation,orange)",
+    "@LootTruhe_(@uid,boardmode; anker,energy)",
+    "-->",
+    "",
+    "```markdown",
+    "@LootSchloss_(@uid,timer,blau)",
+    "@LootTruhe_(@uid,timer,diamonds)",
+    "```",
+    "",
+    "# Live",
+    "@Schloss(info, gruen)",
+    "@LootSchloss_(@uid,boardmodefontbutton,orange)",
+    "@Schatztruhe",
+    "@LootTruhe_(@uid,annotation; anker,energy)",
+  ].join("\n")
+
+  assert.deepEqual(
+    parseCourseLockDeclarations(markdown).map(({ target }) => target),
+    ["info"],
+  )
+  assert.deepEqual(
+    parseCourseLockCatalogDeclarations(markdown).map(({ target }) => target),
+    ["info", "boardmodefontbutton"],
+  )
+  assert.deepEqual(
+    parseCourseChestDeclarations(markdown).map(({ placement, reward }) => ({
+      placement,
+      reward,
+    })),
+    [{ placement: "", reward: "gold" }],
+  )
+  assert.deepEqual(
+    parseCourseChestCatalogDeclarations(markdown).map(
+      ({ placement, reward }) => ({ placement, reward }),
+    ),
+    [
+      { placement: "", reward: "gold" },
+      { placement: "annotation; anker", reward: "energy" },
+    ],
+  )
+})
 
 test("findet Portal- und Inline-Kistentypen im Kursquelltext", () => {
   const declarations = parseCourseChestDeclarations(`
@@ -175,6 +222,72 @@ test("normalisiert Schlossfarben und ignoriert ungültige Farben", () => {
   assert.notEqual(declarations[0].baseId, declarations[1].baseId)
 })
 
+test("bindet globale Schlösser nur mit anker an ihre Quellfolie", () => {
+  const markdown = `
+# Abschnitt A
+@Schloss(boardmodefontbutton, gruen)
+@Schloss(textmarkerbutton, gelb; anker)
+@LootSchloss_(@uid,annotationsbar,orange; anker)
+@Schloss(info, rot; 12s)
+@Schloss(menu, blau; ankerr)
+`
+
+  assert.deepEqual(
+    parseCourseLockDeclarations(markdown).map(
+      ({ target, color, onlyOnSlide, section }) => ({
+        target,
+        color,
+        onlyOnSlide,
+        section,
+      }),
+    ),
+    [
+      {
+        target: "boardmodefontbutton",
+        color: "green",
+        onlyOnSlide: false,
+        section: 0,
+      },
+      {
+        target: "textmarkerbutton",
+        color: "yellow",
+        onlyOnSlide: true,
+        section: 0,
+      },
+    ],
+  )
+  assert.deepEqual(
+    parseCourseLockCatalogDeclarations(markdown).map(
+      ({ target, color, onlyOnSlide, section }) => ({
+        target,
+        color,
+        onlyOnSlide,
+        section,
+      }),
+    ),
+    [
+      {
+        target: "boardmodefontbutton",
+        color: "green",
+        onlyOnSlide: false,
+        section: 0,
+      },
+      {
+        target: "textmarkerbutton",
+        color: "yellow",
+        onlyOnSlide: true,
+        section: 0,
+      },
+      {
+        target: "annotationsbar",
+        color: "orange",
+        onlyOnSlide: true,
+        section: 0,
+      },
+    ],
+  )
+})
+
 test("findet die erste gültige Ressourcen-Konfiguration", () => {
   const declaration = parseCourseResourceDeclaration(`
 # Start
@@ -316,7 +429,7 @@ test("enthält das geheime Labor als echte Live-Demo außerhalb des Codeblocks",
   const laboratoryHeadings = markdown.match(/^## Das geheime Labor\s*$/gmu) ?? []
 
   assert.equal(laboratoryHeadings.length, 2)
-  assert.deepEqual(declarations, [{ section: 9 }])
+  assert.deepEqual(declarations, [{ section: 11 }])
 })
 
 test("wiederholt die frühe Quelltextladung nach einem vorübergehenden Fehler", async () => {

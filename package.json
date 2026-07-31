@@ -6,6 +6,7 @@
   "scripts": {
     "build": "parcel build src/index.ts --dist-dir dist --no-scope-hoist",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "test:stress": "npm run build && node tests/run-browser-stress.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

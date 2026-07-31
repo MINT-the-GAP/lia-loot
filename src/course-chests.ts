@@ -1,6 +1,6 @@
 import type { ResourceKind } from "./types"
-import { requestedKeyColor } from "./key-colors.ts"
 import type { KeyColor } from "./key-colors.ts"
+import { parseLockOptions } from "./lock-options.ts"
 
 export interface CourseChestDeclaration {
   baseId: string
@@ -13,6 +13,7 @@ export interface CourseLockDeclaration {
   baseId: string
   target: string
   color: KeyColor
+  onlyOnSlide: boolean
   section: number
 }
 
@@ -27,10 +28,24 @@ export interface CourseSecretSlideDeclaration {
   section: number
 }
 
+export interface CourseChestDiscovery {
+  declarations: CourseChestDeclaration[]
+  catalog: CourseChestDeclaration[]
+}
+
+export interface CourseLockDiscovery {
+  declarations: CourseLockDeclaration[]
+  catalog: CourseLockDeclaration[]
+}
+
 const CHEST_MACRO =
   /^\s*@(Schatztruhe|Diamanttruhe|Energiekiste)(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/
 const LOCK_MACRO =
   /^\s*@Schloss\s*\(\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]+)\s*\)\s*$/
+const INTERNAL_CHEST_MACRO =
+  /^\s*@LootTruhe_\s*\(\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]*)\s*,\s*(gold|diamonds|energy)\s*\)\s*$/i
+const INTERNAL_LOCK_MACRO =
+  /^\s*@LootSchloss_\s*\(\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]+)\s*\)\s*$/
 const RESOURCE_MACRO =
   /^\s*@Ressourcen\s*\(\s*([^,()\r\n]+?)\s*,\s*([^,()\r\n]+?)(?:\s*,\s*([^,()\r\n]+?))?\s*\)\s*$/
 const SECRET_SLIDE_MACRO = /^\s*@Geheimfolie\s*$/
@@ -249,20 +264,100 @@ export function parseCourseLockDeclarations(
     if (!match) continue
 
     const target = match[1].trim()
-    const color = requestedKeyColor(match[2])
-    if (!color) continue
-    const invocation = `Schloss(${target.toLowerCase()},${color})`
+    const options = parseLockOptions(match[2])
+    if (!options.valid || !options.color) continue
+    const invocation =
+      `Schloss(${target.toLowerCase()},${options.color}` +
+      `${options.onlyOnSlide ? ",anker" : ""})`
     const occurrence = (occurrences.get(invocation) ?? 0) + 1
     occurrences.set(invocation, occurrence)
     declarations.push({
       baseId: `source-lock-${hash(invocation)}-${occurrence}`,
       target,
-      color,
+      color: options.color,
+      onlyOnSlide: options.onlyOnSlide,
       section: line.section,
     })
   }
 
   return declarations
+}
+
+function parseInternalCourseChestDeclarations(
+  markdown: string,
+): CourseChestDeclaration[] {
+  const declarations: CourseChestDeclaration[] = []
+  const occurrences = new Map<string, number>()
+
+  for (const line of visibleCourseLines(markdown)) {
+    const match = INTERNAL_CHEST_MACRO.exec(line.content)
+    if (!match) continue
+
+    const placement = match[2].trim()
+    const reward = match[3].toLowerCase() as ResourceKind
+    const invocation = normalizedInvocation(
+      `LootTruhe(${reward})`,
+      `${match[1].trim()};${placement}`,
+    )
+    const occurrence = (occurrences.get(invocation) ?? 0) + 1
+    occurrences.set(invocation, occurrence)
+    declarations.push({
+      baseId: `source-internal-${reward}-${hash(invocation)}-${occurrence}`,
+      placement,
+      reward,
+      section: line.section,
+    })
+  }
+
+  return declarations
+}
+
+function parseInternalCourseLockDeclarations(
+  markdown: string,
+): CourseLockDeclaration[] {
+  const declarations: CourseLockDeclaration[] = []
+  const occurrences = new Map<string, number>()
+
+  for (const line of visibleCourseLines(markdown)) {
+    const match = INTERNAL_LOCK_MACRO.exec(line.content)
+    if (!match) continue
+
+    const target = match[2].trim()
+    const options = parseLockOptions(match[3])
+    if (!options.valid || !options.color) continue
+    const invocation =
+      `LootSchloss(${match[1].trim()},${target.toLowerCase()},` +
+      `${options.color}${options.onlyOnSlide ? ",anker" : ""})`
+    const occurrence = (occurrences.get(invocation) ?? 0) + 1
+    occurrences.set(invocation, occurrence)
+    declarations.push({
+      baseId: `source-internal-lock-${hash(invocation)}-${occurrence}`,
+      target,
+      color: options.color,
+      onlyOnSlide: options.onlyOnSlide,
+      section: line.section,
+    })
+  }
+
+  return declarations
+}
+
+export function parseCourseChestCatalogDeclarations(
+  markdown: string,
+): CourseChestDeclaration[] {
+  return [
+    ...parseCourseChestDeclarations(markdown),
+    ...parseInternalCourseChestDeclarations(markdown),
+  ]
+}
+
+export function parseCourseLockCatalogDeclarations(
+  markdown: string,
+): CourseLockDeclaration[] {
+  return [
+    ...parseCourseLockDeclarations(markdown),
+    ...parseInternalCourseLockDeclarations(markdown),
+  ]
 }
 
 function nonnegativeNumberLiteral(raw: string): number | null {
@@ -419,6 +514,26 @@ export async function discoverCourseLockDeclarations(): Promise<
 > {
   const markdown = await loadCourseMarkdown()
   return markdown ? parseCourseLockDeclarations(markdown) : []
+}
+
+export async function discoverCourseChests(): Promise<CourseChestDiscovery> {
+  const markdown = await loadCourseMarkdown()
+  return markdown
+    ? {
+        declarations: parseCourseChestDeclarations(markdown),
+        catalog: parseCourseChestCatalogDeclarations(markdown),
+      }
+    : { declarations: [], catalog: [] }
+}
+
+export async function discoverCourseLocks(): Promise<CourseLockDiscovery> {
+  const markdown = await loadCourseMarkdown()
+  return markdown
+    ? {
+        declarations: parseCourseLockDeclarations(markdown),
+        catalog: parseCourseLockCatalogDeclarations(markdown),
+      }
+    : { declarations: [], catalog: [] }
 }
 
 export async function discoverCourseResourceDeclaration(): Promise<
