@@ -45,7 +45,7 @@ import: https://raw.githubusercontent.com/MINT-the-GAP/lia-mathpath/refs/heads/m
   if (api) {
     var rawEnergy = String("@2").trim();
     var energy =
-      rawEnergy === "" || rawEnergy === "@2"
+      rawEnergy === "" || rawEnergy.startsWith("@")
         ? undefined
         : Number(rawEnergy);
     api.resources(Number("@0"), Number("@1"), energy);
