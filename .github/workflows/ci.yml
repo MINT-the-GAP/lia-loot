@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Typecheck, Unit-Tests und Dist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Versioniertes Dist ist aktuell
+        run: git diff --exit-code -- dist/index.js
+
+  browser-current:
+    name: Browser aktuell (${{ matrix.browser }})
+    needs: quality
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser:
+          - chromium
+          - firefox
+          - webkit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Versionierten Playwright-Browser installieren
+        run: ./node_modules/.bin/playwright install --with-deps "${{ matrix.browser }}"
+      - name: Browser-Suite ausführen
+        run: npm run test:browser -- --project="${{ matrix.browser }}"
+      - name: Browser-Diagnose sichern
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-${{ matrix.browser }}
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  chromium-131:
+    name: Chromium 131 (Playwright 1.49.1)
+    needs: quality
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Exakte Chromium-131-Toolchain einsetzen
+        run: npm install --no-save --package-lock=false --ignore-scripts @playwright/test@1.49.1
+      - name: Chromium 131 aus der lokalen Toolchain installieren
+        run: ./node_modules/.bin/playwright install --with-deps chromium
+      - name: Browser-Suite mit Major-Assertion ausführen
+        env:
+          EXPECTED_CHROMIUM_MAJOR: "131"
+          EXPECTED_PLAYWRIGHT_VERSION: "1.49.1"
+        run: npm run test:browser -- --project=chromium
+      - name: Browser-Diagnose sichern
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-chromium-131
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 7

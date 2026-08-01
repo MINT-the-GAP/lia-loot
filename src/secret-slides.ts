@@ -360,6 +360,7 @@ function enforceRootClasses(): void {
     discoveryState === "failed",
   )
   root.classList.toggle(BLOCKED_ROOT_CLASS, routeBlocked)
+  rootClassObserver?.takeRecords()
 }
 
 function setRouteBlocked(blocked: boolean): void {
@@ -453,6 +454,7 @@ function syncAll(): void {
     hideGateStatus()
   }
   syncInteractionGate()
+  tocObserver?.takeRecords()
 }
 
 function scheduleSync(): void {

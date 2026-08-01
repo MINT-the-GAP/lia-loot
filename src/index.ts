@@ -15,7 +15,9 @@ import { installObjectLocks } from "./object-lock"
 import {
   discoverCourseAchievementsDeclaration,
   discoverCourseResourceDeclaration,
+  discoverCourseVersion,
 } from "./course-chests"
+import { prepareLiaCourseIdentity } from "./course-identity"
 import { hideHighscore, showHighscore } from "./popup"
 import {
   allRenderedCourseQuizzesSolved,
@@ -37,13 +39,11 @@ import {
   installTreasureChests,
   refreshTreasureChests,
 } from "./treasure-chest"
-import type { HighscoreApi, ResourceKind } from "./types"
+import type { HighscoreApi, LootRuntimeState, ResourceKind } from "./types"
 
 const VERSION = "0.0.1"
 
 function boot(): void {
-  if (window.__LIA_LOOT_HIGHSCORE__) return
-
   const store = new HighscoreStore()
   const resourceStore = new ResourceStore()
   const keyInventoryStore = new KeyInventoryStore()
@@ -177,7 +177,6 @@ function boot(): void {
     },
   }
 
-  window.__LIA_LOOT_HIGHSCORE__ = api
   injectStyles()
   installSecretSlides({
     found: () => achievements.secretSlideFound(),
@@ -290,6 +289,35 @@ function boot(): void {
     useHint: () => spendResource("gold"),
     useResolve: () => spendResource("diamonds"),
   })
+
+  window.__LIA_LOOT_HIGHSCORE__ = api
 }
 
-boot()
+function claimRuntime(): LootRuntimeState | null {
+  const current = window.__LIA_LOOT_RUNTIME__
+  if (current?.status === "booting" || current?.status === "ready") {
+    return null
+  }
+  if (window.__LIA_LOOT_HIGHSCORE__) {
+    window.__LIA_LOOT_RUNTIME__ = { version: VERSION, status: "ready" }
+    return null
+  }
+
+  const runtime: LootRuntimeState = { version: VERSION, status: "booting" }
+  window.__LIA_LOOT_RUNTIME__ = runtime
+  return runtime
+}
+
+async function start(runtime: LootRuntimeState): Promise<void> {
+  try {
+    await prepareLiaCourseIdentity(discoverCourseVersion)
+    boot()
+    if (window.__LIA_LOOT_RUNTIME__ === runtime) runtime.status = "ready"
+  } catch (error) {
+    if (window.__LIA_LOOT_RUNTIME__ === runtime) runtime.status = "failed"
+    console.error("[lia-loot] Initialisierung fehlgeschlagen.", error)
+  }
+}
+
+const runtime = claimRuntime()
+if (runtime) void start(runtime)

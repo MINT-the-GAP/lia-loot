@@ -82,20 +82,27 @@ function keyColorsBySection(source) {
   return colors
 }
 
-test("hält den Stresstest als eigenständigen vollständigen Importkurs", () => {
-  const frontmatter = /^<!--([\s\S]*?)-->/u.exec(markdown)?.[1] ?? ""
-  const imports = [...frontmatter.matchAll(/^import:\s+(\S+)\s*$/gmu)].map(
-    (match) => match[1],
-  )
+test("hält jeden externen Demoimport im Stresstest genau einmal", () => {
+  const importLines = (source) => {
+    const frontmatter = /^<!--([\s\S]*?)-->/u.exec(source)?.[1] ?? ""
+    return [...frontmatter.matchAll(/^import:\s+(\S+)\s*$/gmu)].map(
+      (match) => match[1],
+    )
+  }
+  const imports = importLines(markdown)
   const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8")
-  const readmeFrontmatter = /^<!--([\s\S]*?)-->/u.exec(readme)?.[1] ?? ""
-  const readmeImports = [
-    ...readmeFrontmatter.matchAll(/^import:\s+(\S+)\s*$/gmu),
-  ].map((match) => match[1])
+  const smoke = readFileSync(
+    new URL("../TemplateTargets.md", import.meta.url),
+    "utf8",
+  )
+  const externalImports = imports.filter((url) => url.startsWith("https://"))
 
+  assert.deepEqual(importLines(readme), [])
   assert.equal(imports.length, 13)
-  assert.deepEqual(imports.slice(0, -1), readmeImports)
+  assert.equal(new Set(imports).size, imports.length)
+  assert.equal(externalImports.length, 12)
   assert.equal(imports.at(-1), "./README.md")
+  assert.deepEqual(imports, importLines(smoke))
   assert.equal(parseCourseAchievementsDeclaration(markdown), true)
   assert.deepEqual(parseCourseResourceDeclaration(markdown), {
     gold: 8,

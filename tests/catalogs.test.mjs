@@ -170,7 +170,7 @@ test("dedupliziert Template-Schlösser gemäß Scope und Importverfügbarkeit", 
   ])
 })
 
-test("zählt alle internen README-Liveobjekte im Achievement-Katalog mit", () => {
+test("hält fremdabhängige README-Beispiele aus dem Livekatalog heraus", () => {
   const markdown = readFileSync(
     new URL("../README.md", import.meta.url),
     "utf8",
@@ -181,9 +181,9 @@ test("zählt alle internen README-Liveobjekte im Achievement-Katalog mit", () =>
   const lockCatalog = parseCourseLockCatalogDeclarations(markdown)
 
   assert.equal(courseChestUnitCount(publicChests), 18)
-  assert.equal(courseChestUnitCount(chestCatalog), 30)
+  assert.equal(courseChestUnitCount(chestCatalog), 18)
   assert.equal(courseLockUnitCount(publicLocks), 2)
-  assert.equal(courseLockUnitCount(lockCatalog), 14)
+  assert.equal(courseLockUnitCount(lockCatalog), 2)
 
   const portalCalls = visiblePortalCalls(markdown)
   const slideCount = visibleMarkdownLines(markdown).filter((line) =>

@@ -20,6 +20,13 @@ import {
   sourceSlideIsActive,
 } from "./slide-activity.ts"
 import {
+  isSurfaceTarget,
+  resolveSurfaceTarget,
+  surfaceTargetElement,
+  surfaceTargetIsGrouped,
+  type SurfaceTarget,
+} from "./surface-targets.ts"
+import {
   findTemplateTarget,
   isTemplateTarget,
   resolveTemplateTarget,
@@ -36,14 +43,7 @@ const TRAY_ATTRIBUTE = "data-loot-chest-tray"
 const SVG_NS = "http://www.w3.org/2000/svg"
 const OPENING_DURATION = 650
 
-type CoreChestPlacement =
-  | "toc"
-  | "menu"
-  | "classroom"
-  | "info"
-  | "translator"
-  | "mode"
-type ChestPlacement = CoreChestPlacement | TemplateTarget
+type ChestPlacement = SurfaceTarget | TemplateTarget
 type ChestLocation = ChestPlacement | "inline"
 
 interface TreasureChestController {
@@ -82,37 +82,6 @@ interface PortalDestination {
   template: boolean
   templateLayout: "floating" | "inside" | null
   templatePosition: TemplateChestPosition | null
-}
-
-const PLACEMENT_ALIASES: Readonly<Record<string, CoreChestPlacement>> = {
-  toc: "toc",
-  menu: "menu",
-  classroom: "classroom",
-  info: "info",
-  translator: "translator",
-  translate: "translator",
-  translation: "translator",
-  lang: "translator",
-  übersetzer: "translator",
-  uebersetzer: "translator",
-  mode: "mode",
-  display: "mode",
-  view: "mode",
-  darstellung: "mode",
-}
-
-const TARGET_SELECTORS: Record<CoreChestPlacement, string> = {
-  toc: "#lia-toc .lia-toc__content",
-  menu:
-    "#lia-support-menu .lia-support-menu__item--settings .lia-support-menu__submenu",
-  classroom:
-    "#lia-support-menu .lia-support-menu__item--share .lia-support-menu__submenu",
-  info:
-    "#lia-support-menu .lia-support-menu__item--info .lia-support-menu__submenu",
-  translator:
-    "#lia-support-menu .lia-support-menu__item--lang .lia-support-menu__submenu",
-  mode:
-    "#lia-support-menu .lia-support-menu__item--mode .lia-support-menu__submenu",
 }
 
 const portalRequests = new Map<string, PortalRequest>()
@@ -375,7 +344,7 @@ function invalidPlacementErrors(values: readonly string[]): string[] {
 
 function resolveChestPlacement(value: string): ChestPlacement | null {
   return (
-    PLACEMENT_ALIASES[value.trim().toLowerCase()] ??
+    resolveSurfaceTarget(value) ??
     resolveTemplateTarget(value)
   )
 }
@@ -701,12 +670,13 @@ function portalDestination(
     }
   }
 
-  const target = document.querySelector<HTMLElement>(TARGET_SELECTORS[placement])
+  if (!isSurfaceTarget(placement)) return null
+  const target = surfaceTargetElement(placement, document)
   return target
     ? {
         anchor: target,
         container: target,
-        grouped: placement !== "toc",
+        grouped: surfaceTargetIsGrouped(placement),
         template: false,
         templateLayout: null,
         templatePosition: null,
@@ -954,6 +924,7 @@ function syncAll(): void {
   }
 
   syncPortals()
+  discardObservedWrites()
 }
 
 function scheduleSync(): void {
@@ -965,14 +936,12 @@ function scheduleSync(): void {
   }, 0)
 }
 
+function discardObservedWrites(): void {
+  for (const observer of observers) observer.takeRecords()
+}
+
 function observedDocumentMutations(mutations: MutationRecord[]): void {
-  const needsSync = mutations.some((mutation) => {
-    const target = mutation.target as Node & { nodeType?: number }
-    if (target.nodeType !== 1) return true
-    const element = target as unknown as Element
-    return !element.closest(`${CHEST_TAG}, [${PORTAL_ATTRIBUTE}]`)
-  })
-  if (needsSync) scheduleSync()
+  if (mutations.length > 0) scheduleSync()
 }
 
 class LootTreasureChestElement extends HTMLElement {

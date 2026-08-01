@@ -6,10 +6,18 @@
   "scripts": {
     "build": "parcel build src/index.ts --dist-dir dist --no-scope-hoist",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "test:browser": "playwright test",
     "test:stress": "npm run build && node tests/run-browser-stress.mjs",
     "typecheck": "tsc --noEmit"
   },
+  "browserslist": [
+    "Chrome >= 131",
+    "Firefox >= 128",
+    "Safari >= 18"
+  ],
   "devDependencies": {
+    "@liascript/editor": "1.1.43--1.1.0",
+    "@playwright/test": "1.62.0",
     "parcel": "^2.16.4",
     "typescript": "^5.8.3"
   }

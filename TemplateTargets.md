@@ -28,7 +28,13 @@ import: ./README.md
 
 Dieser Kurs prüft die direkt importierten Template-Ziele von Loot manuell im
 Browser. Jede Zielseite enthält einen farblich passenden Schlüssel, eine
-`@Schatztruhe` am Ziel und ein `@Schloss` über demselben Ziel. Geprüft wird:
+`@Schatztruhe` am Ziel und ein `@Schloss` über demselben Ziel.
+
+Die externen Demo-Abhängigkeiten stehen ausschließlich im Dokumentkopf dieses
+eigenständigen Kurses und dort jeweils genau einmal. `README.md` selbst enthält
+keine Fremdimporte und vererbt deshalb keine Demo-Laufzeiten an nutzende Kurse.
+
+Geprüft wird:
 
 1. Die Truhe erscheint am dokumentierten Ziel und nur in dessen vorgesehenem
    Laufzeitzustand, etwa bei geöffnetem Werkzeugmenü.

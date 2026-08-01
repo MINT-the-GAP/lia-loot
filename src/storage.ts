@@ -1,5 +1,6 @@
 import { createConfig } from "./score.ts"
 import { createEmptyKeyCounts, KEY_COLORS } from "./key-colors.ts"
+import { liaCourseIdentity } from "./course-identity.ts"
 import type {
   AchievementState,
   HighscoreState,
@@ -15,29 +16,50 @@ const KEY_INVENTORY_STORAGE_PREFIX = "lia-loot:key-inventory:v1:"
 const MAGNIFIER_STORAGE_PREFIX = "lia-loot:magnifier:v1:"
 const ACHIEVEMENTS_STORAGE_PREFIX = "lia-loot:achievements:v1:"
 
-function storageKey(): string {
+function legacyCourseStorageKey(prefix: string): string {
   const course = `${window.location.origin}${window.location.pathname}${window.location.search}`
-  return `${STORAGE_PREFIX}${encodeURIComponent(course)}`
+  return `${prefix}${encodeURIComponent(course)}`
+}
+
+function migrateLegacyCourseStorage(
+  prefix: string,
+  targetKey: string,
+): void {
+  const legacyKey = legacyCourseStorageKey(prefix)
+  if (legacyKey === targetKey) return
+
+  const legacyValue = window.sessionStorage.getItem(legacyKey)
+  if (legacyValue === null) return
+  if (window.sessionStorage.getItem(targetKey) === null) {
+    window.sessionStorage.setItem(targetKey, legacyValue)
+  }
+  window.sessionStorage.removeItem(legacyKey)
+}
+
+function courseStorageKey(prefix: string): string {
+  const targetKey = `${prefix}${encodeURIComponent(liaCourseIdentity())}`
+  migrateLegacyCourseStorage(prefix, targetKey)
+  return targetKey
+}
+
+function storageKey(): string {
+  return courseStorageKey(STORAGE_PREFIX)
 }
 
 function resourcesStorageKey(): string {
-  const course = `${window.location.origin}${window.location.pathname}${window.location.search}`
-  return `${RESOURCES_STORAGE_PREFIX}${encodeURIComponent(course)}`
+  return courseStorageKey(RESOURCES_STORAGE_PREFIX)
 }
 
 function keyInventoryStorageKey(): string {
-  const course = `${window.location.origin}${window.location.pathname}${window.location.search}`
-  return `${KEY_INVENTORY_STORAGE_PREFIX}${encodeURIComponent(course)}`
+  return courseStorageKey(KEY_INVENTORY_STORAGE_PREFIX)
 }
 
 function magnifierStorageKey(): string {
-  const course = `${window.location.origin}${window.location.pathname}${window.location.search}`
-  return `${MAGNIFIER_STORAGE_PREFIX}${encodeURIComponent(course)}`
+  return courseStorageKey(MAGNIFIER_STORAGE_PREFIX)
 }
 
 function achievementsStorageKey(): string {
-  const course = `${window.location.origin}${window.location.pathname}${window.location.search}`
-  return `${ACHIEVEMENTS_STORAGE_PREFIX}${encodeURIComponent(course)}`
+  return courseStorageKey(ACHIEVEMENTS_STORAGE_PREFIX)
 }
 
 function isState(value: unknown): value is HighscoreState {

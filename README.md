@@ -7,19 +7,6 @@ comment:  Loot ergänzt LiaScript-Kurse um konfigurierbare Gamification. Das ers
 
 script:   ./dist/index.js
 
-import: https://raw.githubusercontent.com/MINT-the-GAP/lia-DynFlex/refs/heads/main/README.md
-import: https://raw.githubusercontent.com/MINT-the-GAP/lia-timer/refs/heads/main/README.md
-import: https://raw.githubusercontent.com/MINT-the-GAP/lia-board-mode/refs/heads/main/README.md
-import: https://raw.githubusercontent.com/MINT-the-GAP/lia-marker/refs/heads/main/README.md
-import: https://raw.githubusercontent.com/MINT-the-GAP/lia-annotation/refs/heads/main/README.md
-import: https://raw.githubusercontent.com/MINT-the-GAP/lia-canvas-ocr/refs/heads/main/README.md
-import: https://raw.githubusercontent.com/MINT-the-GAP/lia-kachel/refs/heads/main/README.md
-import: https://raw.githubusercontent.com/MINT-the-GAP/lia-llm/refs/heads/main/README.md
-import: https://raw.githubusercontent.com/liaTemplates/JSXGraph/main/README.md
-import: https://raw.githubusercontent.com/MINT-the-GAP/lia-coordinate/refs/heads/main/README.md
-import: https://raw.githubusercontent.com/MINT-the-GAP/lia-freeze-v2/main/README.md
-import: https://raw.githubusercontent.com/MINT-the-GAP/lia-mathpath/refs/heads/master/README.md
-
 @Highscore
 <script run-once modify="false">
 (function waitForLoot(remaining) {
@@ -33,7 +20,7 @@ import: https://raw.githubusercontent.com/MINT-the-GAP/lia-mathpath/refs/heads/m
   } else {
     console.error("Loot konnte nicht geladen werden: dist/index.js fehlt.");
   }
-})(200);
+})(400);
 "LIA: stop"
 </script>
 @end
@@ -56,7 +43,7 @@ import: https://raw.githubusercontent.com/MINT-the-GAP/lia-mathpath/refs/heads/m
   } else {
     console.error("Loot konnte nicht geladen werden: dist/index.js fehlt.");
   }
-})(200);
+})(400);
 "LIA: stop"
 </script>
 @end
@@ -78,7 +65,7 @@ import: https://raw.githubusercontent.com/MINT-the-GAP/lia-mathpath/refs/heads/m
   } else {
     console.error("Loot konnte nicht geladen werden: dist/index.js fehlt.");
   }
-})(200);
+})(400);
 "LIA: stop"
 </script>
 @end
@@ -185,8 +172,10 @@ Einwegportal erreichbare Geheimfolie. Damit eignet er sich zugleich als
 Import-Smoke-Test und als nachvollziehbarer End-to-End-Beispielkurs.
 
 Der manuelle Integrationskurs [`TemplateTargets.md`](./TemplateTargets.md)
-importiert zusätzlich jedes hier aufgeführte Fremdtemplate direkt und prüft alle
-12 Template-Ziel-IDs mit echter Laufzeitoberfläche, Truhe und Schloss.
+importiert jedes dort benötigte Fremdtemplate ausschließlich in seinem eigenen
+Dokumentkopf und jeweils genau einmal. Er prüft alle 12 Template-Ziel-IDs mit
+echter Laufzeitoberfläche, Truhe und Schloss. Das importierbare Loot-Template
+selbst lädt keine dieser reinen Demo-Abhängigkeiten transitiv mit.
 JSXGraph bleibt dabei ausschließlich als direkte technische Laufzeitabhängigkeit
 von `lia-coordinate` im Dokumentkopf; eine Loot-Option `jsxgraph` gibt es nicht.
 
@@ -291,7 +280,8 @@ Werkzeugleisten von Board-Mode, Marker und Annotation werden dagegen unabhängig
 der Folie im per Same-Origin erreichbaren Top-Dokument gesucht. In der Spalte
 „Versteck-Aufruf“ kann `@Schatztruhe` jeweils durch `@Diamanttruhe` oder
 `@Energiekiste` ersetzt werden. Diese Zielparameter gelten für die drei
-Truhenarten; Schlüssel und Lupe bleiben eigenständige Inline-Funde.
+Truhenarten. Die Lupe bleibt ein eigenständiger Inline-Fund; Schlüssel besitzen
+zusätzlich die unten dokumentierten offiziellen Oberflächenziele.
 
 | Template / Ziel-ID | Truhe dort verstecken | Schloss davor setzen | Tatsächlicher Zielort und Besonderheiten |
 |:--|:--|:--|:--|
@@ -308,9 +298,11 @@ Truhenarten; Schlüssel und Lupe bleiben eigenständige Inline-Funde.
 | lia-freeze-v2 · `freeze` | `@Schatztruhe(freeze)` | `@Schloss(freeze, rot)` | Abgabebox, Exam-Start, ADetails-Punktebereich oder Auswertungsleiste: Damit lässt sich beispielsweise ein Schloss direkt vor `@Abgabe` setzen. |
 | lia-mathpath · `mathpath` | `@Schatztruhe(mathpath)` | `@Schloss(mathpath, rot)` | Die Truhe gehört zum mit `@Explain` erweiterten Quiz. Das Schloss liegt ausschließlich über dem ersten sichtbaren `.lia-mathpath-explain-link`; weitere Explain-Links desselben Hinweises werden mitgesperrt, die übrige Quizbedienung bleibt frei. |
 
-Die [11 praktischen Beispielfolien](#template-live-beispiele) am Ende dieser README
-zeigen alle 12 Ziel-IDs mit sichtbarer Komponente, passendem Fundort, Schlüssel und
+Der eigenständige Integrationskurs [`TemplateTargets.md`](./TemplateTargets.md)
+zeigt alle 12 Ziel-IDs mit sichtbarer Komponente, passendem Fundort, Schlüssel und
 Schloss. `lia-marker` zeigt seine beiden möglichen Ziele gemeinsam auf einer Folie.
+Die README enthält diese Fremdtemplate-Beispiele nur als nicht ausführbaren
+Quelltext und bleibt dadurch frei von verschachtelten Demo-Importen.
 
 Ziele werden bei Truhen wie alle anderen Optionen mit Semikolons kombiniert; ein
 Schloss erhält genau eine Ziel-ID und eine Farbe, getrennt durch ein Komma:
@@ -466,12 +458,45 @@ Kursautorinnen und Kursautoren können eine Farbe gezielt festlegen:
 @Schluessel(orange)
 ```
 
-Auch Schlüssel unterstützen beide Sichtbarkeitsoptionen. Ohne Farbangabe bleibt
-die bisherige stabile Überraschungsfarbe erhalten:
+Die vollständige, eindeutige Grammatik lautet:
+
+```text
+@Schluessel([farbe]; [ziel]; [anker]; [dauer]; [unsichtbar|zauberstaub])
+```
+
+Alle Optionen sind optional und reihenfolgeunabhängig. Zulässige Farben sind
+`rot`, `blau`, `gruen`, `gelb`, `lila` und `orange`. Als Oberflächenziel ist
+höchstens eines der Ziele `toc`, `menu`, `classroom`, `info`, `translator` oder
+`mode` erlaubt. Ohne Ziel bleibt der Schlüssel ein Inline-Fund. `anker`, eine
+Dauer wie `30s` oder `1min` und genau eine der Verbergungsarten `unsichtbar` oder
+`zauberstaub` lassen sich sowohl inline als auch an einem Oberflächenziel mit der
+Farbe kombinieren.
+
+Ein gelber Schlüssel im Einstellungen-Untermenü und ein orangefarbener Schlüssel
+im Classroom-Menü werden so gesetzt:
+
+```markdown
+@Schluessel(gelb; menu)
+@Schluessel(orange; classroom)
+```
+
+Soll der orangefarbene Schlüssel erst nach dem Entsperren des Classroom-Menüs
+erreichbar sein, kommt ein passender Inline-Schlüssel samt Schloss hinzu:
+
+```markdown
+@Schluessel(lila)
+@Schloss(classroom, lila)
+```
+
+Die Reihenfolge der Optionen ist frei; die folgenden Kombinationen sind deshalb
+ebenfalls gültig. Ohne Farbangabe bleibt die bisherige stabile
+Überraschungsfarbe erhalten:
 
 ```markdown
 @Schluessel(gruen; anker; 30s)
 @Schluessel(anker; 1min)
+@Schluessel(gelb; menu; anker; 30s; unsichtbar)
+@Schluessel(zauberstaub; 1min; classroom; orange)
 ```
 
 Gezielt gesetzte Farben sind ebenfalls sofort sichtbar. Jeder eingesammelte Schlüssel
@@ -913,9 +938,8 @@ Das letzte native LiaScript-Quiz auf der letzten Kursseite ist automatisch die
 Abschlussaufgabe. Dafür ist kein weiteres Makro nötig. Sobald diese Aufgabe korrekt
 gelöst wurde, stoppt die Zeit und der Highscore-Dialog öffnet sich.
 
-In dieser README ist das die Rechenaufgabe auf der abschließenden
-`lia-mathpath`-Beispielfolie. Der folgende Block ist deshalb nur ein kopierbares
-Minimalbeispiel und kein zweites Live-Quiz:
+Der folgende Block ist ein kopierbares Minimalbeispiel. Im verwendenden Kurs muss
+dieses Quiz auf der letzten Kursseite stehen, wenn es die Abschlussaufgabe sein soll:
 
 ```markdown
 Wie heißt dieses Template?
@@ -924,6 +948,15 @@ Wie heißt dieses Template?
 [[?]] Der Name bedeutet auf Englisch unter anderem Beute oder Fundstücke.
 ```
 
+## Integrationsbeispiele für Fremdtemplates
+
+Die ausführbaren Beispiele mit DynFlex, Timer, Board-Mode, Marker, Annotation,
+Canvas/OCR, Kachel, LLM, Coordinate, Freeze und MathPath liegen im eigenständigen
+Kurs [`TemplateTargets.md`](./TemplateTargets.md). Die eigenständigen Demo-Kurse
+importieren die benötigten Fremdtemplates direkt und jeweils genau einmal. Die frühere README-Übersicht bleibt unten
+als nicht ausführbarer Markdown-Quelltext erhalten.
+
+````markdown
 <a id=template-live-beispiele></a>
 
 # Template-Verstecke und -Schlösser live
@@ -1222,3 +1255,4 @@ Wie viel ist $\frac{1}{2}+\frac{1}{2}$? [[1]]
 
 @LootTruhe_(@uid,mathpath; anker,diamonds)
 @LootSchloss_(@uid,mathpath,gruen)
+````

@@ -3,12 +3,6 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import {
-  parseCourseChestCatalogDeclarations,
-  parseCourseChestDeclarations,
-  parseCourseLockCatalogDeclarations,
-  parseCourseLockDeclarations,
-} from "../src/course-chests.ts"
-import {
   findTemplateTarget,
   findTemplateTargets,
   isTemplateTarget,
@@ -700,43 +694,18 @@ test("portaliert Template-Truhen floating oder als echtes Menü-Kind", () => {
   )
 })
 
-test("dokumentiert zwölf direkte Importe, zwölf Ziele und die Coordinate-Abhängigkeit", () => {
+test("hält den öffentlichen README-Header frei von Demo-Importen", () => {
   const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8")
   const frontmatter = /^<!--([\s\S]*?)-->/u.exec(readme)?.[1] ?? ""
   const imports = [
-    ...frontmatter.matchAll(/^import:\s+(https:\/\/\S+)\s*$/gmu),
+    ...frontmatter.matchAll(/^import:\s+(\S+)\s*$/gmu),
+  ].map((match) => match[1])
+  const scripts = [
+    ...frontmatter.matchAll(/^script:\s+(\S+)\s*$/gmu),
   ].map((match) => match[1])
 
-  assert.equal(imports.length, 12)
-  for (const { importName } of TEMPLATE_TARGET_DEFINITIONS) {
-    const repository = importName.includes("/")
-      ? importName
-      : "MINT-the-GAP/" + importName
-    assert.ok(
-      imports.some((url) =>
-        url.toLowerCase().includes("/" + repository.toLowerCase() + "/"),
-      ),
-      importName,
-    )
-  }
-
-  for (const removedRepository of [
-    "lia-orthography",
-    "lia-mathe",
-    "algebrite",
-    "lia-resetter",
-  ]) {
-    assert.ok(
-      imports.every((url) => !url.toLowerCase().includes(removedRepository)),
-      removedRepository,
-    )
-  }
-  assert.equal(
-    imports.filter((url) =>
-      url.toLowerCase().includes("/liatemplates/jsxgraph/"),
-    ).length,
-    1,
-  )
+  assert.deepEqual(imports, [])
+  assert.deepEqual(scripts, ["./dist/index.js"])
 
   const tableRows = readme
     .split(/\r?\n/u)
@@ -765,7 +734,6 @@ test("dokumentiert zwölf direkte Importe, zwölf Ziele und die Coordinate-Abhä
 })
 
 test("hält den direkten Template-Smoke für alle Ziele vollständig", () => {
-  const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8")
   const smoke = readFileSync(
     new URL("../TemplateTargets.md", import.meta.url),
     "utf8",
@@ -776,15 +744,36 @@ test("hält den direkten Template-Smoke für alle Ziele vollständig", () => {
       (match) => match[1],
     )
   }
-  const readmeImports = importLines(readme)
   const smokeImports = importLines(smoke)
+  const externalImports = smokeImports.filter((url) => url.startsWith("https://"))
 
-  assert.deepEqual(
-    smokeImports.slice(0, readmeImports.length),
-    readmeImports,
-  )
-  assert.equal(smokeImports[readmeImports.length], "./README.md")
+  assert.equal(smokeImports.filter((url) => url === "./README.md").length, 1)
+  assert.equal(smokeImports.at(-1), "./README.md")
   assert.equal(smokeImports.length, 13)
+  assert.equal(externalImports.length, 12)
+  assert.equal(new Set(externalImports).size, externalImports.length)
+
+  const requiredImports = new Set(
+    TEMPLATE_TARGET_DEFINITIONS.map(({ importName }) => importName),
+  )
+  for (const importName of requiredImports) {
+    const repository = importName.includes("/")
+      ? importName
+      : "MINT-the-GAP/" + importName
+    assert.equal(
+      externalImports.filter((url) =>
+        url.toLowerCase().includes("/" + repository.toLowerCase() + "/"),
+      ).length,
+      1,
+      importName,
+    )
+  }
+  assert.equal(
+    externalImports.filter((url) =>
+      url.toLowerCase().includes("/liatemplates/jsxgraph/"),
+    ).length,
+    1,
+  )
 
   const chestExamples = { marker: "textmarker" }
   const anchoredChestTargets = new Set(["annotation", "boardmode", "marker"])
@@ -830,188 +819,41 @@ test("hält den direkten Template-Smoke für alle Ziele vollständig", () => {
   )
 })
 
-test("zeigt am README-Ende genau eine praktische Folie je Direktimport", () => {
+test("neutralisiert die README-Fremdtemplate-Demos und verweist auf den Smoke-Kurs", () => {
   const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8")
-  const anchor = "<a id=template-live-beispiele></a>"
-  assert.equal(readme.split(anchor).length, 2)
-  const demo = readme.slice(readme.indexOf(anchor))
 
-  const expectedSlides = [
-    {
-      heading: "lia-DynFlex – `dynflex`",
-      component: /<section class="dynFlex">/u,
-    },
-    {
-      heading: "lia-timer – `timer`",
-      component: /data-solution-timer="10s"/u,
-    },
-    {
-      heading: "lia-board-mode – `boardmode`",
-      component: /globale Schriftsteuerung/u,
-    },
-    {
-      heading: "lia-marker – `marker` und `markerquiz`",
-      component: /<div class="markerquiz">/u,
-    },
-    {
-      heading: "lia-annotation – `annotation`",
-      component: /globalen Werkzeugleiste/u,
-    },
-    {
-      heading: "lia-canvas-ocr – `canvasocr`",
-      component: /^@canvas$/mu,
-    },
-    {
-      heading: "lia-kachel – `kachel`",
-      component: /<div class="Kachel">/u,
-    },
-    {
-      heading: "lia-llm – `llm`",
-      component: /@LLMQuiz\(0\.66;/u,
-    },
-    {
-      heading: "lia-coordinate – `coordinate`",
-      component: /^@CoordinateSystem\(/mu,
-    },
-    {
-      heading: "lia-freeze-v2 – `freeze`",
-      component: /^@Abgabe$/mu,
-    },
-    {
-      heading: "lia-mathpath – `mathpath`",
-      component: /\[\[\?\]\] @Explain/u,
-    },
-  ]
+  assert.match(
+    readme,
+    /\[`TemplateTargets\.md`\]\(\.\/TemplateTargets\.md\)/u,
+  )
+  assert.match(
+    readme,
+    /^````markdown\r?\n<a id=template-live-beispiele><\/a>$/mu,
+  )
+  assert.equal([...readme.matchAll(/^````/gmu)].length, 2)
+  assert.ok(readme.trimEnd().endsWith("````"))
+})
 
-  const headingMatches = [...demo.matchAll(/^##\s+(.+)$/gmu)]
-  assert.deepEqual(
-    headingMatches.map((match) => match[1]),
-    expectedSlides.map(({ heading }) => heading),
-  )
-  const slides = headingMatches.map((match, index) =>
-    demo.slice(
-      match.index,
-      headingMatches[index + 1]?.index ?? demo.length,
-    ),
-  )
-  assert.equal(slides.length, 11)
-  for (let index = 0; index < slides.length; index += 1) {
-    assert.match(slides[index], expectedSlides[index].component)
-  }
+test("dokumentiert die eindeutige Oberflächen-Schlüsselgrammatik", () => {
+  const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8")
 
-  const targetOrder = [
-    "dynflex",
-    "timer",
-    "boardmode",
-    "marker",
-    "markerquiz",
-    "annotation",
-    "canvasocr",
-    "kachel",
-    "llm",
-    "coordinate",
-    "freeze",
-    "mathpath",
-  ]
-  const publicChestTargets = { marker: "textmarker" }
-  const publicLockTargets = {
-    annotation: "annotationsbar",
-    boardmode: "boardmodefontbutton",
-    marker: "textmarkerbutton",
-  }
-  for (const target of targetOrder) {
-    const chestTarget = publicChestTargets[target] ?? target
-    const lockTarget = publicLockTargets[target] ?? target
-    const escapedChest = chestTarget.replace(/[.*+?^$()|[\]\\]/gu, "\\$&")
-    const escapedLock = lockTarget.replace(/[.*+?^$()|[\]\\]/gu, "\\$&")
-    assert.match(
-      demo,
-      new RegExp(
-        "^@(?:Schatztruhe|Diamanttruhe|Energiekiste)\\(" +
-          escapedChest +
-          "(?:;\\s*anker)?\\)$",
-        "mu",
-      ),
-      "kopierbare Truhe: " + target,
-    )
-    assert.match(
-      demo,
-      new RegExp("^@Schloss\\(" + escapedLock + ",\\s*[^)]+\\)$", "mu"),
-      "kopierbares Schloss: " + target,
-    )
-    assert.equal(resolveTemplateTarget(chestTarget), target)
-    assert.equal(resolveTemplateTarget(lockTarget), target)
-  }
-
-  for (const lockTarget of Object.values(publicLockTargets)) {
-    const escapedLock = lockTarget.replace(/[.*+?^$()|[\]\\]/gu, "\\$&")
-    assert.match(
-      demo,
-      new RegExp(
-        "^@Schloss\\(" + escapedLock + ",\\s*[^;)]+;\\s*anker\\)$",
-        "mu",
-      ),
-      "folienlokales öffentliches Schloss: " + lockTarget,
-    )
-    assert.match(
-      demo,
-      new RegExp(
-        "^@LootSchloss_\\(@uid," +
-          escapedLock +
-          ",[^;)]+;\\s*anker\\)$",
-        "mu",
-      ),
-      "folienlokales internes Schloss: " + lockTarget,
-    )
-  }
-
-  assert.deepEqual(
-    [
-      ...demo.matchAll(
-        /^@LootTruhe_\(@uid,([^;,]+);\s*anker,(gold|diamonds|energy)\)$/gmu,
-      ),
-    ].map((match) => match[1]),
-    targetOrder,
+  assert.match(
+    readme,
+    /@Schluessel\(\[farbe\]; \[ziel\]; \[anker\]; \[dauer\]; \[unsichtbar\|zauberstaub\]\)/u,
   )
-  const internalLockTargets = [
-    ...demo.matchAll(
-      /^@LootSchloss_\(@uid,([^,]+),([^)]+)\)$/gmu,
-    ),
-  ].map((match) => match[1])
-  assert.deepEqual(internalLockTargets, [
-    "dynflex",
-    "timer",
-    "boardmodefontbutton",
-    "textmarkerbutton",
-    "markerquiz",
-    "annotationsbar",
-    "canvasocr",
-    "kachel",
-    "llm",
-    "coordinate",
-    "freeze",
-    "mathpath",
-  ])
-  assert.deepEqual(
-    internalLockTargets.map((target) => resolveTemplateTarget(target)),
-    targetOrder,
+  assert.match(readme, /Alle Optionen sind optional und reihenfolgeunabhängig\./u)
+  assert.match(
+    readme,
+    /höchstens eines der Ziele `toc`, `menu`, `classroom`, `info`, `translator` oder\s+`mode` erlaubt/u,
   )
-
-  assert.deepEqual(parseCourseLockDeclarations(demo), [])
-  assert.deepEqual(parseCourseChestDeclarations(demo), [])
-  assert.deepEqual(
-    parseCourseLockCatalogDeclarations(demo).map(({ target }) => target),
-    internalLockTargets,
+  assert.match(readme, /^@Schluessel\(gelb; menu\)$/mu)
+  assert.match(readme, /^@Schluessel\(orange; classroom\)$/mu)
+  assert.match(
+    readme,
+    /^@Schluessel\(gelb; menu; anker; 30s; unsichtbar\)$/mu,
   )
-  assert.deepEqual(
-    parseCourseChestCatalogDeclarations(demo).map(({ placement }) =>
-      resolveTemplateTarget(placement.split(";")[0]),
-    ),
-    targetOrder,
-  )
-  assert.equal([...demo.matchAll(/^```/gmu)].length % 2, 0)
-  assert.equal(
-    [...readme.matchAll(/^Wie heißt dieses Template\?$/gmu)].length,
-    1,
+  assert.match(
+    readme,
+    /^@Schluessel\(zauberstaub; 1min; classroom; orange\)$/mu,
   )
 })

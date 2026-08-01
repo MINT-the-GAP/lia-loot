@@ -10,17 +10,22 @@ import {
 } from "../src/key-colors.ts"
 import { KeyInventoryStore } from "../src/inventory-store.ts"
 import { ResourceStore } from "../src/resource-store.ts"
+import { setLiaCourseVersion } from "../src/course-identity.ts"
 
 function browserSession() {
+  setLiaCourseVersion("0.0.1")
   const data = new Map()
   globalThis.window = {
+    LIA: { defaultCourseURL: "https://example.test/key-course.md" },
     location: {
+      href: "https://viewer.example/?demo=1#1",
       origin: "https://example.test",
       pathname: "/key-course",
       search: "?demo=1",
     },
     sessionStorage: {
       getItem: (key) => data.get(key) ?? null,
+      removeItem: (key) => data.delete(key),
       setItem: (key, value) => data.set(key, value),
     },
   }
@@ -230,4 +235,56 @@ test("bestimmt Überraschungsfarben stabil aus der Fund-ID", () => {
     color: "red",
     mystery: false,
   })
+})
+
+test("trennt Inventare derselben Kurs-URL nach Kursversion", () => {
+  browserSession()
+  setLiaCourseVersion("1.0.0")
+  const firstVersion = new KeyInventoryStore()
+  firstVersion.collectKey("kurs:gelb", "yellow")
+
+  setLiaCourseVersion("2.0.0")
+  const secondVersion = new KeyInventoryStore()
+  assert.equal(secondVersion.isKeyCollected("kurs:gelb"), false)
+  secondVersion.collectKey("kurs:orange", "orange")
+
+  setLiaCourseVersion("1.0.0")
+  const restoredFirstVersion = new KeyInventoryStore()
+  assert.equal(restoredFirstVersion.isKeyCollected("kurs:gelb"), true)
+  assert.equal(restoredFirstVersion.isKeyCollected("kurs:orange"), false)
+})
+
+test("migriert den versionslosen Altzustand genau einmal", () => {
+  const data = browserSession()
+  const legacyCourse = "https://example.test/key-course?demo=1"
+  const legacyKey =
+    `lia-loot:key-inventory:v1:${encodeURIComponent(legacyCourse)}`
+  data.set(
+    legacyKey,
+    JSON.stringify({
+      version: 1,
+      keys: {
+        red: 0,
+        blue: 0,
+        green: 0,
+        yellow: 1,
+        purple: 0,
+        orange: 0,
+      },
+      collectedKeys: ["legacy:yellow", "legacy:consumed"],
+      unlockedLocks: ["legacy:lock"],
+    }),
+  )
+
+  setLiaCourseVersion("1.0.0")
+  const migrated = new KeyInventoryStore()
+  assert.equal(migrated.isKeyCollected("legacy:yellow"), true)
+  assert.equal(migrated.isLockUnlocked("legacy:lock"), true)
+  assert.equal(data.has(legacyKey), false)
+
+  setLiaCourseVersion("2.0.0")
+  const laterVersion = new KeyInventoryStore()
+  assert.equal(laterVersion.isKeyCollected("legacy:yellow"), false)
+  assert.equal(laterVersion.isLockUnlocked("legacy:lock"), false)
+  setLiaCourseVersion("0.0.1")
 })

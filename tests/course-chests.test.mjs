@@ -6,6 +6,7 @@ import {
   discoverCourseLockDeclarations,
   discoverCourseResourceDeclaration,
   discoverCourseSecretSlideDeclarations,
+  discoverCourseVersion,
   parseCourseAchievementsDeclaration,
   parseCourseChestCatalogDeclarations,
   parseCourseChestDeclarations,
@@ -446,7 +447,7 @@ test("wiederholt die frühe Quelltextladung nach einem vorübergehenden Fehler",
       return {
         ok: true,
         text: async () =>
-          "# Kurs\n@Ressourcen(7, 2, 0)\n@Schloss(info, gruen)\n@Geheimfolie\n",
+          "<!--\nversion: 3.2.1\n-->\n# Kurs\n@Ressourcen(7, 2, 0)\n@Schloss(info, gruen)\n@Geheimfolie\n",
       }
     },
     setTimeout: (callback) => globalThis.setTimeout(callback, 0),
@@ -454,10 +455,11 @@ test("wiederholt die frühe Quelltextladung nach einem vorübergehenden Fehler",
   }
 
   try {
-    const [declarations, resources, secretSlides] = await Promise.all([
+    const [declarations, resources, secretSlides, version] = await Promise.all([
       discoverCourseLockDeclarations(),
       discoverCourseResourceDeclaration(),
       discoverCourseSecretSlideDeclarations(),
+      discoverCourseVersion(),
     ])
     assert.equal(fetchAttempts, 2)
     assert.equal(declarations.length, 1)
@@ -469,6 +471,7 @@ test("wiederholt die frühe Quelltextladung nach einem vorübergehenden Fehler",
       section: 0,
     })
     assert.deepEqual(secretSlides, [{ section: 0 }])
+    assert.equal(version, "3.2.1")
   } finally {
     if (previousWindow === undefined) delete globalThis.window
     else globalThis.window = previousWindow

@@ -35,6 +35,10 @@ Folie, Mehrziel-Portalen, wiederholten Komponenten sowie ineinanderliegenden
 Template-Flächen. Für einen vollständigen neuen Durchlauf muss eine frische
 Browsersitzung verwendet oder der Kurszustand zurückgesetzt werden.
 
+Alle für diesen Belastungskurs benötigten Fremdtemplates werden ausschließlich
+hier und jeweils genau einmal direkt importiert. Das zusätzlich importierte
+`README.md` bringt nur Loot selbst und keine transitiven Demo-Abhängigkeiten mit.
+
 Die Inventur am Ende muss **23 geöffnete Schlösser** und **26 eingesammelte
 Truhen-Einheiten** ergeben. Ein Mehrziel-Aufruf zählt dabei je Ziel als eigene
 Einheit.

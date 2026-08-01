@@ -9,6 +9,12 @@ export interface CourseChestDeclaration {
   section: number
 }
 
+export interface CourseKeyDeclaration {
+  baseId: string
+  options: string
+  section: number
+}
+
 export interface CourseLockDeclaration {
   baseId: string
   target: string
@@ -40,6 +46,8 @@ export interface CourseLockDiscovery {
 
 const CHEST_MACRO =
   /^\s*@(Schatztruhe|Diamanttruhe|Energiekiste)(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/
+const KEY_MACRO =
+  /^\s*@Schluessel(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/
 const LOCK_MACRO =
   /^\s*@Schloss\s*\(\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]+)\s*\)\s*$/
 const INTERNAL_CHEST_MACRO =
@@ -56,6 +64,7 @@ const NONNEGATIVE_NUMBER_LITERAL =
 const MAX_SOURCE_LENGTH = 10 * 1024 * 1024
 const SOURCE_TIMEOUT = 4000
 const SOURCE_RETRY_DELAYS = [0, 300, 1000] as const
+export const DEFAULT_COURSE_VERSION = "0.0.1"
 
 const MACRO_REWARD: Readonly<Record<string, ResourceKind>> = {
   Schatztruhe: "gold",
@@ -177,6 +186,16 @@ function hash(value: string): string {
   return (result >>> 0).toString(36)
 }
 
+export function parseCourseVersion(markdown: string): string {
+  const header = /^\s*<!--([\s\S]*?)-->/u.exec(
+    markdown.replace(/^\uFEFF/u, ""),
+  )
+  if (!header) return DEFAULT_COURSE_VERSION
+
+  const version = /^\s*version\s*:\s*(.*?)\s*$/imu.exec(header[1])?.[1]?.trim()
+  return version || DEFAULT_COURSE_VERSION
+}
+
 function visibleCourseLines(markdown: string): VisibleCourseLine[] {
   const lines: VisibleCourseLine[] = []
   let fence: Fence | null = null
@@ -246,6 +265,39 @@ export function parseCourseChestDeclarations(
       baseId: `source-${reward}-${hash(invocation)}-${occurrence}`,
       placement,
       reward,
+      section: line.section,
+    })
+  }
+
+  return declarations
+}
+
+export function parseCourseKeyDeclarations(
+  markdown: string,
+): CourseKeyDeclaration[] {
+  const declarations: CourseKeyDeclaration[] = []
+  const occurrences = new Map<string, number>()
+  const occupiedBaseIds = new Set<string>()
+
+  for (const line of visibleCourseLines(markdown)) {
+    const match = KEY_MACRO.exec(line.content)
+    if (!match) continue
+
+    const options = (match[1] ?? "").trim()
+    const invocation = normalizedInvocation("Schluessel", options)
+    const occurrence = (occurrences.get(invocation) ?? 0) + 1
+    occurrences.set(invocation, occurrence)
+    const baseIdStem = `source-key-${hash(invocation)}-${occurrence}`
+    let baseId = baseIdStem
+    let collision = 1
+    while (occupiedBaseIds.has(baseId)) {
+      collision += 1
+      baseId = `${baseIdStem}-collision-${collision}`
+    }
+    occupiedBaseIds.add(baseId)
+    declarations.push({
+      baseId,
+      options,
       section: line.section,
     })
   }
@@ -507,6 +559,18 @@ export async function discoverCourseChestDeclarations(): Promise<
 > {
   const markdown = await loadCourseMarkdown()
   return markdown ? parseCourseChestDeclarations(markdown) : []
+}
+
+export async function discoverCourseKeyDeclarations(): Promise<
+  CourseKeyDeclaration[]
+> {
+  const markdown = await loadCourseMarkdown()
+  return markdown ? parseCourseKeyDeclarations(markdown) : []
+}
+
+export async function discoverCourseVersion(): Promise<string | null> {
+  const markdown = await loadCourseMarkdown()
+  return markdown ? parseCourseVersion(markdown) : null
 }
 
 export async function discoverCourseLockDeclarations(): Promise<

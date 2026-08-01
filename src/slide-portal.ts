@@ -300,6 +300,7 @@ function clearRoute(): void {
   activeRoute = null
   clearSlidePortalRoute()
   removeReturnPortals()
+  rootObserver?.takeRecords()
 }
 
 function setRoute(route: SlidePortalRoute): void {
@@ -489,6 +490,7 @@ function syncAll(): void {
   if (pendingFocusSection !== null && focusTimer === null) {
     tryFocusDestination()
   }
+  rootObserver?.takeRecords()
 }
 
 function scheduleSync(): void {

@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Loot Surface-Key E2E</title>
+  <style>
+    html, body {
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      min-height: 100%;
+    }
+
+    body {
+      padding: 5rem 2rem 2rem;
+    }
+
+    header {
+      align-items: center;
+      background: #f2f4f8;
+      display: flex;
+      height: 3.5rem;
+      inset: 0 0 auto;
+      padding-inline: 1rem;
+      position: fixed;
+    }
+
+    button {
+      min-height: 2.5rem;
+      min-width: 2.5rem;
+    }
+
+    .lia-support-menu__nav {
+      align-items: stretch;
+      display: flex;
+      gap: 1rem;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .lia-support-menu__item {
+      border: 1px solid #8a94a6;
+      display: flex;
+      flex-direction: column;
+      min-height: 10rem;
+      min-width: 18rem;
+      padding: 0.75rem;
+      position: relative;
+    }
+
+    .lia-support-menu__submenu {
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      min-height: 5rem;
+      padding: 0.75rem;
+    }
+
+    .loot-key-tray,
+    [data-loot-key-placement] {
+      align-items: center;
+      display: inline-flex;
+      min-height: 4rem;
+      min-width: 4rem;
+    }
+
+    #fixture-slide {
+      margin-top: 2rem;
+      min-height: 8rem;
+    }
+  </style>
+</head>
+<body>
+  <header role="banner">Synthetische LiaScript-Oberfläche</header>
+
+  <template id="support-menu-template">
+    <nav id="lia-support-menu" class="lia-support-menu" aria-label="Support-Menü">
+      <ul class="lia-support-menu__nav" role="menubar">
+        <li class="lia-support-menu__item lia-support-menu__item--settings" role="none">
+          <button type="button" data-group-id="setting" aria-expanded="false">
+            Einstellungen
+          </button>
+          <div class="lia-support-menu__submenu" data-group-id="setting" role="group" aria-label="Einstellungen">
+            <button id="lia-btn-light-mode" type="button">Hellmodus</button>
+          </div>
+        </li>
+        <li class="lia-support-menu__item lia-support-menu__item--share" role="none">
+          <button type="button" data-group-id="share" aria-expanded="false">
+            Classroom
+          </button>
+          <div class="lia-support-menu__submenu" data-group-id="share" role="group" aria-label="Classroom">
+            <button id="lia-button-qr-code" type="button">QR-Code</button>
+          </div>
+        </li>
+      </ul>
+    </nav>
+  </template>
+
+  <div id="fixture-support-menu-host"></div>
+
+  <main id="fixture-slide">
+    <h1>Surface-Key-Testkurs</h1>
+    <lia-loot-magnifier
+      id="fixture-magnifier"
+      data-magnifier-id="surface-e2e-magnifier"
+      data-options=""
+    ></lia-loot-magnifier>
+  </main>
+
+  <script>
+    ;(function prepareFixture() {
+      const parameters = new URLSearchParams(window.location.search)
+      const variant = parameters.get("case") === "concealed"
+        ? "concealed"
+        : "access"
+      const requestedVersion = parameters.get("version") || "1.0.0"
+      const version = /^[0-9A-Za-z._-]{1,32}$/.test(requestedVersion)
+        ? requestedVersion
+        : "1.0.0"
+
+      const courses = {
+        access: [
+          "<!--",
+          "version: " + version,
+          "-->",
+          "# Surface-Key-Testkurs",
+          "@Schluessel(gelb; menu)",
+          "@Schluessel(orange; classroom)",
+          "@Schloss(classroom, gelb)",
+        ].join("\n"),
+        concealed: [
+          "<!--",
+          "version: " + version,
+          "-->",
+          "# Unsichtbarer Surface-Key",
+          "@Schluessel(blau; menu; unsichtbar)",
+          "@Lupe",
+        ].join("\n"),
+      }
+
+      const template = document.getElementById("support-menu-template")
+
+      function freshSupportMenu() {
+        return template.content.firstElementChild.cloneNode(true)
+      }
+
+      document
+        .getElementById("fixture-support-menu-host")
+        .replaceWith(freshSupportMenu())
+
+      window.remountSupportMenu = function remountSupportMenu() {
+        document.getElementById("lia-support-menu").replaceWith(freshSupportMenu())
+      }
+
+      if (variant !== "concealed") {
+        document.getElementById("fixture-magnifier").remove()
+      }
+
+      window.__LOOT_E2E_FIXTURE__ = { variant, version }
+      window.LIA = {
+        defaultCourseURL: new URL(
+          "/tests/browser/fixtures/course-" + variant + ".md",
+          window.location.origin,
+        ).href,
+        fetch: async function fetchCourse() {
+          return new Response(courses[variant], {
+            headers: { "content-type": "text/markdown; charset=utf-8" },
+            status: 200,
+          })
+        },
+      }
+    })()
+  </script>
+  <script src="/dist/index.js"></script>
+</body>
+</html>

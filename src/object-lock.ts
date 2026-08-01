@@ -983,8 +983,10 @@ function focusAfterUnlock(binding: TargetBinding): void {
   const restoreTabIndex = (): void => {
     binding.root.removeEventListener("blur", restoreTabIndex)
     restoreAttribute(binding.root, "tabindex", previousTabIndex)
+    flushObservedWrites()
   }
   binding.root.setAttribute("tabindex", "-1")
+  flushObservedWrites()
   binding.root.addEventListener("blur", restoreTabIndex, { once: true })
   binding.root.focus({ preventScroll: true })
 }
@@ -1080,6 +1082,7 @@ function syncAll(): void {
     if (existing) enforceDecoration(existing)
     else decorations.set(slotKey, createDecoration(next.request, next.binding))
   }
+  flushObservedWrites()
 }
 
 function scheduleSync(): void {
@@ -1088,6 +1091,97 @@ function scheduleSync(): void {
     syncTimer = null
     syncAll()
   }, 0)
+}
+
+function mutationElement(node: Node | null): Element | null {
+  if (!node) return null
+  if (node.nodeType === 1) return node as Element
+  return node.parentElement
+}
+
+function isOwnedObserverNode(node: Node | null): boolean {
+  const element = mutationElement(node)
+  return Boolean(
+    element?.closest(`[data-loot-lock-button], #${STATUS_ID}`),
+  )
+}
+
+function changedClassNames(mutation: MutationRecord, target: Element): string[] {
+  const before = new Set((mutation.oldValue ?? "").split(/\s+/u).filter(Boolean))
+  const after = new Set(
+    (target.getAttribute("class") ?? "").split(/\s+/u).filter(Boolean),
+  )
+  return [...new Set([...before, ...after])].filter(
+    (name) => before.has(name) !== after.has(name),
+  )
+}
+
+function isEnforcedAttributeMutation(mutation: MutationRecord): boolean {
+  if (mutation.type !== "attributes" || !mutation.attributeName) return false
+  const target = mutationElement(mutation.target)
+  if (!target) return false
+
+  const activeDecorations = [...decorations.values()]
+  if (mutation.attributeName === "tabindex") {
+    const locked = activeDecorations.some((decoration) =>
+      decoration.binding.controls.includes(target as HTMLElement),
+    )
+    return locked && target.getAttribute("tabindex") === "-1"
+  }
+  if (mutation.attributeName === "aria-hidden") {
+    const concealed = activeDecorations.some((decoration) =>
+      decoration.binding.contents.includes(target as HTMLElement),
+    )
+    return concealed && target.getAttribute("aria-hidden") === "true"
+  }
+  if (mutation.attributeName !== "class") return false
+
+  const changed = changedClassNames(mutation, target)
+  if (changed.length !== 1) return false
+  if (changed[0] === "loot-object-lock-concealed") {
+    const concealed = activeDecorations.some((decoration) =>
+      decoration.binding.contents.includes(target as HTMLElement),
+    )
+    return target.classList.contains(changed[0]) === concealed
+  }
+  if (changed[0] === "loot-object-lock-target") {
+    const lockedRoot = activeDecorations.some(
+      (decoration) =>
+        decoration.binding.mode === "fill" && decoration.binding.root === target,
+    )
+    return target.classList.contains(changed[0]) === lockedRoot
+  }
+  return false
+}
+
+function mutationNeedsSync(mutation: MutationRecord): boolean {
+  if (isOwnedObserverNode(mutation.target)) return false
+  if (isEnforcedAttributeMutation(mutation)) return false
+  if (mutation.type !== "childList") return true
+  const changedNodes = [
+    ...Array.from(mutation.addedNodes),
+    ...Array.from(mutation.removedNodes),
+  ]
+  if (changedNodes.length === 0) return true
+  return changedNodes.some((node) => {
+    if (!isOwnedObserverNode(node)) return true
+    const element = mutationElement(node)
+    const button = element?.closest<HTMLElement>("[data-loot-lock-button]")
+    if (!button) return false
+    const active = [...decorations.values()].some(
+      (decoration) => decoration.button === button,
+    )
+    return active !== button.isConnected
+  })
+}
+
+function handleObservedMutations(mutations: MutationRecord[]): void {
+  if (mutations.some(mutationNeedsSync)) scheduleSync()
+}
+
+function flushObservedWrites(): void {
+  const pending = observers.flatMap((observer) => observer.takeRecords())
+  if (pending.some(mutationNeedsSync)) scheduleSync()
 }
 
 function eventElement(target: EventTarget | null): Element | null {
@@ -1158,7 +1252,7 @@ export function installObjectLocks(nextController: ObjectLockController): void {
   if (observers.length === 0) {
     for (const candidate of templateDocumentCandidates(document)) {
       const Observer = candidate.defaultView?.MutationObserver ?? MutationObserver
-      const candidateObserver = new Observer(scheduleSync)
+      const candidateObserver = new Observer(handleObservedMutations)
       candidateObserver.observe(candidate.documentElement, {
         attributeFilter: [
           "aria-hidden",
@@ -1169,6 +1263,7 @@ export function installObjectLocks(nextController: ObjectLockController): void {
           "style",
           "tabindex",
         ],
+        attributeOldValue: true,
         attributes: true,
         childList: true,
         subtree: true,

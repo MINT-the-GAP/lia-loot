@@ -1,4 +1,7 @@
 node_modules/
 .parcel-cache/
+blob-report/
+playwright-report/
+test-results/
 *.map
 .vscode/

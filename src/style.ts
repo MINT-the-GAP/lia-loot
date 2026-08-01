@@ -951,7 +951,8 @@ lia-loot-key {
   vertical-align: middle;
 }
 
-lia-loot-key:empty {
+lia-loot-key:empty,
+lia-loot-key.loot-key-host--surface-source {
   display: none;
 }
 
@@ -1083,6 +1084,75 @@ lia-loot-key:empty {
 
 .loot-key-pickup--collected .loot-key-pickup__reward {
   animation: loot-key-reward 600ms steps(5, end) forwards;
+}
+
+.loot-key-placement {
+  min-height: 3.75rem;
+  padding: 0.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  list-style: none;
+}
+
+.loot-key-placement--toc {
+  margin: 0.4rem 0.65rem;
+  border-top: 2px solid color-mix(in srgb, currentColor 16%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, currentColor 16%, transparent);
+}
+
+.loot-key-placement--menu,
+.loot-key-placement--classroom,
+.loot-key-placement--info,
+.loot-key-placement--translator,
+.loot-key-placement--mode {
+  width: 100%;
+}
+
+.loot-key-tray {
+  width: 100%;
+  min-width: 0;
+  margin: 0.5rem 0 0;
+  padding: 0.125rem 0.25rem 0.25rem;
+  display: flex;
+  flex: 0 0 auto;
+  flex-flow: row nowrap;
+  align-items: center;
+  justify-content: center;
+  justify-content: safe center;
+  gap: 0.375rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  box-sizing: border-box;
+  list-style: none;
+}
+
+.loot-key-tray:empty {
+  display: none;
+}
+
+.loot-key-tray > .loot-key-placement {
+  position: relative;
+  flex: 0 0 44px;
+  align-self: auto;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+
+.loot-key-tray > .loot-key-placement > .loot-key-pickup {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
 }
 
 lia-loot-chest {

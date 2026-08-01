@@ -79,8 +79,14 @@ export interface HighscoreApi {
   state(): HighscoreState | null
 }
 
+export interface LootRuntimeState {
+  readonly version: string
+  status: "booting" | "ready" | "failed"
+}
+
 declare global {
   interface Window {
     __LIA_LOOT_HIGHSCORE__?: HighscoreApi
+    __LIA_LOOT_RUNTIME__?: LootRuntimeState
   }
 }
