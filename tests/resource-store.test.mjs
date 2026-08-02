@@ -160,6 +160,45 @@ test("vergibt Energie nur bei aktiviertem Energielimit", () => {
   assert.equal(store.state()?.energy, 1)
 })
 
+test("vergibt konfigurierte Mengen für Gold, Diamanten und Energie genau einmal", () => {
+  browserSession()
+  const store = new ResourceStore()
+  store.configure(0, 0, 0)
+
+  assert.equal(store.collectChest("menge:gold", "gold", 3), true)
+  assert.equal(store.collectChest("menge:diamanten", "diamonds", 4), true)
+  assert.equal(store.collectChest("menge:energie", "energy", 5), true)
+  assert.deepEqual(
+    {
+      gold: store.state()?.gold,
+      diamonds: store.state()?.diamonds,
+      energy: store.state()?.energy,
+    },
+    { gold: 3, diamonds: 4, energy: 5 },
+  )
+
+  assert.equal(store.collectChest("menge:gold", "gold", 9), false)
+  assert.equal(store.state()?.gold, 3)
+
+  const restored = new ResourceStore()
+  const state = restored.configure(0, 0, 0)
+  assert.equal(state.gold, 3)
+  assert.equal(state.diamonds, 4)
+  assert.equal(state.energy, 5)
+})
+
+test("sammelt Kisten mit ungültiger oder überlaufender Menge nicht ein", () => {
+  browserSession()
+  const store = new ResourceStore()
+  store.configure(Number.MAX_SAFE_INTEGER, 0, 0)
+
+  for (const [index, amount] of [0, -1, 1.5, Number.NaN].entries()) {
+    assert.equal(store.collectChest("ungültig:" + index, "gold", amount), false)
+  }
+  assert.equal(store.collectChest("überlauf", "gold", 1), false)
+  assert.deepEqual(store.state()?.collectedChests, [])
+})
+
 test("merkt sich eine eingesammelte Schatztruhe beim Neuladen", () => {
   browserSession()
   const first = new ResourceStore()

@@ -67,10 +67,16 @@ export class ResourceStore {
     return true
   }
 
-  collectChest(chestId: string, reward: ResourceKind = "gold"): boolean {
+  collectChest(
+    chestId: string,
+    reward: ResourceKind = "gold",
+    amount = 1,
+  ): boolean {
     const normalizedId = chestId.trim()
     if (
       !normalizedId ||
+      !Number.isSafeInteger(amount) ||
+      amount <= 0 ||
       !this.enabled ||
       !this.current ||
       this.current.collectedChests.includes(normalizedId)
@@ -80,9 +86,13 @@ export class ResourceStore {
 
     if (reward === "energy") {
       if (this.current.energy === null) return false
-      this.current.energy += 1
+      const energy = this.current.energy + amount
+      if (!Number.isSafeInteger(energy)) return false
+      this.current.energy = energy
     } else {
-      this.current[reward] += 1
+      const resource = this.current[reward] + amount
+      if (!Number.isSafeInteger(resource)) return false
+      this.current[reward] = resource
     }
     this.current.collectedChests.push(normalizedId)
     saveResources(this.current)

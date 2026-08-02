@@ -86,6 +86,24 @@ test("findet Portal- und Inline-Kistentypen im Kursquelltext", () => {
   assert.equal(new Set(declarations.map(({ baseId }) => baseId)).size, 4)
 })
 
+test("bewahrt Mengenangaben in Inline- und Portal-Kistendeklarationen", () => {
+  const declarations = parseCourseChestDeclarations(`
+@Schatztruhe(3)
+@Diamanttruhe(4; translator)
+@Energiekiste(5; menu; anker)
+`)
+
+  assert.deepEqual(
+    declarations.map(({ placement, reward }) => ({ placement, reward })),
+    [
+      { placement: "3", reward: "gold" },
+      { placement: "4; translator", reward: "diamonds" },
+      { placement: "5; menu; anker", reward: "energy" },
+    ],
+  )
+  assert.equal(new Set(declarations.map(({ baseId }) => baseId)).size, 3)
+})
+
 test("bewahrt Sichtbarkeitsoptionen für Portaltruhen und alte IDs unverändert", () => {
   const [legacy, delayed] = parseCourseChestDeclarations(`
 @Schatztruhe(toc; menu)

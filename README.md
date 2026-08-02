@@ -234,15 +234,26 @@ Ohne Parameter setzt das Makro eine Schatztruhe genau an die Aufrufstelle:
 @Schatztruhe
 ```
 
-Beim Anklicken steigt der Goldbestand um eins und die Truhe verschwindet dauerhaft
+Ohne Mengenangabe steigt der Goldbestand beim Anklicken um eins. Eine positive ganze
+Zahl als erste Option legt stattdessen die Belohnungsmenge fest:
+
+```markdown
+@Schatztruhe(3)
+@Schatztruhe(3; menu)
+```
+
+Der erste Aufruf erzeugt eine Inline-Truhe mit drei Goldmünzen, der zweite eine
+Menü-Truhe mit drei Goldmünzen. Danach verschwindet die jeweilige Truhe dauerhaft
 für den aktuellen Browser-Tab. Jeder Makroaufruf erhält eine eigene ID und kann daher
 genau einmal eingesammelt werden.
 
 Mit einer durch Semikolons getrennten Liste setzt ein Aufruf mehrere unabhängige
-Truhen in LiaScripts Bedienoberfläche:
+Truhen in LiaScripts Bedienoberfläche. Steht am Anfang eine Menge, bringt jede dieser
+Truhen die volle angegebene Belohnung:
 
 ```markdown
 @Schatztruhe(toc; menu; classroom; info; translator; mode)
+@Schatztruhe(3; toc; menu)
 ```
 
 | Ziel | Position |
@@ -304,8 +315,9 @@ Schloss. `lia-marker` zeigt seine beiden möglichen Ziele gemeinsam auf einer Fo
 Die README enthält diese Fremdtemplate-Beispiele nur als nicht ausführbaren
 Quelltext und bleibt dadurch frei von verschachtelten Demo-Importen.
 
-Ziele werden bei Truhen wie alle anderen Optionen mit Semikolons kombiniert; ein
-Schloss erhält genau eine Ziel-ID und eine Farbe, getrennt durch ein Komma:
+Eine optionale Belohnungsmenge steht bei allen drei Truhenarten immer zuerst. Danach
+werden Ziele und weitere Optionen wie bisher mit Semikolons kombiniert; ein Schloss
+erhält genau eine Ziel-ID und eine Farbe, getrennt durch ein Komma:
 
 ```markdown
 @Schatztruhe(canvasocr)
@@ -316,7 +328,7 @@ Schloss erhält genau eine Ziel-ID und eine Farbe, getrennt durch ein Komma:
 @Schloss(freeze, rot)
 
 @Diamanttruhe(kachel; anker; 15s)
-@Energiekiste(boardmode)
+@Energiekiste(3; boardmode)
 ```
 
 Zusätzlich verstehen alle drei Truhenarten und Schlüssel zwei frei kombinierbare
@@ -343,9 +355,13 @@ Neuladen startet den Countdown jedes noch nicht eingesammelten Fundes neu – au
 wenn er zuvor bereits abgelaufen war. Bereits eingesammelte Funde bleiben wie
 bisher verschwunden.
 
-Unvollständige oder vertippte Anker- und Zeitangaben lassen den Fund fail-closed
-verborgen und erzeugen eine Warnung in der Browserkonsole. Die bisherigen
-Schreibweisen bleiben zur Kompatibilität mit vorhandenen Kursen weiterhin gültig.
+Als Menge ist ausschließlich eine positive ganze Zahl zulässig. `3s` bleibt wegen
+seiner Zeiteinheit eine Verzögerung und bedeutet nicht drei Ressourceneinheiten.
+Null, negative oder gebrochene Mengen sowie eine Menge hinter einer anderen Option
+lassen den Fund ebenso wie unvollständige oder vertippte Anker- und Zeitangaben
+fail-closed verborgen und erzeugen eine Warnung in der Browserkonsole. Die bisherigen
+Schreibweisen ohne Menge bleiben zur Kompatibilität mit vorhandenen Kursen gültig
+und vergeben weiterhin genau eine Ressourceneinheit.
 
 Die Ziele können einzeln oder kombiniert angegeben werden. Globale Oberflächen-Truhen
 werden bereits beim Kursstart aus der Kursquelle registriert. Sie erscheinen deshalb
@@ -377,7 +393,8 @@ Ohne Parameter setzt das Makro eine Diamanttruhe direkt an die Aufrufstelle:
 @Diamanttruhe
 ```
 
-Beim Anklicken steigt der Diamantenbestand um eins. Danach verschwindet die
+Ohne Mengenangabe steigt der Diamantenbestand beim Anklicken um eins. Eine führende
+positive ganze Zahl vergibt entsprechend mehrere Diamanten. Danach verschwindet die
 Diamanttruhe dauerhaft für den aktuellen Browser-Tab. Sie besitzt eine eigene
 cyan-silberne Pixelart und ein Diamantemblem.
 
@@ -386,6 +403,8 @@ Alle Zielangaben der Goldtruhe funktionieren genauso für Diamanttruhen:
 ```markdown
 @Diamanttruhe(toc; menu; classroom; info; translator; mode)
 @Diamanttruhe(translator; anker; 15s)
+@Diamanttruhe(3)
+@Diamanttruhe(3; menu)
 ```
 
 Jeder Aufruf erhält eine eigene ID. Gold- und Diamanttruhen können deshalb
@@ -410,8 +429,9 @@ Ohne Parameter setzt das Makro eine Energiekiste direkt an die Aufrufstelle:
 @Energiekiste
 ```
 
-Beim Anklicken steigt der Energiebestand um eins. Danach verschwindet die
-Energiekiste dauerhaft für den aktuellen Browser-Tab. Ihre violett-goldene
+Ohne Mengenangabe steigt der Energiebestand beim Anklicken um eins. Eine führende
+positive ganze Zahl vergibt entsprechend mehrere Energiepunkte. Danach verschwindet
+die Energiekiste dauerhaft für den aktuellen Browser-Tab. Ihre violett-goldene
 Pixelart trägt ein gut sichtbares Blitzemblem.
 
 Alle Zielangaben der anderen Truhen funktionieren auch für Energiekisten:
@@ -419,6 +439,8 @@ Alle Zielangaben der anderen Truhen funktionieren auch für Energiekisten:
 ```markdown
 @Energiekiste(toc; menu; classroom; info; translator; mode)
 @Energiekiste(mode; anker; 12s)
+@Energiekiste(3)
+@Energiekiste(3; menu)
 ```
 
 Zum Einsammeln muss Energie mit dem dritten Wert von `@Ressourcen(...)`

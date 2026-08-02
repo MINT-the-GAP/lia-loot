@@ -17,6 +17,7 @@ else globalThis.HTMLElement = previousHTMLElement
 
 test("parst vollständig unsichtbare und staubverdeckte Inline-Truhen", () => {
   assert.deepEqual(parseTreasureChestOptions("unsichtbar"), {
+    amount: 1,
     concealment: "solid",
     errors: [],
     inline: true,
@@ -25,6 +26,7 @@ test("parst vollständig unsichtbare und staubverdeckte Inline-Truhen", () => {
     visibility: { delayMs: 0, onlyOnSlide: false },
   })
   assert.deepEqual(parseTreasureChestOptions("zauberstaub; anker; 12s"), {
+    amount: 1,
     concealment: "dust",
     errors: [],
     inline: true,
@@ -34,12 +36,58 @@ test("parst vollständig unsichtbare und staubverdeckte Inline-Truhen", () => {
   })
 })
 
+test("parst eine positive Ganzzahl am Anfang als Belohnungsmenge", () => {
+  assert.equal(parseTreasureChestOptions("").amount, 1)
+  assert.equal(parseTreasureChestOptions("").inline, true)
+  assert.deepEqual(parseTreasureChestOptions("3"), {
+    amount: 3,
+    concealment: null,
+    errors: [],
+    inline: true,
+    placements: [],
+    valid: true,
+    visibility: { delayMs: 0, onlyOnSlide: false },
+  })
+  assert.deepEqual(
+    parseTreasureChestOptions("3; menu; anker; 1.5 Minuten"),
+    {
+      amount: 3,
+      concealment: null,
+      errors: [],
+      inline: false,
+      placements: ["menu"],
+      valid: true,
+      visibility: { delayMs: 90_000, onlyOnSlide: true },
+    },
+  )
+  assert.equal(parseTreasureChestOptions("3s").amount, 1)
+  assert.equal(parseTreasureChestOptions("3s").visibility.delayMs, 3_000)
+})
+
+test("weist ungültige, doppelte und nachgestellte Mengen fail-closed zurück", () => {
+  for (const specification of [
+    "0",
+    "-1",
+    "1.5",
+    "1,5",
+    "1e3",
+    "menu; 3",
+    "3; 4; menu",
+    "9007199254740992",
+  ]) {
+    const parsed = parseTreasureChestOptions(specification)
+    assert.equal(parsed.valid, false, specification)
+    assert.ok(parsed.errors.length > 0, specification)
+  }
+})
+
 test("kombiniert Verbergung mit Zeit, Anker und mehreren Portalzielen", () => {
   assert.deepEqual(
     parseTreasureChestOptions(
       "toc; mode; zauberstaub; anker; 1.5 Minuten",
     ),
     {
+      amount: 1,
       concealment: "dust",
       errors: [],
       inline: false,
@@ -54,6 +102,7 @@ test("parst alle zwölf Template-Ziele als unabhängige Portalplätze", () => {
   const parsed = parseTreasureChestOptions(TEMPLATE_TARGETS.join("; "))
 
   assert.deepEqual(parsed, {
+    amount: 1,
     concealment: null,
     errors: [],
     inline: false,
@@ -77,10 +126,11 @@ test("weist doppelte und widersprüchliche Verbergungsoptionen fail-closed zurü
 
 test("zählt alle drei verborgenen Truhentypen mit ihren Portalinstanzen", () => {
   const declarations = parseCourseChestDeclarations(`
-@Schatztruhe(unsichtbar)
-@Diamanttruhe(zauberstaub; anker; 2s)
-@Energiekiste(toc; menu; unsichtbar; 10s)
+@Schatztruhe(3; unsichtbar)
+@Diamanttruhe(4; zauberstaub; anker; 2s)
+@Energiekiste(5; toc; menu; unsichtbar; 10s)
 @Schatztruhe(unsichtbar; zauberstaub)
+@Energiekiste(0)
 `)
 
   assert.equal(courseChestUnitCount(declarations), 4)

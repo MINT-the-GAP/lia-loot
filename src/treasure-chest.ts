@@ -50,10 +50,11 @@ interface TreasureChestController {
   active(reward: ResourceKind): boolean
   catalogReady(total: number): void
   collected(chestId: string): boolean
-  collect(chestId: string, reward: ResourceKind): boolean
+  collect(chestId: string, reward: ResourceKind, amount: number): boolean
 }
 
 interface HostRequest {
+  amount: number
   baseId: string
   concealment: ConcealmentMode | null
   errors: string[]
@@ -67,6 +68,7 @@ interface HostRequest {
 }
 
 interface PortalRequest {
+  amount: number
   concealment: ConcealmentMode | null
   placements: Set<ChestPlacement>
   reward: ResourceKind
@@ -182,6 +184,7 @@ function chestGraphic(
 
 function rewardBadge(
   rewardKind: ResourceKind,
+  amount: number,
   ownerDocument: Document = document,
 ): HTMLSpanElement {
   const reward = ownerDocument.createElement("span")
@@ -194,11 +197,33 @@ function rewardBadge(
   reward.setAttribute("aria-hidden", "true")
   reward.innerHTML =
     rewardKind === "diamonds"
-      ? '<span class="loot-treasure-reward__gem"></span><span>+1</span>'
+      ? '<span class="loot-treasure-reward__gem"></span><span>+' +
+        amount +
+        "</span>"
       : rewardKind === "energy"
-        ? '<span class="loot-treasure-reward__energy"></span><span>+1</span>'
-        : '<span class="loot-treasure-reward__coin"></span><span>+1</span>'
+        ? '<span class="loot-treasure-reward__energy"></span><span>+' +
+          amount +
+          "</span>"
+        : '<span class="loot-treasure-reward__coin"></span><span>+' +
+          amount +
+          "</span>"
   return reward
+}
+
+function chestLabel(reward: ResourceKind, amount: number): string {
+  if (amount === 1) {
+    return reward === "diamonds"
+      ? "Diamanttruhe öffnen und einen Diamanten erhalten"
+      : reward === "energy"
+        ? "Energiekiste öffnen und einen Energiepunkt erhalten"
+        : "Schatztruhe öffnen und eine Goldmünze erhalten"
+  }
+
+  return reward === "diamonds"
+    ? "Diamanttruhe öffnen und " + amount + " Diamanten erhalten"
+    : reward === "energy"
+      ? "Energiekiste öffnen und " + amount + " Energiepunkte erhalten"
+      : "Schatztruhe öffnen und " + amount + " Goldmünzen erhalten"
 }
 
 function showResourceRequirement(
@@ -230,6 +255,7 @@ function createChestButton(
   chestId: string,
   location: ChestLocation,
   reward: ResourceKind,
+  amount: number,
   ownerDocument: Document = document,
 ): HTMLButtonElement {
   const button = ownerDocument.createElement("button")
@@ -243,17 +269,11 @@ function createChestButton(
   button.dataset.lootChestButton = chestId
   button.dataset.lootChestLocation = location
   button.dataset.lootChestReward = reward
-  button.setAttribute(
-    "aria-label",
-    reward === "diamonds"
-      ? "Diamanttruhe öffnen und einen Diamanten erhalten"
-      : reward === "energy"
-        ? "Energiekiste öffnen und einen Energiepunkt erhalten"
-        : "Schatztruhe öffnen und eine Goldmünze erhalten",
-  )
+  button.dataset.lootChestAmount = String(amount)
+  button.setAttribute("aria-label", chestLabel(reward, amount))
   button.append(
     chestGraphic(reward, ownerDocument),
-    rewardBadge(reward, ownerDocument),
+    rewardBadge(reward, amount, ownerDocument),
   )
 
   button.addEventListener("click", () => {
@@ -272,7 +292,7 @@ function createChestButton(
     }
 
     openingIds.add(chestId)
-    if (!controller.collect(chestId, reward)) {
+    if (!controller.collect(chestId, reward, amount)) {
       openingIds.delete(chestId)
       refreshTreasureChests()
       return
@@ -349,7 +369,55 @@ function resolveChestPlacement(value: string): ChestPlacement | null {
   )
 }
 
+const NUMBER_LIKE_TOKEN =
+  /^[+-]?(?:(?:\d+(?:[.,]\d*)?)|(?:[.,]\d+))(?:e[+-]?\d+)?$/iu
+
+function parseChestAmount(rawSpecification: string): {
+  amount: number
+  errors: string[]
+  options: string
+} {
+  const tokens = rawSpecification
+    .split(";")
+    .map((token) => token.trim())
+    .filter(Boolean)
+  const errors: string[] = []
+  let amount = 1
+
+  if (tokens[0] && NUMBER_LIKE_TOKEN.test(tokens[0])) {
+    const token = tokens.shift()!
+    const parsed = Number(token)
+    if (!/^\d+$/u.test(token) || !Number.isSafeInteger(parsed) || parsed <= 0) {
+      errors.push(
+        "Ungültige Truhenmenge: " +
+          token +
+          ". Erwartet wird eine positive ganze Zahl.",
+      )
+    } else {
+      amount = parsed
+    }
+  }
+
+  const misplacedAmounts = tokens.filter((token) =>
+    NUMBER_LIKE_TOKEN.test(token),
+  )
+  if (misplacedAmounts.length > 0) {
+    errors.push(
+      "Die Truhenmenge muss als erste Option stehen und darf nur einmal angegeben werden.",
+    )
+  }
+
+  return {
+    amount,
+    errors,
+    options: tokens
+      .filter((token) => !NUMBER_LIKE_TOKEN.test(token))
+      .join("; "),
+  }
+}
+
 export function parseTreasureChestOptions(rawSpecification: string): {
+  amount: number
   concealment: ConcealmentMode | null
   errors: string[]
   inline: boolean
@@ -357,9 +425,11 @@ export function parseTreasureChestOptions(rawSpecification: string): {
   valid: boolean
   visibility: CollectibleVisibilityRule
 } {
-  const parsed = parseCollectibleOptions(rawSpecification)
+  const amount = parseChestAmount(rawSpecification)
+  const parsed = parseCollectibleOptions(amount.options)
   const concealment = extractConcealmentOptions(parsed.values)
   const errors = [
+    ...amount.errors,
     ...parsed.errors,
     ...concealment.errors,
     ...invalidPlacementErrors(concealment.values),
@@ -367,10 +437,11 @@ export function parseTreasureChestOptions(rawSpecification: string): {
   const placements = readPlacements(concealment.values)
   const hasOptions = parsed.hasOptions || concealment.mode !== null
   const inline =
-    rawSpecification.trim() === "" ||
+    amount.options.trim() === "" ||
     (hasOptions && concealment.values.length === 0)
 
   return {
+    amount: amount.amount,
     concealment: concealment.mode,
     errors,
     inline,
@@ -408,6 +479,7 @@ function readHostRequest(host: HTMLElement): HostRequest {
   const parsed = parseTreasureChestOptions(rawPlacement)
 
   return {
+    amount: parsed.amount,
     baseId,
     concealment: parsed.concealment,
     errors: parsed.errors,
@@ -422,7 +494,7 @@ function readHostRequest(host: HTMLElement): HostRequest {
 }
 
 function portalSignature(request: PortalRequest): string {
-  return `${request.reward}:${[
+  return `${request.reward}:${request.amount}:${[
     ...request.placements,
   ].sort().join(";")}:${collectibleVisibilitySignature(request.visibility)}:${request.concealment ?? "none"}`
 }
@@ -488,6 +560,7 @@ function registerSourceDeclarations(
     const placements = new Set(parsed.placements)
     if (placements.size === 0) continue
     const request: PortalRequest = {
+      amount: parsed.amount,
       concealment: parsed.concealment,
       placements,
       reward: declaration.reward,
@@ -542,6 +615,7 @@ function registerHost(host: HTMLElement): HostRequest {
     if (request.concealment === null) setHostConcealment(host, null)
   } else {
     const portalRequest: PortalRequest = {
+      amount: request.amount,
       concealment: request.concealment,
       placements: new Set(request.placements),
       reward: request.reward,
@@ -567,6 +641,7 @@ function buttonIn(
   container: ParentNode,
   chestId: string,
   reward: ResourceKind,
+  amount: number,
 ): HTMLButtonElement | null {
   const buttons = container.querySelectorAll<HTMLButtonElement>(
     "[data-loot-chest-button]",
@@ -575,7 +650,8 @@ function buttonIn(
     [...buttons].find(
       (button) =>
         button.dataset.lootChestButton === chestId &&
-        button.dataset.lootChestReward === reward,
+        button.dataset.lootChestReward === reward &&
+        button.dataset.lootChestAmount === String(amount),
     ) ??
     null
   )
@@ -638,8 +714,13 @@ function syncInline(
     setHostConcealment(host, null)
     return
   }
-  if (!opening && !buttonIn(host, chestId, request.reward)) {
-    host.replaceChildren(createChestButton(chestId, "inline", request.reward))
+  if (
+    !opening &&
+    !buttonIn(host, chestId, request.reward, request.amount)
+  ) {
+    host.replaceChildren(
+      createChestButton(chestId, "inline", request.reward, request.amount),
+    )
   }
   setHostConcealment(host, request.concealment)
 }
@@ -794,7 +875,10 @@ function ensurePortal(
     return
   }
 
-  if (wrapper?.dataset.lootChestReward !== request.reward) {
+  if (
+    wrapper?.dataset.lootChestReward !== request.reward ||
+    wrapper?.dataset.lootChestAmount !== String(request.amount)
+  ) {
     removePortal(wrapper)
     wrapper = null
   }
@@ -809,6 +893,7 @@ function ensurePortal(
     wrapper.dataset.lootChestPortal = chestId
     wrapper.dataset.lootChestLocation = placement
     wrapper.dataset.lootChestReward = request.reward
+    wrapper.dataset.lootChestAmount = String(request.amount)
     if (destination.template) {
       wrapper.dataset.lootChestTemplateTarget = placement
     }
@@ -821,6 +906,7 @@ function ensurePortal(
         chestId,
         placement,
         request.reward,
+        request.amount,
         ownerDocument,
       ),
     )

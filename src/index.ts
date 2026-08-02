@@ -83,18 +83,25 @@ function boot(): void {
   const collectTreasureChest = (
     chestId: string,
     reward: ResourceKind,
+    amount: number,
   ): boolean => {
-    if (!resourceStore.collectChest(chestId, reward)) return false
+    if (!resourceStore.collectChest(chestId, reward, amount)) return false
     const resources = resourceStore.state()
     if (!resources) return false
     achievements.chestCollected(resources.collectedChests.length)
     renderResources(resources.gold, resources.diamonds, resources.energy)
     announceResource(
-      reward === "diamonds"
-        ? "Diamanttruhe geöffnet: einen Diamanten erhalten."
-        : reward === "energy"
-          ? "Energiekiste geöffnet: einen Energiepunkt erhalten."
-          : "Schatztruhe geöffnet: eine Goldmünze erhalten.",
+      amount === 1
+        ? reward === "diamonds"
+          ? "Diamanttruhe geöffnet: einen Diamanten erhalten."
+          : reward === "energy"
+            ? "Energiekiste geöffnet: einen Energiepunkt erhalten."
+            : "Schatztruhe geöffnet: eine Goldmünze erhalten."
+        : reward === "diamonds"
+          ? "Diamanttruhe geöffnet: " + amount + " Diamanten erhalten."
+          : reward === "energy"
+            ? "Energiekiste geöffnet: " + amount + " Energiepunkte erhalten."
+            : "Schatztruhe geöffnet: " + amount + " Goldmünzen erhalten.",
     )
     return true
   }

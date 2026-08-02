@@ -106,7 +106,7 @@
       "@Schatztruhe(boardmode; marker; annotation; anker)",
       "@Diamanttruhe(boardmode; marker; annotation; anker)",
       "@Energiekiste(boardmode; marker; annotation; menu; anker)",
-      "@Energiekiste(toc; menu; mode)",
+      "@Energiekiste(3; toc; menu; mode)",
       "@LootSchloss_(@uid,boardmodefontbutton,rot)",
       "@LootSchloss_(@uid,textmarkerbutton,gelb)",
       "@LootSchloss_(@uid,annotationsbar,orange; anker)",
@@ -198,7 +198,7 @@
         data-placement="boardmode; marker; annotation; anker"
         data-reward="diamonds"></lia-loot-chest>
       <lia-loot-chest data-chest-id="0_203"
-        data-placement="toc; menu; mode"
+        data-placement="3; toc; menu; mode"
         data-reward="energy"></lia-loot-chest>
       <lia-loot-chest data-chest-id="0_204"
         data-placement="boardmode; marker; annotation; menu; anker"
@@ -1074,6 +1074,22 @@
             return button.dataset.lootChestButton
           }),
         )
+        const tripleEnergyButtons = globalChestButtons.filter(function (button) {
+          return (
+            button.dataset.lootChestReward === "energy" &&
+            button.dataset.lootChestAmount === "3"
+          )
+        })
+        check(
+          tripleEnergyButtons.length === 3 &&
+            tripleEnergyButtons.every(function (button) {
+              return (
+                button.getAttribute("aria-label").includes("3 Energiepunkte") &&
+                button.querySelector(".loot-treasure-reward").textContent === "+3"
+              )
+            }),
+          "Alle drei Mengen-Energiekisten zeigen und benennen jeweils +3",
+        )
         globalChestButtons.forEach(function (button) { button.click() })
         await waitFor(function () {
           const state = storedState("collectedChests")
@@ -1218,7 +1234,7 @@
           finalResources.collectedChests.length === 16 &&
           finalResources.gold === 5 &&
           finalResources.diamonds === 4 &&
-          finalResources.energy === 17,
+          finalResources.energy === 23,
           "Alle sechzehn Funde erhöhen die drei Ressourcen exakt",
           finalResources,
         )
