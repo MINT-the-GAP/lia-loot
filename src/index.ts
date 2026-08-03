@@ -11,8 +11,18 @@ import {
 import { installKeyPickups } from "./key-pickup"
 import { installMagnifier } from "./magnifier"
 import { MagnifierStore } from "./magnifier-store"
+import { installExploration } from "./exploration"
+import { ExplorationStore } from "./exploration-store"
+import {
+  installLootIf,
+  recordLootIfQuizSolved,
+  recordLootIfSecretSlideVisited,
+  refreshLootIf,
+} from "./loot-if"
+import { LootIfStore } from "./loot-if-store"
 import { installObjectLocks } from "./object-lock"
 import {
+  discoverCourseAchievementCatalog,
   discoverCourseAchievementsDeclaration,
   discoverCourseResourceDeclaration,
   discoverCourseVersion,
@@ -48,6 +58,8 @@ function boot(): void {
   const resourceStore = new ResourceStore()
   const keyInventoryStore = new KeyInventoryStore()
   const magnifierStore = new MagnifierStore()
+  const explorationStore = new ExplorationStore()
+  const lootIfStore = new LootIfStore()
   const achievementStore = new AchievementStore()
   const achievements = new AchievementManager(
     achievementStore,
@@ -77,6 +89,7 @@ function boot(): void {
         kind === "gold" ? "coins" : kind === "diamonds" ? "gems" : "energy",
       )
     }
+    refreshLootIf()
     return allowed
   }
 
@@ -88,7 +101,7 @@ function boot(): void {
     if (!resourceStore.collectChest(chestId, reward, amount)) return false
     const resources = resourceStore.state()
     if (!resources) return false
-    achievements.chestCollected(resources.collectedChests.length)
+    achievements.chestCollected(resourceStore.collectedChestCounts())
     renderResources(resources.gold, resources.diamonds, resources.energy)
     announceResource(
       amount === 1
@@ -103,6 +116,7 @@ function boot(): void {
             ? "Energiekiste geöffnet: " + amount + " Energiepunkte erhalten."
             : "Schatztruhe geöffnet: " + amount + " Goldmünzen erhalten.",
     )
+    refreshLootIf()
     return true
   }
 
@@ -112,9 +126,10 @@ function boot(): void {
     energy?: number,
   ): void => {
     const resources = resourceStore.configure(gold, diamonds, energy)
-    achievements.chestCollected(resources.collectedChests.length)
+    achievements.chestCollected(resourceStore.collectedChestCounts())
     renderResources(resources.gold, resources.diamonds, resources.energy)
     refreshTreasureChests()
+    refreshLootIf()
   }
 
   const api: HighscoreApi = {
@@ -185,14 +200,40 @@ function boot(): void {
   }
 
   injectStyles()
+  installLootIf(
+    {
+      chestCounts: () => resourceStore.collectedChestCounts(),
+      magnifierFound: () => magnifierStore.isCollected(),
+      resourceState: () => resourceStore.state(),
+      unlockedLockIds: () => keyInventoryStore.state().unlockedLocks,
+    },
+    lootIfStore,
+  )
   installSecretSlides({
-    found: () => achievements.secretSlideFound(),
+    found: () => {
+      achievements.secretSlideFound()
+      recordLootIfSecretSlideVisited()
+    },
   })
   installSlidePortals()
 
   void discoverCourseAchievementsDeclaration()
     .then((enabled) => {
       if (enabled) enableAchievements()
+    })
+
+  void discoverCourseAchievementCatalog()
+    .then((catalog) => {
+      const exploration = explorationStore.state()
+      achievements.explorationCatalogReady(catalog, {
+        dust: exploration.foundDustObjects.length,
+        plant: exploration.wateredPlants.length,
+        soil: exploration.dugLayers.length,
+        solid: exploration.foundInvisibleObjects.length,
+      })
+    })
+    .catch(() => {
+      // A missing source must never turn an unknown aggregate into an achievement.
     })
     .catch(() => {
       // The rendered macro remains the fallback when source loading fails.
@@ -220,6 +261,48 @@ function boot(): void {
     )
   }
 
+  installMagnifier({
+    collected: () => magnifierStore.isCollected(),
+    collect: () => {
+      const collected = magnifierStore.collect()
+      if (collected) refreshLootIf()
+      return collected
+    },
+    find: (concealmentId, mode) => {
+      if (!explorationStore.findConcealedObject(concealmentId, mode)) return
+      const exploration = explorationStore.state()
+      achievements.concealmentFound(
+        mode,
+        mode === "dust"
+          ? exploration.foundDustObjects.length
+          : exploration.foundInvisibleObjects.length,
+      )
+    },
+  })
+
+  installExploration({
+    activeTool: () => explorationStore.activeTool(),
+    collectTool: (kind) => explorationStore.collectTool(kind),
+    digLayer: (layerId) => {
+      if (!explorationStore.digLayer(layerId)) return false
+      achievements.soilDug(explorationStore.state().dugLayers.length)
+      return true
+    },
+    isLayerDug: (layerId) => explorationStore.isLayerDug(layerId),
+    isPlantOpened: (plantId) => explorationStore.isPlantOpened(plantId),
+    isPlantWatered: (plantId) => explorationStore.isPlantWatered(plantId),
+    isToolCollected: (kind) => explorationStore.isToolCollected(kind),
+    openPlant: (plantId) => explorationStore.openPlant(plantId),
+    setActiveTool: (kind) => explorationStore.setActiveTool(kind),
+    waterPlant: (plantId) => {
+      if (!explorationStore.waterPlant(plantId)) return false
+      achievements.plantBloomed(
+        explorationStore.state().wateredPlants.length,
+      )
+      return true
+    },
+  })
+
   installTreasureChests({
     active: (reward) => {
       const resources = resourceStore.state()
@@ -228,19 +311,19 @@ function boot(): void {
         (reward !== "energy" || resources.energy !== null)
       )
     },
-    catalogReady: (total) => {
+    catalogReady: (totals) => {
       achievements.chestCatalogReady(
-        total,
-        resourceStore.state()?.collectedChests.length ?? 0,
+        totals,
+        resourceStore.collectedChestCounts(),
       )
+    },
+    classify: (chestId, reward) => {
+      if (!resourceStore.classifyCollectedChest(chestId, reward)) return
+      achievements.chestCollected(resourceStore.collectedChestCounts())
+      refreshLootIf()
     },
     collected: (chestId) => resourceStore.isChestCollected(chestId),
     collect: collectTreasureChest,
-  })
-
-  installMagnifier({
-    collected: () => magnifierStore.isCollected(),
-    collect: () => magnifierStore.collect(),
   })
 
   const savedKeys = keyInventoryStore.state()
@@ -267,12 +350,14 @@ function boot(): void {
       )
     },
     unlocked: (lockId) => keyInventoryStore.isLockUnlocked(lockId),
-    unlock: (lockId, color) => {
+    unlock: (lockId, color, target) => {
       const result = keyInventoryStore.useKeyForLock(lockId, color)
       if (result === "unlocked") {
         const inventory = keyInventoryStore.state()
         renderKeyInventory(inventory.keys)
         achievements.lockUnlocked(inventory.unlockedLocks.length)
+        lootIfStore.recordOpenedLockTarget(target)
+        refreshLootIf()
       }
       return result
     },
@@ -283,10 +368,11 @@ function boot(): void {
   })
 
   installQuizEventTracking({
-    active: () => store.isRunning() || achievements.isEnabled(),
+    active: () => true,
     failed: () => store.fail(),
     hint: (count) => store.hint(count),
-    solved: () => {
+    solved: (quiz) => {
+      recordLootIfQuizSolved(quiz)
       if (allRenderedCourseQuizzesSolved(document)) {
         achievements.quizzesCompleted()
       }

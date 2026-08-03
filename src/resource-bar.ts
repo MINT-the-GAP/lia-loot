@@ -83,9 +83,11 @@ export function refreshResourceBarVisibility(): void {
   const hasKeys = bar.querySelector("[data-loot-key-color]") !== null
   const hasMagnifier =
     bar.querySelector("[data-loot-magnifier-tool]") !== null
+  const hasExplorationTool =
+    bar.querySelector("[data-loot-tool-control]") !== null
   bar.classList.toggle(
     "loot-resource-bar--empty",
-    !hasVisibleResource && !hasKeys && !hasMagnifier,
+    !hasVisibleResource && !hasKeys && !hasMagnifier && !hasExplorationTool,
   )
 }
 

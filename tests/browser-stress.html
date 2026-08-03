@@ -423,6 +423,13 @@
         return state ? state.unlocked : []
       }
 
+      const emptyCatalogAchievementIds = [
+        "all-invisible-objects-found",
+        "all-magic-dust-objects-found",
+        "all-soil-dug",
+        "all-plants-bloomed",
+      ]
+
       function assertHorizontalTray(container, expectedCount, label) {
         const trays = [
           ...container.querySelectorAll(":scope > [data-loot-chest-tray]"),
@@ -1074,6 +1081,21 @@
             return button.dataset.lootChestButton
           }),
         )
+        const globalChestCounts = globalChestButtons.reduce(function (
+          counts,
+          button,
+        ) {
+          const reward = button.dataset.lootChestReward
+          counts[reward] = (counts[reward] || 0) + 1
+          return counts
+        }, {})
+        check(
+          globalChestCounts.gold === 3 &&
+            globalChestCounts.diamonds === 3 &&
+            globalChestCounts.energy === 7,
+          "Die globale Folie registriert drei Schatz-, drei Diamant- und sieben Energiekisten",
+          globalChestCounts,
+        )
         const tripleEnergyButtons = globalChestButtons.filter(function (button) {
           return (
             button.dataset.lootChestReward === "energy" &&
@@ -1095,9 +1117,20 @@
           const state = storedState("collectedChests")
           return state && state.collectedChests.length === 13
         }, "Die dreizehn globalen Truhen wurden nicht gesammelt")
+        await waitFor(function () {
+          return achievementIds().includes("all-energy-chests-opened")
+        }, "Der Energieerfolg fehlt nach allen sieben Energiekisten")
         check(
-          !achievementIds().includes("all-chests-opened"),
-          "Der Truhenerfolg wartet auf die drei Funde der zweiten Folie",
+          !achievementIds().includes("all-treasure-chests-opened") &&
+            !achievementIds().includes("all-diamond-chests-opened"),
+          "Schatz- und Diamanterfolg warten auf ihre Funde der zweiten Folie",
+        )
+        check(
+          emptyCatalogAchievementIds.every(function (achievementId) {
+            return !achievementIds().includes(achievementId)
+          }),
+          "Leere Unsichtbar-, Zauberstaub-, Erd- und Pflanzenkataloge vergeben keinen Erfolg",
+          achievementIds(),
         )
         await waitFor(function () {
           return document.querySelectorAll("[data-loot-chest-button]").length === 0
@@ -1205,29 +1238,49 @@
           "Zwei Markerquiz-Proxies erzeugen nur ein Markerquiz-Portal",
         )
 
-        let localChestButtons = [
+        const localChestButtons = [
           ...document.querySelectorAll("[data-loot-chest-button]"),
         ]
-        localChestButtons.slice(0, 2).forEach(function (button) { button.click() })
+        const localGoldButtons = localChestButtons.filter(function (button) {
+          return button.dataset.lootChestReward === "gold"
+        })
+        const localDiamondButtons = localChestButtons.filter(function (button) {
+          return button.dataset.lootChestReward === "diamonds"
+        })
+        check(
+          localGoldButtons.length === 2 && localDiamondButtons.length === 1,
+          "Auf der zweiten Folie warten genau zwei Schatz- und eine Diamanttruhe",
+          localChestButtons.map(function (button) {
+            return button.dataset.lootChestReward
+          }),
+        )
+        localGoldButtons.forEach(function (button) { button.click() })
         await waitFor(function () {
           const state = storedState("collectedChests")
           return state && state.collectedChests.length === 15
         }, "Die ersten fünfzehn Truhen wurden nicht gespeichert")
+        await waitFor(function () {
+          return achievementIds().includes("all-treasure-chests-opened")
+        }, "Der Schatzerfolg fehlt nach allen fünf Schatztruhen")
         check(
-          !achievementIds().includes("all-chests-opened"),
-          "Der Truhenerfolg erscheint nicht vor der sechzehnten Truhe",
+          !achievementIds().includes("all-diamond-chests-opened"),
+          "Der Diamanterfolg erscheint nicht vor der vierten Diamanttruhe",
         )
 
-        localChestButtons = [
+        const remainingLocalChestButtons = [
           ...document.querySelectorAll(
             "[data-loot-chest-button]:not(.loot-treasure-chest--opened)",
           ),
         ]
-        check(localChestButtons.length === 1, "Genau eine letzte Truhe bleibt übrig")
-        localChestButtons[0].click()
+        check(
+          remainingLocalChestButtons.length === 1 &&
+            remainingLocalChestButtons[0].dataset.lootChestReward === "diamonds",
+          "Genau eine letzte Diamanttruhe bleibt übrig",
+        )
+        remainingLocalChestButtons[0].click()
         await waitFor(function () {
-          return achievementIds().includes("all-chests-opened")
-        }, "Der Truhenerfolg fehlt nach exakt sechzehn Funden")
+          return achievementIds().includes("all-diamond-chests-opened")
+        }, "Der Diamanterfolg fehlt nach allen vier Diamanttruhen")
 
         const finalResources = storedState("collectedChests")
         check(
@@ -1239,13 +1292,34 @@
           finalResources,
         )
         check(
+          [
+            "all-treasure-chests-opened",
+            "all-diamond-chests-opened",
+            "all-energy-chests-opened",
+          ].every(function (achievementId) {
+            return achievementIds().includes(achievementId)
+          }),
+          "Alle drei Kistenarten vergeben ihren eigenen Gesamterfolg",
+          achievementIds(),
+        )
+        check(
+          emptyCatalogAchievementIds.every(function (achievementId) {
+            return !achievementIds().includes(achievementId)
+          }),
+          "Nullkataloge für Unsichtbar, Zauberstaub, Erde und Pflanzen bleiben ohne Erfolg",
+          achievementIds(),
+        )
+        check(
           document.querySelector(
             "[data-achievement-id='all-locks-opened']",
           ) &&
           document.querySelector(
-            "[data-achievement-id='all-chests-opened']",
+            "[data-achievement-id='all-treasure-chests-opened']",
+          ) &&
+          document.querySelector(
+            "[data-achievement-id='all-diamond-chests-opened']",
           ),
-          "Schloss- und Truhenerfolg werden unabhängig gestapelt",
+          "Schloss-, Schatz- und Diamanterfolg werden unabhängig gestapelt",
         )
 
         await sleep(800)

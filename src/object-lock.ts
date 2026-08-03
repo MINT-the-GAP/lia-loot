@@ -27,6 +27,14 @@ import {
   sourceSlideIsActive,
 } from "./slide-activity.ts"
 import type { UnlockResult } from "./inventory-store.ts"
+import {
+  hostIsRevealBlocked,
+  REVEAL_CHANGED_EVENT,
+} from "./exploration.ts"
+import {
+  installSlideNavigationLock,
+  setSlideNavigationLocked,
+} from "./slide-navigation-lock.ts"
 
 const LOCK_TAG = "lia-loot-lock"
 const PORTAL_TAG = "lia-loot-slide-portal"
@@ -39,7 +47,7 @@ const FEEDBACK_DURATION = 2200
 interface ObjectLockController {
   catalogReady(total: number): void
   unlocked(lockId: string): boolean
-  unlock(lockId: string, color: KeyColor): UnlockResult
+  unlock(lockId: string, color: KeyColor, target: LockTarget): UnlockResult
 }
 
 interface LockRequest {
@@ -193,6 +201,7 @@ let sourceDiscovery: "idle" | "pending" | "complete" = "idle"
 let captureInstalled = false
 let slideActivityInstalled = false
 let viewportListenersInstalled = false
+let revealListenerInstalled = false
 
 function resolveBaseId(host: HTMLElement): string {
   const authoredId = host.getAttribute("data-lock-id")?.trim()
@@ -252,17 +261,6 @@ function portalForHost(host: HTMLElement): HTMLElement | null {
   return nearest
 }
 
-function topLevelSlideChild(
-  host: HTMLElement,
-  slide: HTMLElement,
-): HTMLElement | null {
-  let top = host
-  while (top.parentElement && top.parentElement !== slide) {
-    top = top.parentElement
-  }
-  return top.parentElement === slide ? top : null
-}
-
 function containsOnlyLockHost(element: HTMLElement): boolean {
   const children = [...element.children]
   return (
@@ -278,17 +276,22 @@ function quizForHost(host: HTMLElement): HTMLElement | null {
 
   const slide = host.closest<HTMLElement>("main.lia-slide__content")
   if (!slide) return null
-  const top = topLevelSlideChild(host, slide)
-  if (!top) return null
-
-  let previous = top.previousElementSibling
-  while (previous instanceof HTMLElement && containsOnlyLockHost(previous)) {
-    previous = previous.previousElementSibling
+  let cursor: HTMLElement = host
+  while (cursor !== slide) {
+    let previous = cursor.previousElementSibling
+    while (previous instanceof HTMLElement && containsOnlyLockHost(previous)) {
+      previous = previous.previousElementSibling
+    }
+    if (previous instanceof HTMLElement) {
+      if (previous.matches(QUIZ_SELECTOR)) return previous
+      const nestedQuizzes =
+        previous.querySelectorAll<HTMLElement>(QUIZ_SELECTOR)
+      return nestedQuizzes[nestedQuizzes.length - 1] ?? null
+    }
+    if (!(cursor.parentElement instanceof HTMLElement)) return null
+    cursor = cursor.parentElement
   }
-
-  return previous instanceof HTMLElement && previous.matches(QUIZ_SELECTOR)
-    ? previous
-    : null
+  return null
 }
 
 function retainHostRequest(request: LockRequest): LockRequest {
@@ -305,6 +308,10 @@ function retainHostRequest(request: LockRequest): LockRequest {
 
 function registerHost(host: HTMLElement): LockRequest | null {
   const baseId = resolveBaseId(host)
+  if (hostIsRevealBlocked(host, false)) {
+    persistentHostRequests.delete(baseId)
+    return null
+  }
   const target = resolveLockTarget(host.getAttribute("data-target"))
   const options = parseLockOptions(host.getAttribute("data-color") ?? "")
 
@@ -998,6 +1005,7 @@ function attemptUnlock(slotKey: string): void {
   const result = controller.unlock(
     decoration.lockId,
     decoration.request.color,
+    decoration.request.target,
   )
   if (result === "missing-key") {
     showFeedback(
@@ -1029,7 +1037,29 @@ function attemptUnlock(slotKey: string): void {
   }, UNLOCK_DURATION)
 }
 
-function desiredDecorations(): Map<
+function requestNeedsDecoration(request: LockRequest): boolean {
+  const id = requestLockId(request)
+  return !controller?.unlocked(id) || unlockingIds.has(id)
+}
+
+function navigationRequestIsApplicable(request: LockRequest): boolean {
+  return (
+    request.target === "seitenwechsel" &&
+    (!request.onlyOnSlide ||
+      sourceSlideIsActive(request.sourceSection, request.sourceHost))
+  )
+}
+
+function unresolvedNavigationRequest(request: LockRequest): boolean {
+  return (
+    navigationRequestIsApplicable(request) &&
+    !controller?.unlocked(requestLockId(request))
+  )
+}
+
+function desiredDecorations(
+  requests: readonly LockRequest[],
+): Map<
   string,
   { binding: TargetBinding; request: LockRequest }
 > {
@@ -1038,7 +1068,7 @@ function desiredDecorations(): Map<
     { binding: TargetBinding; requests: LockRequest[] }
   >()
 
-  for (const request of collectRequests()) {
+  for (const request of requests) {
     const binding = bindingFor(request)
     if (!binding) continue
     const existing = grouped.get(binding.slotKey)
@@ -1052,18 +1082,20 @@ function desiredDecorations(): Map<
   >()
   if (!controller) return desired
   for (const [slotKey, group] of grouped) {
-    const request = group.requests.find((candidate) => {
-      const id = requestLockId(candidate)
-      return !controller?.unlocked(id) || unlockingIds.has(id)
-    })
+    const request = group.requests.find(requestNeedsDecoration)
     if (request) desired.set(slotKey, { binding: group.binding, request })
   }
   return desired
 }
 
 function syncAll(): void {
-  if (!controller) return
-  const desired = desiredDecorations()
+  if (!controller) {
+    setSlideNavigationLocked(false)
+    return
+  }
+  const requests = collectRequests()
+  setSlideNavigationLocked(requests.some(unresolvedNavigationRequest))
+  const desired = desiredDecorations(requests)
 
   for (const [slotKey, decoration] of [...decorations]) {
     const next = desired.get(slotKey)
@@ -1244,9 +1276,16 @@ export function installObjectLocks(nextController: ObjectLockController): void {
 
   if (!captureInstalled) {
     captureInstalled = true
-    for (const candidate of templateDocumentCandidates(document)) {
+    const candidates = templateDocumentCandidates(document)
+    for (const candidate of candidates) {
       candidate.addEventListener("click", blockNativeLockedClick, true)
     }
+    installSlideNavigationLock(candidates)
+  }
+
+  if (!revealListenerInstalled) {
+    revealListenerInstalled = true
+    document.addEventListener(REVEAL_CHANGED_EVENT, scheduleSync)
   }
 
   if (observers.length === 0) {

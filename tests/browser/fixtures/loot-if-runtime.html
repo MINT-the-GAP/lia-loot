@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="de" class="lia-theme-default lia-variant-light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lootif Runtime E2E</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      padding: 2rem;
+    }
+
+    button {
+      min-height: 2.5rem;
+      min-width: 2.5rem;
+    }
+
+    .lia-slide__container > main {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    .lia-quiz__control {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .fixture-result {
+      border: 1px solid #657080;
+      padding: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <label for="lia-input-search">Foliensuche</label>
+  <input id="lia-input-search" type="search">
+  <nav id="lia-toc">
+    <div class="lia-toc__content">
+      <a class="lia-toc__link" href="#1">Lootif Runtime E2E</a>
+    </div>
+  </nav>
+  <div class="lia-slide__container">
+    <main id="fixture-slide" class="lia-slide__content"></main>
+  </div>
+
+  <script>
+    ;(function prepareFixture() {
+      const parameters = new URLSearchParams(window.location.search)
+      const variant = parameters.get("case") || "quiz"
+      const slide = document.getElementById("fixture-slide")
+
+      function start(id, options) {
+        return '<lia-loot-if-start data-loot-if-id="' + id +
+          '" data-options="' + options + '"></lia-loot-if-start>'
+      }
+
+      function end() {
+        return '<a href="#lia-loot-if-end">LOOT-IF-END</a>'
+      }
+
+      function range(id, options, content) {
+        return start(id, options) + content + end()
+      }
+
+      function result(id, text) {
+        return '<p class="fixture-result" id="' + id + '">' + text + '</p>'
+      }
+
+      function quiz(id) {
+        return [
+          '<section class="lia-quiz open" id="' + id + '">',
+          '<p>Bewertbare Aufgabe ' + id + '</p>',
+          '<div class="lia-quiz__control">',
+          '<button type="button" class="lia-quiz__check">Prüfen 0</button>',
+          '<button type="button" class="lia-quiz__resolve">Auflösen</button>',
+          '</div>',
+          '</section>',
+        ].join("")
+      }
+
+      if (variant === "quiz") {
+        slide.innerHTML = [
+          '<h1>Quiz-Trigger</h1>',
+          quiz("quiz-one"),
+          range(
+            "previous-result",
+            "Vorherige Aufgabe gelöst; spawn",
+            result("previous-content", "Vorherige Aufgabe erfüllt"),
+          ),
+          quiz("quiz-two"),
+          '<div id="unavailable-quiz-shell" inert aria-hidden="true">' +
+            quiz("inert-hidden-quiz") +
+            '</div>',
+          range(
+            "slide-result",
+            "Alle Aufgaben der aktuellen Folie gelöst; spawn",
+            result("slide-content", "Alle Folienaufgaben erfüllt") +
+              quiz("self-hidden-quiz"),
+          ),
+          range(
+            "count-result",
+            "mindestens 2 bewertbare Aufgaben gelöst; spawn",
+            result("count-content", "Zwei Aufgaben erfüllt"),
+          ),
+        ].join("")
+      } else if (variant === "resources") {
+        slide.innerHTML = [
+          '<h1>Ressourcen-Trigger</h1>',
+          range("gold-result", "Gold > 1; spawn", result("gold-content", "Gold erfüllt")),
+          range("diamond-result", "Diamanten = 1; spawn", result("diamond-content", "Diamanten erfüllt")),
+          range("energy-result", "Energie < 2; spawn", result("energy-content", "Energie erfüllt")),
+        ].join("")
+      } else if (variant === "chests") {
+        slide.innerHTML = [
+          '<h1>Kisten-Trigger</h1>',
+          '<lia-loot-chest data-chest-id="fixture-gold" data-placement="1" data-reward="gold"></lia-loot-chest>',
+          '<lia-loot-chest data-chest-id="fixture-diamonds" data-placement="1" data-reward="diamonds"></lia-loot-chest>',
+          '<lia-loot-chest data-chest-id="fixture-energy" data-placement="1" data-reward="energy"></lia-loot-chest>',
+          range("gold-chest-result", "1 Schatztruhe geöffnet; spawn", result("gold-chest-content", "Schatztruhe erfüllt")),
+          range("diamond-chest-result", "Diamantenkisten >= 1; spawn", result("diamond-chest-content", "Diamantenkiste erfüllt")),
+          range("energy-chest-result", "Energiekisten = 1; spawn", result("energy-chest-content", "Energiekiste erfüllt")),
+        ].join("")
+      } else if (variant === "lock-magnifier") {
+        slide.innerHTML = [
+          '<h1>Schloss- und Lupen-Trigger</h1>',
+          '<lia-loot-key data-key-id="fixture-red-key" data-color="red"></lia-loot-key>',
+          quiz("locked-quiz"),
+          '<lia-loot-lock data-lock-id="fixture-check-lock" data-target="check" data-color="red"></lia-loot-lock>',
+          '<lia-loot-magnifier data-magnifier-id="fixture-magnifier" data-options=""></lia-loot-magnifier>',
+          range("lock-result", "Schloss check geöffnet; spawn", result("lock-content", "Schloss erfüllt")),
+          range("magnifier-result", "Lupe gefunden; spawn", result("magnifier-content", "Lupe erfüllt")),
+        ].join("")
+      } else if (variant === "facts") {
+        slide.innerHTML = [
+          '<h1>Geheim- und Marker-Trigger</h1>',
+          '<p id="marker-source">Photosynthese</p>',
+          range("marker-color-result", "Ein Wort wurde mit der Farbe rot markiert; spawn", result("marker-color-content", "Markerfarbe erfüllt")),
+          range("marker-word-result", "markiert: rot: Photosynthese; spawn", result("marker-word-content", "Markerwort erfüllt")),
+          range("secret-result", "Geheime Folie besucht; spawn", result("secret-content", "Geheimfolie erfüllt")),
+        ].join("")
+        document.querySelector('#lia-toc a[href="#1"]').textContent =
+          "Geheim- und Marker-Trigger"
+        document.querySelector("#lia-toc .lia-toc__content").insertAdjacentHTML(
+          "beforeend",
+          '<a class="lia-toc__link" href="#2">Verborgener Garten</a>',
+        )
+        const secretSlide = document.createElement("main")
+        secretSlide.className = "lia-slide__content"
+        secretSlide.hidden = true
+        secretSlide.innerHTML = [
+          '<h1>Verborgener Garten</h1>',
+          '<lia-loot-secret-slide data-secret-id="1_900"></lia-loot-secret-slide>',
+        ].join("")
+        slide.parentElement.appendChild(secretSlide)
+
+        function showHashSection() {
+          const match = /^#([12])$/.exec(window.location.hash)
+          const section = match ? Number(match[1]) - 1 : 0
+          const slides = slide.parentElement.querySelectorAll(":scope > main")
+          slides.forEach(function toggle(candidate, index) {
+            candidate.hidden = index !== section
+          })
+        }
+        window.addEventListener("hashchange", showHashSection)
+        showHashSection()
+      } else if (variant === "nested") {
+        slide.innerHTML = [
+          '<h1>Verschachtelte Trigger</h1>',
+          start("outer-result", "Lupe gefunden; spawn"),
+          result("outer-content", "Äußerer Bereich erfüllt"),
+          start("inner-result", "Gold >= 1; spawn"),
+          result("inner-content", "Innerer Bereich erfüllt"),
+          end(),
+          end(),
+          '<lia-loot-magnifier data-magnifier-id="nested-magnifier" data-options=""></lia-loot-magnifier>',
+        ].join("")
+      } else if (variant === "malformed") {
+        slide.innerHTML = [
+          '<h1>Fehlerhafte Trigger</h1>',
+          range("empty-slide-result", "Alle Aufgaben der aktuellen Folie gelöst; spawn", result("empty-slide-content", "Darf ohne Aufgabe nie erscheinen")),
+          range("invalid-result", "Gold >= 1; verschwinde", result("invalid-content", "Darf nie erscheinen")),
+          '<lia-loot-if-start data-loot-if-id="@uid" data-options="Gold >= 1; spawn"></lia-loot-if-start>',
+          result("placeholder-id-content", "Darf mit @uid nie erscheinen"),
+          end(),
+          start("unpaired-result", "Gold >= 1; spawn"),
+          result("unpaired-content", "Darf ohne Ende nie erscheinen"),
+        ].join("")
+      } else {
+        throw new Error("Unbekannter Fixture-Fall: " + variant)
+      }
+
+      window.__LOOT_IF_FIXTURE__ = {
+        variant,
+        solve: function solve(id) {
+          const quizElement = document.getElementById(id)
+          if (!quizElement) throw new Error("Quiz fehlt: " + id)
+          quizElement.classList.add("solved")
+        },
+        markRedWord: function markRedWord() {
+          const source = document.getElementById("marker-source")
+          const textNode = source && source.firstChild
+          if (!textNode) throw new Error("Marker-Text fehlt.")
+
+          function pathFor(node) {
+            const parts = []
+            let cursor = node
+            while (cursor && cursor !== document.body) {
+              const parent = cursor.parentNode
+              if (!parent) throw new Error("Marker-Pfad ist unvollständig.")
+              parts.unshift(Array.prototype.indexOf.call(parent.childNodes, cursor))
+              cursor = parent
+            }
+            return "/" + parts.join("/")
+          }
+
+          const path = pathFor(textNode)
+          window.__LIA_TEXTMARKER_REG_V4__ = {
+            instances: {
+              fixture: {
+                HL: [{
+                  anchor: {
+                    ep: path,
+                    eo: textNode.nodeValue.length,
+                    sp: path,
+                    so: 0,
+                  },
+                  color: "red",
+                  id: "fixture-user-highlight",
+                  kind: "user",
+                }],
+              },
+            },
+          }
+          const overlay = document.createElement("div")
+          overlay.id = "lia-hl-overlay"
+          const rectangle = document.createElement("span")
+          rectangle.className = "lia-hl-rect"
+          rectangle.dataset.kind = "user"
+          rectangle.dataset.hl = "red"
+          overlay.appendChild(rectangle)
+          document.body.appendChild(overlay)
+        },
+      }
+
+      const course = [
+        "<!--",
+        "version: 1.0.0",
+        "-->",
+        "# Lootif Runtime E2E",
+      ].join("\n")
+      window.LIA = {
+        defaultCourseURL: new URL(
+          "/tests/browser/fixtures/course-loot-if-runtime.md",
+          window.location.origin,
+        ).href,
+        fetch: async function fetchCourse() {
+          return new Response(course, {
+            headers: { "content-type": "text/markdown; charset=utf-8" },
+            status: 200,
+          })
+        },
+      }
+    })()
+  </script>
+  <script src="/dist/index.js"></script>
+</body>
+</html>

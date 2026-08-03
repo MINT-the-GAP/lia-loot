@@ -84,6 +84,15 @@ export function templateDocumentCandidates(
   return documents
 }
 
+export function annotationToggleIsHidden(
+  toggle: Element | null,
+): boolean {
+  return (
+    toggle?.getAttribute("aria-pressed") === "false" ||
+    toggle?.getAttribute("data-active") === "0"
+  )
+}
+
 function queryAll(
   documentRoot: Document,
   selector: string,
@@ -437,9 +446,7 @@ const DEFINITIONS: readonly TemplateTargetDefinition[] = [
         const toggle = root.querySelector<HTMLElement>(
           "button[data-act='toggle']",
         )
-        const annotationsHidden =
-          toggle?.getAttribute("aria-pressed") === "false" ||
-          toggle?.getAttribute("data-active") === "0"
+        const annotationsHidden = annotationToggleIsHidden(toggle)
         return {
           target: "annotation",
           root,

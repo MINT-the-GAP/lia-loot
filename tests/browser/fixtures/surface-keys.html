@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de">
+<html lang="de" class="lia-theme-default lia-variant-light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -58,6 +58,10 @@
       padding: 0.75rem;
     }
 
+    .lia-support-menu__submenu svg {
+      height: 15rem;
+    }
+
     .loot-key-tray,
     [data-loot-key-placement] {
       align-items: center;
@@ -69,6 +73,19 @@
     #fixture-slide {
       margin-top: 2rem;
       min-height: 8rem;
+    }
+
+    #fixture-conditions {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+      margin-top: 2rem;
+    }
+
+    .lia-annot-toolbar {
+      align-items: center;
+      display: flex;
+      margin-block: 1rem;
     }
   </style>
 </head>
@@ -94,11 +111,29 @@
             <button id="lia-button-qr-code" type="button">QR-Code</button>
           </div>
         </li>
+        <li class="lia-support-menu__item lia-support-menu__item--lang" role="none">
+          <button type="button">Translator</button>
+          <div class="lia-support-menu__submenu" role="group" aria-label="Translator">
+            <select aria-label="Language"><option>Deutsch</option></select>
+          </div>
+        </li>
       </ul>
     </nav>
   </template>
 
   <div id="fixture-support-menu-host"></div>
+
+  <aside id="fixture-annotation-toolbar" class="lia-annot-toolbar" aria-label="Annotationen">
+    <button
+      id="fixture-annotation-toggle"
+      type="button"
+      data-act="toggle"
+      data-active="1"
+      aria-pressed="true"
+    >
+      Annotationen sichtbar
+    </button>
+  </aside>
 
   <main id="fixture-slide">
     <h1>Surface-Key-Testkurs</h1>
@@ -107,20 +142,82 @@
       data-magnifier-id="surface-e2e-magnifier"
       data-options=""
     ></lia-loot-magnifier>
+    <lia-loot-tool
+      id="fixture-shovel"
+      data-tool-id="surface-e2e-shovel"
+      data-tool="shovel"
+      data-options=""
+    ></lia-loot-tool>
+    <lia-loot-tool
+      id="fixture-watering-can"
+      data-tool-id="surface-e2e-watering-can"
+      data-tool="watering-can"
+      data-options=""
+    ></lia-loot-tool>
+
+    <section id="fixture-conditions" aria-label="Bedingte Items">
+      <lia-loot-key
+        id="condition-inline-key"
+        data-key-id="condition-inline-key"
+        data-color="rot; theme-rot; darkmode; ohne-annotation"
+      ></lia-loot-key>
+      <lia-loot-chest
+        id="condition-inline-chest"
+        data-chest-id="condition-inline-chest"
+        data-placement="3; theme-rot; darkmode; ohne-annotation"
+        data-reward="gold"
+      ></lia-loot-chest>
+      <lia-loot-reveal
+        id="condition-soil"
+        data-reveal-id="condition-soil"
+        data-options="erde; theme-rot; darkmode; ohne-annotation"
+      >
+        <button id="condition-soil-payload" type="button">Fund unter Erde</button>
+      </lia-loot-reveal>
+      <lia-loot-reveal
+        id="condition-plant"
+        data-reveal-id="condition-plant"
+        data-options="pflanze; theme-rot; darkmode; ohne-annotation"
+      >
+        <button id="condition-plant-payload" type="button">Fund hinter Pflanze</button>
+      </lia-loot-reveal>
+      <lia-loot-key
+        id="condition-theme-or-key"
+        data-key-id="condition-theme-or-key"
+        data-color="orange; theme-gelb; theme-blau; lightmode; darkmode"
+      ></lia-loot-key>
+      <lia-loot-chest
+        id="condition-turquoise-chest"
+        data-chest-id="condition-turquoise-chest"
+        data-placement="1; theme-tuerkis; lightmode"
+        data-reward="gold"
+      ></lia-loot-chest>
+    </section>
   </main>
 
   <script>
     ;(function prepareFixture() {
       const parameters = new URLSearchParams(window.location.search)
-      const variant = parameters.get("case") === "concealed"
-        ? "concealed"
+      const requestedCase = parameters.get("case")
+      const variant = ["concealed", "conditions", "layers"].includes(requestedCase)
+        ? requestedCase
         : "access"
       const requestedVersion = parameters.get("version") || "1.0.0"
       const version = /^[0-9A-Za-z._-]{1,32}$/.test(requestedVersion)
         ? requestedVersion
         : "1.0.0"
 
+      const selectedCourse = requestedCase === "translator"
+        ? "translator"
+        : variant
       const courses = {
+        translator: [
+          "<!--",
+          "version: " + version,
+          "-->",
+          "# Translator-Key",
+          "@Schluessel(blau; translator)",
+        ].join("\n"),
         access: [
           "<!--",
           "version: " + version,
@@ -138,6 +235,24 @@
           "@Schluessel(blau; menu; unsichtbar)",
           "@Lupe",
         ].join("\n"),
+        layers: [
+          "<!--",
+          "version: " + version,
+          "-->",
+          "# Direkte Surface-Layer",
+          "@Ressourcen(0, 0, 0)",
+          "@Schluessel(blau; translator; erde; pflanze; unsichtbar)",
+          "@Schatztruhe(2; menu; erde; pflanze)",
+        ].join("\n"),
+        conditions: [
+          "<!--",
+          "version: " + version,
+          "-->",
+          "# Bedingte Items",
+          "@Ressourcen(0, 0, 0)",
+          "@Schluessel(gelb; translator; theme-rot; darkmode; ohne-annotation)",
+          "@Schatztruhe(2; menu; theme-rot; darkmode; ohne-annotation)",
+        ].join("\n"),
       }
 
       const template = document.getElementById("support-menu-template")
@@ -154,22 +269,77 @@
         document.getElementById("lia-support-menu").replaceWith(freshSupportMenu())
       }
 
-      if (variant !== "concealed") {
-        document.getElementById("fixture-magnifier").remove()
+      if (variant !== "concealed" && variant !== "layers") {
+        if (variant !== "conditions") {
+          document.getElementById("fixture-magnifier").remove()
+        }
+      }
+      if (variant !== "layers" && variant !== "conditions") {
+        document.getElementById("fixture-shovel").remove()
+        document.getElementById("fixture-watering-can").remove()
+      }
+      if (variant !== "conditions") {
+        document.getElementById("fixture-conditions").remove()
+        document.getElementById("fixture-annotation-toolbar").remove()
+      } else {
+        const compoundOptions = "theme-rot; darkmode; ohne-annotation"
+        document
+          .getElementById("fixture-magnifier")
+          .setAttribute("data-options", compoundOptions)
+        document
+          .getElementById("fixture-shovel")
+          .setAttribute("data-options", compoundOptions)
+        document
+          .getElementById("fixture-watering-can")
+          .setAttribute("data-options", compoundOptions)
       }
 
       window.__LOOT_E2E_FIXTURE__ = { variant, version }
+      const annotationStore = { ui: { visible: true } }
+      const settings = { light: true, theme: "default" }
       window.LIA = {
         defaultCourseURL: new URL(
           "/tests/browser/fixtures/course-" + variant + ".md",
           window.location.origin,
         ).href,
         fetch: async function fetchCourse() {
-          return new Response(courses[variant], {
+          return new Response(courses[selectedCourse], {
             headers: { "content-type": "text/markdown; charset=utf-8" },
             status: 200,
           })
         },
+        settings,
+      }
+      if (variant === "conditions") {
+        window.__LIA_ANNOTATION__ = {
+          getStore: () => annotationStore,
+        }
+        window.setFixtureEnvironment = function setFixtureEnvironment(
+          theme,
+          mode,
+          annotationsVisible,
+        ) {
+          const root = document.documentElement
+          for (const className of [...root.classList]) {
+            if (
+              className.startsWith("lia-theme-") ||
+              className.startsWith("lia-variant-")
+            ) {
+              root.classList.remove(className)
+            }
+          }
+          root.classList.add("lia-theme-" + theme, "lia-variant-" + mode)
+          settings.theme = theme
+          settings.light = mode === "light"
+          annotationStore.ui.visible = annotationsVisible
+          const toggle = document.getElementById("fixture-annotation-toggle")
+          toggle.setAttribute("aria-pressed", String(annotationsVisible))
+          toggle.setAttribute("data-active", annotationsVisible ? "1" : "0")
+          toggle.textContent = annotationsVisible
+            ? "Annotationen sichtbar"
+            : "Annotationen ausgeblendet"
+        }
+        window.setFixtureEnvironment("default", "light", true)
       }
     })()
   </script>

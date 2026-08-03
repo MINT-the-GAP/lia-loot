@@ -25,15 +25,27 @@ const {
 if (previousHTMLElement === undefined) delete globalThis.HTMLElement
 else globalThis.HTMLElement = previousHTMLElement
 
+function visibility(overrides = {}) {
+  return {
+    delayMs: 0,
+    onlyOnSlide: false,
+    onlyWithoutAnnotations: false,
+    themes: [],
+    variants: [],
+    ...overrides,
+  }
+}
+
 test("bewahrt alle bisherigen Inline-Schluesselformen", () => {
   assert.deepEqual(parseKeyPickupOptions(""), {
     concealment: null,
     errors: [],
     inline: true,
+    layers: [],
     placement: null,
     requestedColor: null,
     valid: true,
-    visibility: { delayMs: 0, onlyOnSlide: false },
+    visibility: visibility(),
   })
   assert.deepEqual(
     parseKeyPickupOptions("gruen; anker; 30s; zauberstaub"),
@@ -41,13 +53,38 @@ test("bewahrt alle bisherigen Inline-Schluesselformen", () => {
       concealment: "dust",
       errors: [],
       inline: true,
+      layers: [],
       placement: null,
       requestedColor: "gruen",
       valid: true,
-      visibility: { delayMs: 30_000, onlyOnSlide: true },
+      visibility: visibility({ delayMs: 30_000, onlyOnSlide: true }),
     },
   )
   assert.equal(parseKeyPickupOptions("anker; 1min").valid, true)
+})
+
+test("trennt Schluesselfarbe und gemeinsame Sichtbarkeitsoptionen", () => {
+  assert.deepEqual(
+    parseKeyPickupOptions(
+      "blau; translator; theme-blau; darkmode; ohne-annotation; anker; 2s",
+    ),
+    {
+      concealment: null,
+      errors: [],
+      inline: false,
+      layers: [],
+      placement: "translator",
+      requestedColor: "blau",
+      valid: true,
+      visibility: visibility({
+        delayMs: 2_000,
+        onlyOnSlide: true,
+        onlyWithoutAnnotations: true,
+        themes: ["blue"],
+        variants: ["dark"],
+      }),
+    },
+  )
 })
 
 test("parst Farbe, Surface-Ziel und Optionen in beliebiger Reihenfolge", () => {
@@ -55,10 +92,11 @@ test("parst Farbe, Surface-Ziel und Optionen in beliebiger Reihenfolge", () => {
     concealment: "solid",
     errors: [],
     inline: false,
+    layers: [],
     placement: "menu",
     requestedColor: "gelb",
     valid: true,
-    visibility: { delayMs: 0, onlyOnSlide: false },
+    visibility: visibility(),
   })
 
   assert.deepEqual(
@@ -69,10 +107,11 @@ test("parst Farbe, Surface-Ziel und Optionen in beliebiger Reihenfolge", () => {
       concealment: "dust",
       errors: [],
       inline: false,
+      layers: [],
       placement: "classroom",
       requestedColor: "orange",
       valid: true,
-      visibility: { delayMs: 12_000, onlyOnSlide: true },
+      visibility: visibility({ delayMs: 12_000, onlyOnSlide: true }),
     },
   )
 
@@ -85,6 +124,43 @@ test("parst Farbe, Surface-Ziel und Optionen in beliebiger Reihenfolge", () => {
   }
   assert.equal(resolveSurfaceTarget("translation"), "translator")
   assert.equal(resolveSurfaceTarget("display"), "mode")
+})
+
+test("kombiniert geordnete Exploration-Layer mit allen Schlüsseloptionen", () => {
+  assert.deepEqual(
+    parseKeyPickupOptions(
+      "pflanze-unsichtbar; gelb; erde; menu; 12s; erde-zauberstaub; anker; unsichtbar",
+    ),
+    {
+      concealment: "solid",
+      errors: [],
+      inline: false,
+      layers: [
+        { kind: "plant", concealment: "solid" },
+        { kind: "soil", concealment: null },
+        { kind: "soil", concealment: "dust" },
+      ],
+      placement: "menu",
+      requestedColor: "gelb",
+      valid: true,
+      visibility: visibility({ delayMs: 12_000, onlyOnSlide: true }),
+    },
+  )
+})
+
+test("behält identische Schlüssel-Layer in deklarierter Reihenfolge", () => {
+  const parsed = parseKeyPickupOptions(
+    "erde; pflanze; erde; pflanze-unsichtbar; erde",
+  )
+
+  assert.equal(parsed.valid, true)
+  assert.deepEqual(parsed.layers, [
+    { kind: "soil", concealment: null },
+    { kind: "plant", concealment: null },
+    { kind: "soil", concealment: null },
+    { kind: "plant", concealment: "solid" },
+    { kind: "soil", concealment: null },
+  ])
 })
 
 test("weist mehrere Ziele, Farben und unbekannte Werte fail-closed zurueck", () => {
@@ -227,7 +303,7 @@ test("verwirft eigene DOM-Commits, repariert aber spaetere externe Entfernung ei
 })
 
 test("behaelt bei Remount und Renderer-Clone genau den Source-Request", () => {
-  const signature = "4:yellow:menu:0:0:none"
+  const signature = "4:yellow:menu:0:0:none:none"
   const matches = new Map([["old-runtime-id", signature]])
   const surfaceRequests = new Set(["source-key-id"])
   const registerDomRequest = (baseId, nextSignature, sourceCount) => {
@@ -250,7 +326,7 @@ test("behaelt bei Remount und Renderer-Clone genau den Source-Request", () => {
   assert.deepEqual([...matches], [["new-runtime-id", signature]])
   assert.deepEqual([...surfaceRequests], ["source-key-id"])
 
-  registerDomRequest("dom-only-key", "9:orange:classroom:0:0:none", 0)
+  registerDomRequest("dom-only-key", "9:orange:classroom:0:0:none:none", 0)
   assert.deepEqual(
     [...surfaceRequests],
     ["source-key-id", "dom-only-key"],

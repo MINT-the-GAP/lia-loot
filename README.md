@@ -51,6 +51,11 @@ script:   ./dist/index.js
 @achievements: @LootAchievements_
 @Achievements: @LootAchievements_
 @Erfolge: @LootAchievements_
+@lootif: @LootIfStart_(@uid,@0)
+@Endelootif: @LootIfEnd_
+@EndeLootif: @LootIfEnd_
+@endlootif: @LootIfEnd_
+@EndLootIf: @LootIfEnd_
 
 @LootAchievements_
 <script run-once modify="false">
@@ -70,11 +75,29 @@ script:   ./dist/index.js
 </script>
 @end
 
+@LootIfStart_
+<lia-keep>
+<lia-loot-if-start data-loot-if-id='@0' data-options='@1'></lia-loot-if-start>
+</lia-keep>
+@end
+
+@LootIfEnd_
+[LOOT-IF-END](#lia-loot-if-end)
+@end
+
 @Schatztruhe: @LootTruhe_(@uid,@0,gold)
 @Diamanttruhe: @LootTruhe_(@uid,@0,diamonds)
 @Energiekiste: @LootTruhe_(@uid,@0,energy)
 @Schluessel: @LootSchluessel_(@uid,@0)
 @Lupe: @LootLupe_(@uid,@0)
+@Schaufel: @LootWerkzeug_(@uid,shovel,@0)
+@Giesskanne: @LootWerkzeug_(@uid,watering-can,@0)
+@Erdhaufen: @LootRevealStart_(@uid,erde,@0)
+@EndeErdhaufen: @LootRevealEnd_(erde)
+@Pflanze: @LootRevealStart_(@uid,pflanze,@0)
+@Blume: @Pflanze(@0)
+@EndePflanze: @LootRevealEnd_(pflanze)
+@EndeBlume: @LootRevealEnd_(pflanze)
 @Portal: @LootPortal_(@uid,@0,two-way)
 @Einwegportal: @LootPortal_(@uid,@0,one-way)
 @Einbahnportal: @LootPortal_(@uid,@0,one-way)
@@ -99,6 +122,22 @@ script:   ./dist/index.js
 <lia-keep>
 <lia-loot-magnifier data-magnifier-id="@0" data-options="@1"></lia-loot-magnifier>
 </lia-keep>
+@end
+
+@LootWerkzeug_
+<lia-keep>
+<lia-loot-tool data-tool-id='@0' data-tool='@1' data-options='@2'></lia-loot-tool>
+</lia-keep>
+@end
+
+@LootRevealStart_
+<lia-keep>
+<lia-loot-reveal-start data-reveal-id='@0' data-reveal-kind='@1' data-options='@1; @2'></lia-loot-reveal-start>
+</lia-keep>
+@end
+
+@LootRevealEnd_
+[LOOT-REVEAL-END](#lia-loot-reveal-end-@0)
 @end
 
 @LootPortal_
@@ -331,8 +370,9 @@ erhält genau eine Ziel-ID und eine Farbe, getrennt durch ein Komma:
 @Energiekiste(3; boardmode)
 ```
 
-Zusätzlich verstehen alle drei Truhenarten und Schlüssel zwei frei kombinierbare
-Optionen. Sie werden wie die Ziele durch Semikolons getrennt:
+Die drei Truhenarten und alle weiteren echten Fund- und Freigabeobjekte verstehen
+gemeinsame Anker-, Zeit- und Sichtbarkeitsoptionen. Sie werden wie die Ziele durch
+Semikolons getrennt:
 
 ```markdown
 @Schatztruhe(anker)
@@ -354,6 +394,59 @@ nicht zurück; der Fund bleibt außerhalb seiner Quellfolie trotzdem verborgen. 
 Neuladen startet den Countdown jedes noch nicht eingesammelten Fundes neu – auch
 wenn er zuvor bereits abgelaufen war. Bereits eingesammelte Funde bleiben wie
 bisher verschwunden.
+
+**Sichtbarkeit nach Theme, Farbmodus und Annotationen**
+
+Ein Fund kann zusätzlich an das aktive LiaScript-Farbtheme, an den hellen oder
+dunklen Farbmodus und an eine ausgeblendete Annotationsanzeige gebunden werden.
+Diese Bedingungen werden live neu ausgewertet: Beim Wechsel des Themes oder
+Farbmodus sowie beim Ein- und Ausblenden der Annotationen verschwindet oder
+erscheint ein noch nicht eingesammelter Fund unmittelbar.
+
+| Achse | Kanonische Optionen | Bedeutung und Aliase |
+|:--|:--|:--|
+| Theme | `theme=rot`, `theme=gelb`, `theme=tuerkis`, `theme=blau` | `theme=standard` und `theme=türkis` bezeichnen ebenfalls das türkisfarbene Standardtheme. Die Kurzformen `theme-rot`, `theme-gelb`, `theme-tuerkis` und `theme-blau` bleiben unterstützt. |
+| Farbmodus | `farbmodus=dunkel`, `farbmodus=hell` | Dafür sind auch `darkmode` beziehungsweise `lightmode` zulässig. |
+| Annotationen | `annotationen=aus` | Der Alias `ohne-annotation` hat dieselbe Bedeutung. Ist keine Annotationsanzeige vorhanden, gilt sie ebenfalls als aus. |
+
+Mehrere Werte derselben Achse sind Alternativen (**ODER**):
+`theme=rot; theme=blau` erlaubt also Rot oder Blau. Bedingungen verschiedener
+Achsen gelten gemeinsam (**UND**). Dasselbe gilt für `anker`, eine Verzögerung,
+die Verbergung mit `unsichtbar` oder `zauberstaub` und direkte `erde`-/`pflanze`-
+Schichten: Ein Objekt wird erst sichtbar beziehungsweise bedienbar, wenn alle
+angegebenen Bedingungen erfüllt sind.
+
+Die Sichtbarkeitsbedingungen gelten für alle echten Fund- und Freigabeobjekte:
+
+| Objektgruppe | Unterstützte Makros |
+|:--|:--|
+| Schlüssel | `@Schluessel` |
+| alle drei Truhenarten | `@Schatztruhe`, `@Diamanttruhe`, `@Energiekiste` |
+| Such- und Aktionswerkzeuge | `@Lupe`, `@Schaufel`, `@Giesskanne` |
+| freizugebende Bereiche | `@Erdhaufen`, `@Pflanze` und der Alias `@Blume` |
+
+Beispiele mit einzelnen und kombinierten Bedingungen:
+
+```markdown
+@Schluessel(blau; translator; theme=rot; theme=blau; farbmodus=dunkel; annotationen=aus)
+@Schatztruhe(3; menu; theme=gelb; lightmode)
+@Diamanttruhe(theme=tuerkis; ohne-annotation)
+@Energiekiste(theme=standard; farbmodus=hell)
+@Lupe(theme=blau; annotationen=aus)
+@Schaufel(theme=rot; darkmode)
+@Giesskanne(theme=türkis; lightmode; ohne-annotation)
+
+@Erdhaufen(unsichtbar; theme=rot; theme=blau; farbmodus=dunkel)
+@Pflanze(zauberstaub; annotationen=aus)
+Hier kann auch ein Quiz oder ein anderes Funditem stehen.
+@EndePflanze
+@EndeErdhaufen
+```
+
+Portale und Schlösser sind Zugänge, aber keine eigenen Fundobjekte. `@Unsichtbar`
+ist eine Verbergung für Inhalt und ebenfalls kein Fundobjekt. Diese drei Gruppen
+erhalten daher keine eigenen Theme-, Farbmodus- oder Annotationsbedingungen;
+Funditems innerhalb solcher Strukturen können die Bedingungen weiterhin verwenden.
 
 Als Menge ist ausschließlich eine positive ganze Zahl zulässig. `3s` bleibt wegen
 seiner Zeiteinheit eine Verzögerung und bedeutet nicht drei Ressourceneinheiten.
@@ -613,6 +706,135 @@ Ein Schlüssel mit kaum sichtbarem Zauberstaub:
 
 @Schluessel(lila; zauberstaub)
 
+## `@Schaufel`, `@Giesskanne`, `@Erdhaufen` und `@Pflanze`
+
+          --{{0}}--
+Mit `@Schaufel` und `@Giesskanne` setzt du zwei weitere einmalig findbare
+Werkzeuge in den Kurs. Nach dem Einsammeln liegen sie dauerhaft in der
+Ressourcenleiste. Beide unterstützen wie die Lupe `anker` und eine Verzögerung:
+
+```markdown
+@Schaufel
+@Giesskanne
+@Schaufel(anker; 12s)
+@Giesskanne(2min)
+```
+
+Schaufel und Gießkanne sind Aktionswerkzeuge: In der Leiste kann immer höchstens
+eines von beiden aktiv sein. Die Lupe arbeitet unabhängig davon und darf
+gleichzeitig aktiv bleiben. So kann ein unsichtbarer Erdhaufen im Lupenkreis
+gefunden und direkt mit der Schaufel bearbeitet werden.
+
+`@Erdhaufen` und `@Pflanze` sind Container für beliebigen blockweise
+gerenderten LiaScript-Inhalt. Öffnendes und schließendes Makro müssen jeweils
+als eigene Zeile direkt auf derselben Folienebene stehen; innerhalb von Listen,
+Zitaten oder gemeinsamen HTML-Containern werden sie nicht eingesetzt. Der Inhalt
+dazwischen bleibt bis zur vollständigen Freigabe verborgen und nicht bedienbar:
+
+```markdown
+@Erdhaufen
+Unter der Erde liegt dieser Text.
+@EndeErdhaufen
+
+@Pflanze
+@Schatztruhe(3)
+@EndePflanze
+```
+
+Ein Erdhaufen gibt seinen Inhalt nach dem Wegbuddeln frei. Eine Pflanze besitzt
+bewusst einen zusätzlichen Schritt: Zuerst wird die kleine Pflanze mit der
+Gießkanne zum Blühen gebracht. Erst ein anschließender Klick auf die Blüte gibt
+den Inhalt frei. `@Blume` ist ein Alias für `@Pflanze`; geschlossen wird diese
+Form wahlweise mit `@EndePflanze` oder dem passenden Alias `@EndeBlume`.
+
+Ohne Zusatzoption sind Erdhaufen und kleine Pflanze sichtbar. Mit `unsichtbar`
+werden sie erst im aktiven Lupenkreis sichtbar; `zauberstaub` hinterlässt dort
+stattdessen den bekannten schwachen Suchhinweis. Zusätzlich akzeptiert jeder
+Container `anker` und höchstens eine Dauer in derselben Schreibweise wie die
+anderen Fundobjekte:
+
+```markdown
+@Erdhaufen(unsichtbar; anker; 12s)
+Verborgener Inhalt
+@EndeErdhaufen
+
+@Pflanze(zauberstaub; 2min)
+Noch ein verborgener Inhalt
+@EndePflanze
+```
+
+Container dürfen verschachtelt werden. Dabei muss in umgekehrter Reihenfolge
+geschlossen werden. Das folgende vollständige Beispiel verlangt zuerst die
+Lupe, dann die Schaufel, danach die Gießkanne und zuletzt einen Klick auf die
+Blüte. Erst dann wird das native LiaScript-Quiz bedienbar:
+
+```markdown
+@Lupe
+@Schaufel
+@Giesskanne
+
+@Erdhaufen(unsichtbar)
+@Pflanze(unsichtbar)
+Welches Lösungswort blüht hier? [[SONNENBLUME]]
+[[?]] Gesucht ist eine gelbe Blume.
+@EndePflanze
+@EndeErdhaufen
+```
+
+Bei einzelnen Fundobjekten können die Schichten auch direkt als Optionen
+angegeben werden. `erde` und `pflanze` beziehungsweise `blume` erzeugen sichtbare
+Schichten; die Suffixe `-unsichtbar` und `-zauberstaub` steuern ihre jeweilige
+Verbergung. Direkte Schichten werden von links nach rechts als außen nach innen
+gelesen; das Fundobjekt liegt hinter der letzten Schicht. Eine zusätzliche
+Itemoption `unsichtbar` bleibt davon unabhängig und verbirgt nur das Fundobjekt,
+nicht automatisch Erde oder Pflanze. Die normalen Farb-, Mengen-, Ziel-, Anker-
+und Zeitoptionen bleiben dabei erhalten:
+
+| Direkt schichtbares Fundobjekt | Unterstützte Makros |
+| --- | --- |
+| Schlüssel | `@Schluessel` |
+| alle Truhenbelohnungen und -ziele | `@Schatztruhe`, `@Diamanttruhe`, `@Energiekiste` |
+| Suchwerkzeug | `@Lupe` |
+| Aktionswerkzeuge | `@Schaufel`, `@Giesskanne` |
+
+```markdown
+@Schluessel(blau; translator; erde-unsichtbar; pflanze; unsichtbar)
+@Schatztruhe(3; menu; erde; blume; anker; 12s)
+```
+
+Portale und Schlösser sind keine Fundobjekte und akzeptieren deshalb keine
+direkten `erde`-/`pflanze`-Optionen. Sie lassen sich wie Text, Quizze und andere
+LiaScript-Inhalte vollständig in einen Bereichscontainer setzen:
+
+```markdown
+@Erdhaufen
+@Portal(3)
+Was liegt unter der Erde? [[SCHATZ]]
+@Schloss(check, rot)
+@EndeErdhaufen
+```
+
+Beim Schichten eines Werkzeugs muss ein bereits erreichbarer Lösungsweg bestehen:
+Eine einzige Schaufel hinter ihrer eigenen Erde oder eine einzige Gießkanne hinter
+ihrer eigenen Pflanze wäre absichtlich nicht erreichbar.
+
+
+@Schaufel
+@Giesskanne
+
+
+@Erdhaufen
+Unter der Erde liegt dieser Text.
+@EndeErdhaufen
+
+@Pflanze
+@Schatztruhe(3)
+@EndePflanze
+
+
+
+
+
 ## `@Portal`, `@Einwegportal` und `@Einbahnportal`
 
           --{{0}}--
@@ -672,7 +894,7 @@ das Schloss auf dem Zweiwegportal zur nächsten Folie:
 
 @Schluessel(blau; anker)
 
-@Portal(10)
+@Portal(11)
 @Schloss(portal, blau)
 
 Dieses Einwegportal führt zurück zur Lupenfolie und erzeugt dort keinen Rückweg:
@@ -729,12 +951,18 @@ unabhängig davon lokal.
 | `translator` | Übersetzer und Sprachauswahl |
 | `classroom` | Teilen- und Classroom-Menü |
 | `info` | Info-Menü |
-| `seitenwechsel` | beide Prev-/Next-Schaltflächen für Zurück und Weiter |
+| `seitenwechsel` | alle regulären sequenziellen Eingaben für Zurück und Weiter |
 
 Ein globaler Aufruf steht allein in einer eigenen Zeile. Er wird bereits beim
 Kursstart aus der Kursquelle registriert; das Schloss ist also sichtbar, bevor die
 Folie mit dem Makro besucht wurde. `@Schloss(seitenwechsel, orange)` sperrt Zurück
-und Weiter gemeinsam. Ein orangefarbener Schlüssel entsperrt beide Schaltflächen.
+und Weiter gemeinsam: beide Schaltflächen, `ArrowLeft`/`ArrowRight`, die
+LiaScript-Kurzbefehle `Alt+Shift+N` und `Alt+Shift+P` sowie schnelle horizontale
+Wischgesten per Touch oder Mausdrag (mindestens 150 px horizontal, höchstens
+100 px vertikal und höchstens 300 ms). In Eingabefeldern bleiben Cursor- und
+Widgetfunktionen der Pfeiltasten erhalten, ohne die Folie zu wechseln. Direkte
+Sprünge über das Inhaltsverzeichnis oder ein Portal bleiben absichtlich nutzbar.
+Ein orangefarbener Schlüssel hebt alle sequenziellen Sperren gemeinsam auf.
 
 Die Template-Ziele und ihre lokale oder globale Bindung stehen in der
 [Tabelle der direkt importierten Templates](#ziele-aus-direkt-importierten-templates).
@@ -834,7 +1062,79 @@ keine vertraulichen Daten oder unerwünschten Seiteneffekte enthalten.
 Du hast das geheime Labor gefunden. Diese echte Demo-Folie erscheint nur nach der
 exakten Suche nach `Das geheime Labor` im Inhaltsverzeichnis.
 
-## `@achievements`
+## `@lootif` und `@achievements`
+
+**Bedingte Bereiche mit `@lootif`**
+
+`@lootif(Trigger; spawn)` öffnet einen bedingten Bereich. Der beliebige
+LiaScript-Inhalt darunter kann Text, Medien, native Quizze, alle Loot-Items und
+deren vollständige Optionen sowie weitere Bereichscontainer enthalten. Geschlossen
+wird der Bereich mit `@Endelootif`:
+
+```markdown
+@lootif(Gold >= 5; spawn)
+Diese Nachricht erscheint ab fünf Goldmünzen.
+@Schatztruhe(2; anker; zauberstaub)
+@Endelootif
+```
+
+Das öffnende und das schließende Makro stehen jeweils allein auf einer eigenen
+Zeile und auf derselben Folienebene. Wie bei `@Erdhaufen` und `@Pflanze` werden
+sie nicht innerhalb von Listen, Zitaten oder gemeinsam umschließenden
+HTML-Containern eingesetzt. `@Endelootif` ist die kanonische Schreibweise;
+zusätzlich funktionieren `@EndeLootif`, `@endlootif` und `@EndLootIf`.
+
+Der Trigger steht vor dem Semikolon. Dahinter wird derzeit ausschließlich die
+Aktion `spawn` unterstützt: Der gesamte Bereich ist zuvor weder sichtbar noch
+bedienbar und erscheint beim ersten Erfüllen dauerhaft. Ein späteres Absinken
+einer Ressource lässt bereits erschienenen Inhalt nicht wieder verschwinden. Der
+Spawn-Zustand bleibt kurs- und versionsgebunden im aktuellen Browser-Tab auch
+nach einem Neuladen erhalten.
+
+| Gewünschter Trigger | Kanonische Schreibweise im ersten Feld |
+|:--|:--|
+| unmittelbar vorhergehende bewertbare Aufgabe gelöst | `Vorherige Aufgabe gelöst` |
+| alle erreichbaren bewertbaren Aufgaben der aktuellen Folie gelöst | `Alle Aufgaben der aktuellen Folie gelöst` |
+| mindestens drei bewertbare Aufgaben im Kurs gelöst | `mindestens 3 bewertbare Aufgaben gelöst` oder `bewertbare Aufgaben >= 3` |
+| Energie, Gold oder Diamanten vergleichen | `Energie > 0`, `Gold <= 4`, `Diamanten = 2` |
+| geöffnete Kisten eines Typs vergleichen | `Schatztruhen >= 2`, `Diamanttruhen = 1`, `Energiekisten < 4` |
+| bestimmtes Schloss geöffnet | `Schloss: translator` – der Name entspricht dem ersten Argument von `@Schloss` |
+| eine Geheimfolie besucht | `Geheime Folie besucht` |
+| Lupe gefunden | `Lupe gefunden` |
+| ein beliebiges Wort mit einer Farbe markiert | `markiert: gelb` |
+| ein bestimmtes Wort mit einer Farbe markiert | `markiert: gelb: Energie` |
+
+Für Zahlenvergleiche stehen `>`, `>=`, `=`, `<=` und `<` zur Verfügung. Anzahlen
+von Aufgaben und Kisten sind nichtnegative ganze Zahlen; Ressourcen dürfen auch
+nichtnegative Dezimalzahlen verwenden. Bei Markierungen werden `gelb`, `grün`,
+`blau`, `rosa`, `orange` und `rot` unterstützt. Ohne drittes Feld genügt irgendein
+mit der Farbe markiertes Wort; mit dem dritten Feld muss auch der normalisierte
+Wortlaut übereinstimmen.
+
+Bereiche dürfen in umgekehrter Schließreihenfolge verschachtelt werden. Alle
+äußeren Gates müssen bereits offen sein, bevor ein innerer Trigger seinen Inhalt
+erscheinen lassen kann. Dadurch funktionieren auch die zuvor aufgebauten Such-
+und Freigabeketten unverändert:
+
+```markdown
+@lootif(Lupe gefunden; spawn)
+@Erdhaufen(unsichtbar)
+@Pflanze(zauberstaub)
+Welche Farbe hat die Blüte? [[GELB]]
+@EndePflanze
+@EndeErdhaufen
+@Endelootif
+```
+
+Ungültige Trigger, andere Aktionen, zusätzliche Semikolonfelder und fehlende
+Endmakros werden sicher geschlossen behandelt: Der betroffene Inhalt bleibt
+verborgen und unbedienbar. Eine Range wird niemals über eine Foliengrenze hinweg
+gepaart. Gültige, vollständig geschlossene Bereiche gehören bereits vor ihrem
+Spawn zum vollständigen Kurs- und Achievement-Katalog, werden aber nicht als
+aktive Source-Deklarationen materialisiert. Ungültige oder unbalancierte Bereiche
+werden auch aus diesen Vollkatalogen ausgeschlossen.
+
+**Achievements aktivieren**
 
           --{{0}}--
 Mit einem einzelnen Makro aktivierst du die Erfolgsmeldungen für den gesamten Kurs:
@@ -853,19 +1153,39 @@ Meldung blendet sich nach **12 Sekunden** automatisch aus und kann vorher über 
 oder mit `Escape` geschlossen werden. Weitere Erfolge erscheinen sofort unten im
 Stapel und schieben ältere Meldungen nach oben; jede Meldung hat ihren eigenen Timer.
 
-| Erfolg | Bedingung |
-|:--|:--|
-| Aufgaben-Meister | Die automatische Abschlussaufgabe ist korrekt gelöst und alle dabei geladenen bewertbaren LiaScript-Quizze sind gelöst. |
-| Perfekter Highscore | Der endgültige Highscore entspricht exakt der konfigurierten Maximalpunktzahl. |
-| Schatzjäger | Jede im Kurs deklarierte Schatz-, Diamant- und Energiekiste wurde geöffnet. Mehrere Ziele eines Kistenmakros und die Live-Beispiele dieser README zählen als einzelne Truhen. |
-| Schlossknacker | Alle gültig deklarierten globalen, Template-, gegenstands- und quizlokalen Schlösser einschließlich der Live-Beispiele dieser README wurden mit passenden Schlüsseln geöffnet. |
-| Geheimnis entdeckt | Eine Geheimfolie wurde nach exakter Suche tatsächlich geöffnet. |
+| Erfolg | Interne ID | Bedingung |
+|:--|:--|:--|
+| Aufgaben-Meister | `all-quizzes-solved` | Die automatische Abschlussaufgabe ist korrekt gelöst und alle dabei geladenen bewertbaren LiaScript-Quizze sind gelöst. |
+| Perfekter Highscore | `perfect-highscore` | Der endgültige Highscore entspricht exakt der konfigurierten Maximalpunktzahl. |
+| Schatzjäger | `all-treasure-chests-opened` | Alle im Kurs deklarierten Schatztruhen wurden geöffnet. |
+| Diamantensammler | `all-diamond-chests-opened` | Alle im Kurs deklarierten Diamanttruhen wurden geöffnet. |
+| Energiesammler | `all-energy-chests-opened` | Alle im Kurs deklarierten Energiekisten wurden geöffnet. |
+| Unsichtbares entdeckt | `all-invisible-objects-found` | Alle vollständig unsichtbaren Objekte wurden erstmals tatsächlich mit der aktiven Lupe gefunden. |
+| Zauberstaubspürnase | `all-magic-dust-objects-found` | Alle mit Zauberstaub verborgenen Objekte wurden erstmals tatsächlich mit der aktiven Lupe gefunden. |
+| Ausgrabungsprofi | `all-soil-dug` | Alle Erdhaufen wurden mit der Schaufel weggebuddelt. |
+| Grüner Daumen | `all-plants-bloomed` | Alle kleinen Pflanzen wurden mit der Gießkanne zum Blühen gebracht. Das anschließende Öffnen der Blüte ist dafür nicht erforderlich. |
+| Schlossknacker | `all-locks-opened` | Alle gültig deklarierten globalen, Template-, gegenstands- und quizlokalen Schlösser einschließlich der Live-Beispiele dieser README wurden mit passenden Schlüsseln geöffnet. |
+| Geheimnis entdeckt | `secret-slide-found` | Eine Geheimfolie wurde nach exakter Suche tatsächlich geöffnet. |
 
 Als bewertbare Aufgaben zählen native Quizze mit **Prüfen** und **Auflösen**;
-Umfragen werden nicht mitgezählt. Ein „alle“-Erfolg für Truhen oder Schlösser wird
-nur geprüft, wenn mindestens ein solches Objekt existiert und der vollständige
-Kurskatalog geladen wurde. Jeder Erfolg wird pro Browser-Tab genau einmal gespeichert
-und beim Neuladen nicht erneut eingeblendet.
+Umfragen werden nicht mitgezählt. Bei Truhen zählt jedes tatsächlich erzeugte Ziel
+eines Makroaufrufs als eigene Kiste. Die drei Kistenarten werden vollständig
+unabhängig voneinander ausgewertet.
+
+Für die beiden Lupenerfolge zählt jede konkrete Verbergungsinstanz: direkter Text in
+`@Unsichtbar(...)` oder `@Zauberstaub(...)`, die Verbergung eines Funditems sowie
+jede entsprechend verborgene Erde- oder Pflanzenschicht. „Gefunden“ bedeutet, dass
+die Instanz zum ersten Mal wirklich im aktiven Lupenkreis liegt; ein bloß vorhandenes
+oder nur schwach schimmerndes Objekt reicht nicht aus. Für die Grab- und Blüherfolge
+zählen sowohl `@Erdhaufen` beziehungsweise `@Pflanze`/`@Blume` als auch direkte
+`erde`- und `pflanze`-Schichten an Funditems.
+
+Jeder kursweite „alle“-Erfolg wird erst geprüft, nachdem der vollständige
+Kurskatalog geladen wurde, und nur, wenn mindestens ein Objekt seiner eigenen
+Kategorie existiert. Fehlt eine bestimmte Kistenart oder besitzt der Kurs kein
+unsichtbares Objekt, keinen Zauberstaub, keine Erde beziehungsweise keine Pflanze,
+vergibt er den jeweils zugehörigen Erfolg daher nicht beim Start. Jeder Erfolg wird
+pro Browser-Tab genau einmal gespeichert und beim Neuladen nicht erneut eingeblendet.
 
 ## `@Highscore`
 

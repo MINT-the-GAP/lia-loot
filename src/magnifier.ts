@@ -4,11 +4,25 @@ import {
   type CollectibleVisibilityRule,
 } from "./collectible-visibility.ts"
 import {
+  concealmentIdOf,
   concealedContentOf,
   CONCEALMENT_CHANGED_EVENT,
   CONCEALMENT_SELECTOR,
+  extractConcealmentOptions,
   prepareConcealedHost,
+  setHostConcealment,
+  type ConcealmentMode,
 } from "./concealment.ts"
+import {
+  parseExplorationOptions,
+  type RevealLayerOption,
+} from "./exploration-options.ts"
+import {
+  clearHostRevealLayers,
+  hostIsRevealBlocked,
+  REVEAL_CHANGED_EVENT,
+  setHostRevealLayers,
+} from "./exploration.ts"
 import {
   MAGNIFIER_RADIUS,
   magnifierIntersectsRect,
@@ -34,10 +48,13 @@ const COLLECT_DURATION = 650
 interface MagnifierController {
   collected(): boolean
   collect(): boolean
+  find(concealmentId: string, mode: ConcealmentMode): void
 }
 
 interface MagnifierRequest {
+  concealment: ConcealmentMode | null
   errors: string[]
+  layers: RevealLayerOption[]
   sourceSection: number | null
   valid: boolean
   visibility: CollectibleVisibilityRule
@@ -56,9 +73,13 @@ let lastPointer: PointerPosition | null = null
 let pendingPointer: PointerPosition | null = null
 let pointerFrame: number | null = null
 let pointerTrackingInstalled = false
+let pickupListenerInstalled = false
 let slideActivityInstalled = false
+let revealListenerInstalled = false
+let revealSyncQueued = false
 const collectingIds = new Set<string>()
 const eligibleMagnifierIds = new Set<string>()
+const boundMagnifierButtons = new WeakSet<HTMLButtonElement>()
 const warnedInvalidSpecs = new Set<string>()
 const visibilityGate = new CollectibleVisibilityGate()
 
@@ -89,12 +110,16 @@ function readMagnifierRequest(
     host.getAttribute("data-options")?.trim() ?? "",
   )
   const parsed = parseCollectibleOptions(authored)
-  const errors = [...parsed.errors]
-  if (parsed.values.length > 0) {
-    errors.push(`Unbekannte Lupenoption: ${parsed.values.join("; ")}`)
+  const exploration = parseExplorationOptions(parsed.values)
+  const concealment = extractConcealmentOptions(exploration.values)
+  const errors = [...parsed.errors, ...concealment.errors]
+  if (concealment.values.length > 0) {
+    errors.push(`Unbekannte Lupenoption: ${concealment.values.join("; ")}`)
   }
   return {
+    concealment: concealment.mode,
     errors,
+    layers: exploration.layers,
     sourceSection: sectionFromLootId(magnifierId),
     valid: errors.length === 0,
     visibility: parsed.rule,
@@ -120,6 +145,65 @@ function rewardBadge(): HTMLSpanElement {
   return reward
 }
 
+function magnifierButtonFromEvent(
+  event: MouseEvent,
+): HTMLButtonElement | null {
+  for (const candidate of event.composedPath()) {
+    if (
+      candidate instanceof HTMLButtonElement &&
+      candidate.hasAttribute("data-loot-magnifier-button")
+    ) {
+      return candidate
+    }
+  }
+  return event.target instanceof Element
+    ? event.target.closest<HTMLButtonElement>(
+        "[data-loot-magnifier-button]",
+      )
+    : null
+}
+
+function handleMagnifierPickupClick(event: MouseEvent): void {
+  const button = magnifierButtonFromEvent(event)
+  const magnifierId = button?.dataset.lootMagnifierButton
+  if (
+    !button ||
+    !magnifierId ||
+    !controller ||
+    collectingIds.has(magnifierId) ||
+    !eligibleMagnifierIds.has(magnifierId)
+  ) {
+    return
+  }
+  collectingIds.add(magnifierId)
+  if (!controller.collect()) {
+    collectingIds.delete(magnifierId)
+    syncAllMagnifiers()
+    return
+  }
+
+  const keyboardActivated = event.detail === 0
+  button.disabled = true
+  button.classList.add("loot-magnifier-pickup--collected")
+  button.setAttribute("aria-label", "Lupe gefunden")
+  renderMagnifierTool()
+  announceResource("Lupe gefunden. Du kannst sie jetzt in der Leiste aktivieren.")
+  syncAllMagnifiers()
+
+  window.setTimeout(() => {
+    collectingIds.delete(magnifierId)
+    button.remove()
+    syncAllMagnifiers()
+    if (keyboardActivated) focusMagnifierTool()
+  }, COLLECT_DURATION)
+}
+
+function bindMagnifierButton(button: HTMLButtonElement): void {
+  if (boundMagnifierButtons.has(button)) return
+  boundMagnifierButtons.add(button)
+  button.addEventListener("click", handleMagnifierPickupClick)
+}
+
 function createMagnifierButton(magnifierId: string): HTMLButtonElement {
   const button = document.createElement("button")
   button.type = "button"
@@ -127,37 +211,7 @@ function createMagnifierButton(magnifierId: string): HTMLButtonElement {
   button.dataset.lootMagnifierButton = magnifierId
   button.setAttribute("aria-label", "Lupe einsammeln")
   button.append(createMagnifierGraphic(), rewardBadge())
-
-  button.addEventListener("click", (event) => {
-    if (
-      !controller ||
-      collectingIds.has(magnifierId) ||
-      !eligibleMagnifierIds.has(magnifierId)
-    ) {
-      return
-    }
-    collectingIds.add(magnifierId)
-    if (!controller.collect()) {
-      collectingIds.delete(magnifierId)
-      syncAllMagnifiers()
-      return
-    }
-
-    const keyboardActivated = event.detail === 0
-    button.disabled = true
-    button.classList.add("loot-magnifier-pickup--collected")
-    button.setAttribute("aria-label", "Lupe gefunden")
-    renderMagnifierTool()
-    announceResource("Lupe gefunden. Du kannst sie jetzt in der Leiste aktivieren.")
-    syncAllMagnifiers()
-
-    window.setTimeout(() => {
-      collectingIds.delete(magnifierId)
-      button.remove()
-      syncAllMagnifiers()
-      if (keyboardActivated) focusMagnifierTool()
-    }, COLLECT_DURATION)
-  })
+  bindMagnifierButton(button)
   return button
 }
 
@@ -167,6 +221,7 @@ function syncMagnifier(host: HTMLElement): void {
   if (controller.collected() && !collectingIds.has(magnifierId)) {
     eligibleMagnifierIds.delete(magnifierId)
     visibilityGate.forget(`magnifier:${magnifierId}`)
+    clearHostRevealLayers(host)
     if (host.childElementCount > 0) host.replaceChildren()
     return
   }
@@ -175,7 +230,13 @@ function syncMagnifier(host: HTMLElement): void {
   if (!request.valid) {
     eligibleMagnifierIds.delete(magnifierId)
     warnInvalidSpecification(magnifierId, request.errors)
+    clearHostRevealLayers(host)
     if (host.childElementCount > 0) host.replaceChildren()
+    return
+  }
+  if (hostIsRevealBlocked(host, false)) {
+    eligibleMagnifierIds.delete(magnifierId)
+    host.hidden = true
     return
   }
 
@@ -187,16 +248,23 @@ function syncMagnifier(host: HTMLElement): void {
   )
   if (!visible) {
     eligibleMagnifierIds.delete(magnifierId)
+    clearHostRevealLayers(host)
     if (host.childElementCount > 0) host.replaceChildren()
     return
   }
-  eligibleMagnifierIds.add(magnifierId)
+  host.hidden = false
 
+  const contentHost = setHostRevealLayers(host, magnifierId, request.layers)
   const existing = [
-    ...host.querySelectorAll<HTMLButtonElement>("[data-loot-magnifier-button]"),
+    ...contentHost.querySelectorAll<HTMLButtonElement>("[data-loot-magnifier-button]"),
   ].find((candidate) => candidate.dataset.lootMagnifierButton === magnifierId)
-  if (existing) return
-  host.replaceChildren(createMagnifierButton(magnifierId))
+  if (!existing) {
+    setHostConcealment(contentHost, null)
+    contentHost.replaceChildren(createMagnifierButton(magnifierId))
+  } else bindMagnifierButton(existing)
+  setHostConcealment(contentHost, request.concealment)
+  if (!hostIsRevealBlocked(host)) eligibleMagnifierIds.add(magnifierId)
+  else eligibleMagnifierIds.delete(magnifierId)
 }
 
 function syncAllMagnifiers(): void {
@@ -226,11 +294,34 @@ function setSecretRevealed(
   target.inert = !revealed
 }
 
+function concealedTargetIsRendered(
+  target: HTMLElement,
+  content: HTMLElement,
+): boolean {
+  if (!target.isConnected || content.getClientRects().length === 0) return false
+  const rect = content.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) return false
+
+  let ancestor = target.parentElement
+  while (ancestor) {
+    if (
+      ancestor.hidden ||
+      ancestor.inert ||
+      ancestor.getAttribute("aria-hidden") === "true"
+    ) {
+      return false
+    }
+    ancestor = ancestor.parentElement
+  }
+  return true
+}
+
 function updateSecretTarget(
   target: HTMLElement,
   position: PointerPosition | null,
 ): void {
-  if (!prepareConcealedHost(target)) return
+  const mode = prepareConcealedHost(target)
+  if (!mode) return
   const content = concealedContentOf(target)
   if (!content) return
   const targetRect = target.getBoundingClientRect()
@@ -258,10 +349,17 @@ function updateSecretTarget(
     "--loot-magnifier-y",
     `${position.y - contentRect.top}px`,
   )
-  setSecretRevealed(
-    target,
-    magnifierIntersectsRect(position.x, position.y, contentRect),
+  const wasRevealed = target.classList.contains(
+    "loot-magnifier-secret--under-lens",
   )
+  const revealed =
+    concealedTargetIsRendered(target, content) &&
+    magnifierIntersectsRect(position.x, position.y, contentRect)
+  setSecretRevealed(target, revealed)
+  if (!revealed || wasRevealed) return
+
+  const concealmentId = concealmentIdOf(target)
+  if (concealmentId) controller?.find(concealmentId, mode)
 }
 
 function updateSecretTargets(position: PointerPosition | null): void {
@@ -275,6 +373,15 @@ function syncMagnifierRuntime(): void {
   updateSecretTargets(pointing ? lastPointer : null)
 }
 
+function scheduleMagnifierRuntimeSync(): void {
+  if (revealSyncQueued) return
+  revealSyncQueued = true
+  queueMicrotask(() => {
+    revealSyncQueued = false
+    syncMagnifierRuntime()
+  })
+}
+
 function paintPointer(): void {
   pointerFrame = null
   if (!pendingPointer || !magnifierActive) return
@@ -285,7 +392,7 @@ function paintPointer(): void {
   lens.style.left = `${lastPointer.x}px`
   lens.style.top = `${lastPointer.y}px`
   lens.hidden = false
-  document.documentElement.classList.add("loot-magnifier-pointing")
+  document.body.classList.add("loot-magnifier-pointing")
   updateSecretTargets(lastPointer)
 }
 
@@ -301,7 +408,7 @@ function stopPointing(): void {
   if (pointerFrame !== null) window.cancelAnimationFrame(pointerFrame)
   pointerFrame = null
   ensureLens().hidden = true
-  document.documentElement.classList.remove("loot-magnifier-pointing")
+  document.body.classList.remove("loot-magnifier-pointing")
   updateSecretTargets(null)
 }
 
@@ -311,7 +418,7 @@ function focusMagnifierTool(): void {
 
 function applyMagnifierActive(active: boolean, announce = true): void {
   magnifierActive = Boolean(active && controller?.collected())
-  document.documentElement.classList.toggle(
+  document.body.classList.toggle(
     "loot-magnifier-active",
     magnifierActive,
   )
@@ -469,6 +576,14 @@ export function installMagnifier(nextController: MagnifierController): void {
   if (!slideActivityInstalled) {
     slideActivityInstalled = true
     observeLiaSlideActivity(syncMagnifierRuntime)
+  }
+  if (!revealListenerInstalled) {
+    revealListenerInstalled = true
+    document.addEventListener(REVEAL_CHANGED_EVENT, scheduleMagnifierRuntimeSync)
+  }
+  if (!pickupListenerInstalled) {
+    pickupListenerInstalled = true
+    document.addEventListener("click", handleMagnifierPickupClick, true)
   }
   if (!customElements.get(HIDDEN_TAG)) {
     customElements.define(HIDDEN_TAG, LootHiddenElement)

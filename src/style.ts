@@ -429,7 +429,7 @@ html.loot-secret-slide-discovery-failed
   box-sizing: border-box;
 }
 
-html.loot-magnifier-active body {
+body.loot-magnifier-active {
   cursor: crosshair;
 }
 
@@ -460,9 +460,9 @@ lia-loot-hidden:not([data-loot-concealment-ready="true"]) {
   pointer-events: none;
 }
 
-html.loot-magnifier-active.loot-magnifier-pointing
+body.loot-magnifier-active.loot-magnifier-pointing
   .loot-magnifier-secret--under-lens
-  .loot-magnifier-secret__content {
+  > .loot-magnifier-secret__content {
   opacity: 1;
   -webkit-clip-path: circle(
     var(--loot-magnifier-radius) at var(--loot-magnifier-x)
@@ -942,6 +942,287 @@ lia-loot-magnifier:empty {
   animation: loot-magnifier-reward 600ms steps(5, end) forwards;
 }
 
+lia-loot-tool {
+  min-width: 4.5rem;
+  min-height: 4.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+}
+
+lia-loot-tool:empty,
+lia-loot-tool[hidden],
+lia-loot-reveal[hidden],
+lia-loot-reveal-end,
+a[href^="#lia-loot-reveal-end-"],
+lia-loot-if-start,
+a[href="#lia-loot-if-end"],
+.loot-reveal-layer__cover[hidden],
+.loot-reveal-layer__content[hidden],
+[data-loot-reveal-payload][hidden],
+[data-loot-reveal-range-blocked],
+[data-loot-if-range-blocked] {
+  display: none !important;
+}
+
+lia-loot-reveal-start {
+  display: block;
+}
+
+.loot-exploration-pickup {
+  position: relative;
+  width: 4.5rem;
+  height: 4.5rem;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0.2rem;
+  display: inline-grid;
+  place-items: center;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  box-sizing: border-box;
+  filter: drop-shadow(4px 4px 0 rgba(8, 15, 28, 0.34));
+  cursor: pointer;
+  image-rendering: pixelated;
+  animation: loot-exploration-idle 2.4s steps(3, end) infinite;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.loot-exploration-pickup:hover:not(:disabled),
+.loot-reveal-cover:hover:not(:disabled) {
+  animation: none;
+  transform: translate(-2px, -2px);
+  filter: drop-shadow(7px 7px 0 rgba(8, 15, 28, 0.38));
+}
+
+.loot-exploration-pickup:active:not(:disabled),
+.loot-reveal-cover:active:not(:disabled) {
+  transform: translate(1px, 1px);
+  filter: drop-shadow(2px 2px 0 rgba(8, 15, 28, 0.34));
+}
+
+.loot-exploration-pickup:focus-visible,
+.loot-reveal-cover:focus-visible,
+.loot-exploration-tool:focus-visible {
+  outline: 3px solid #54d5f5;
+  outline-offset: 2px;
+}
+
+.loot-exploration-pickup__reward {
+  position: absolute;
+  z-index: 1;
+  top: -0.35rem;
+  left: 50%;
+  padding: 3px 5px;
+  opacity: 0;
+  color: #172033;
+  background: #d7f7ff;
+  border: 2px solid #1c6275;
+  box-shadow: 2px 2px 0 #1c6275;
+  font: 900 0.66rem/1 ui-monospace, "Cascadia Mono", monospace;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.loot-exploration-pickup--collected {
+  pointer-events: none;
+  animation: loot-exploration-collect 650ms steps(5, end) forwards;
+}
+
+.loot-exploration-pickup--collected .loot-exploration-pickup__reward {
+  animation: loot-exploration-reward 600ms steps(5, end) forwards;
+}
+
+.loot-exploration-tool {
+  width: 2.3rem;
+  min-width: 2.3rem;
+  height: 2rem;
+  padding: 0.18rem;
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: inherit;
+  background: rgba(0, 0, 0, 0.22);
+  border: 2px solid transparent;
+  border-radius: 0.4rem;
+  box-sizing: border-box;
+  cursor: pointer;
+  image-rendering: pixelated;
+}
+
+.loot-exploration-tool:hover,
+.loot-exploration-tool:focus-visible {
+  background: rgba(84, 213, 245, 0.18);
+  border-color: #54d5f5;
+}
+
+.loot-exploration-tool--active {
+  background: rgba(111, 214, 96, 0.24);
+  border-color: #6fd660;
+  box-shadow: 0 0 0 2px rgba(111, 214, 96, 0.2);
+}
+
+.loot-exploration-pickup > .loot-exploration-graphic,
+.loot-exploration-tool > .loot-exploration-graphic,
+.loot-reveal-cover > .loot-exploration-graphic {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: visible;
+  image-rendering: pixelated;
+}
+
+.loot-exploration-tool > .loot-exploration-graphic {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+lia-loot-reveal {
+  position: relative;
+  min-width: 44px;
+  min-height: 44px;
+  max-width: 100%;
+  display: block;
+}
+
+lia-loot-reveal:not([data-loot-reveal-kind])
+  > [data-loot-reveal-payload] {
+  visibility: hidden;
+}
+
+.loot-reveal-layer {
+  position: relative;
+  width: 100%;
+  min-width: 44px;
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+}
+
+.loot-reveal-layer__cover,
+.loot-reveal-layer__content {
+  grid-area: 1 / 1;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.loot-reveal-layer__cover {
+  width: 4.5rem;
+  height: 4.5rem;
+  max-width: 100%;
+  display: grid;
+  place-items: center;
+}
+
+.loot-reveal-layer__content {
+  width: 100%;
+  display: grid;
+  place-items: center;
+}
+
+.loot-reveal-layer__final-content:not(.loot-magnifier-secret) {
+  display: contents;
+}
+
+lia-loot-reveal > [data-loot-reveal-payload] {
+  width: 100%;
+  min-width: 0;
+}
+
+.loot-reveal-cover {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0.1rem;
+  display: inline-grid;
+  place-items: center;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  box-sizing: border-box;
+  filter: drop-shadow(4px 4px 0 rgba(8, 15, 28, 0.34));
+  cursor: pointer;
+  image-rendering: pixelated;
+  animation: loot-exploration-idle 2.4s steps(3, end) infinite;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (any-hover: hover) and (any-pointer: fine) {
+  html[data-loot-active-tool="shovel"] {
+    --loot-action-tool-cursor: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2232%22 height=%2232%22 viewBox=%220 0 64 64%22 shape-rendering=%22crispEdges%22%3E%3Cpath fill=%22%23172033%22 d=%22M38 2h12v4h4v12h-4v4h-4v8h-4v8h-4v8h10v4h4v8H22v-8h4v-4h4v-8h4v-8h4v-8h-4v-4h-4V6h4V2h4Z%22/%3E%3Cpath fill=%22%23d58a2a%22 d=%22M38 6h8v4h4v4h-4v4h-8v-4h-4v-4h4V6Z%22/%3E%3Cpath fill=%22%238c5520%22 d=%22M38 18h8v8h-4v8h-4v8h-8v-4h4v-8h4V18Z%22/%3E%3Cpath fill=%22%23aeb9c8%22 d=%22M30 42h12v4h6v8H26v-8h4v-4Z%22/%3E%3Cpath fill=%22%23e6edf5%22 d=%22M34 46h8v4H30v-2h4v-2Z%22/%3E%3C/svg%3E") 18 29, crosshair;
+  }
+
+  html[data-loot-active-tool="watering-can"] {
+    --loot-action-tool-cursor: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2232%22 height=%2232%22 viewBox=%220 0 64 64%22 shape-rendering=%22crispEdges%22%3E%3Cpath fill=%22%23172033%22 d=%22M22 12h24v4h6v4h4v8h-4v4h-8v-4h4v-8h-6v-4H26v8h20v4h4v24h-4v4H14v-4h-4V32H4v-4h16v-4h2V12Zm-8 20v16h28V28H22v4h-8Z%22/%3E%3Cpath fill=%22%234aa9c7%22 d=%22M14 32h28v16H14V32ZM4 32h10v8H8v-4H4v-4Zm0-8h10v4H4v-4Z%22/%3E%3Cpath fill=%22%23a9efff%22 d=%22M18 34h12v4H18v-4Z%22/%3E%3Cpath fill=%22%2326758f%22 d=%22M26 16h16v4h6v8h-4v-4h-4v-4H26v-4Z%22/%3E%3Cpath fill=%22%2367d7f5%22 d=%22M2 18h4v4H2v-4Zm6-4h4v4H8v-4Zm6 4h4v4h-4v-4Z%22/%3E%3C/svg%3E") 3 10, crosshair;
+  }
+
+  html[data-loot-active-tool] body,
+  html[data-loot-active-tool] .loot-reveal-cover {
+    cursor: var(--loot-action-tool-cursor);
+  }
+}
+
+.loot-key-tray > .loot-key-placement .loot-reveal-layer,
+.loot-chest-tray > .loot-chest-placement .loot-reveal-layer,
+.loot-key-tray > .loot-key-placement .loot-reveal-layer__cover,
+.loot-chest-tray > .loot-chest-placement .loot-reveal-layer__cover {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.loot-key-tray > .loot-key-placement .loot-key-pickup,
+.loot-chest-tray > .loot-chest-placement .loot-treasure-chest {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.loot-reveal-layer--digging > .loot-reveal-layer__cover {
+  animation: loot-soil-dig 520ms steps(5, end) forwards;
+}
+
+.loot-reveal-layer--watering > .loot-reveal-layer__cover {
+  animation: loot-plant-water 520ms steps(4, end);
+}
+
+.loot-reveal-layer--opening > .loot-reveal-layer__cover {
+  animation: loot-bloom-open 520ms steps(5, end) forwards;
+}
+
+.loot-exploration-shadow { fill: rgba(8, 15, 28, 0.3); }
+.loot-exploration-outline { fill: #172033; }
+.loot-shovel-handle { fill: #d58a2a; }
+.loot-shovel-shaft { fill: #8c5520; }
+.loot-shovel-metal { fill: #aeb9c8; }
+.loot-shovel-light { fill: #e6edf5; }
+.loot-watering-can-body { fill: #4aa9c7; }
+.loot-watering-can-light { fill: #a9efff; }
+.loot-watering-can-handle { fill: #26758f; }
+.loot-watering-can-spout { fill: #4aa9c7; }
+.loot-watering-can-water { fill: #67d7f5; }
+.loot-soil-dark { fill: #69421f; }
+.loot-soil-main { fill: #9b6129; }
+.loot-soil-light { fill: #d28a3b; }
+.loot-soil-stone { fill: #728095; }
+.loot-plant-stem { fill: #328a42; }
+.loot-plant-leaf { fill: #55bd58; }
+.loot-plant-pot-dark { fill: #8e452c; }
+.loot-plant-pot { fill: #d36c3d; }
+.loot-plant-pot-light { fill: #f29a5d; }
+.loot-flower-petal { fill: #f06ca8; }
+.loot-flower-center { fill: #f7c948; }
+
 lia-loot-key {
   min-width: 4.5rem;
   min-height: 3.5rem;
@@ -997,7 +1278,7 @@ lia-loot-key.loot-key-host--surface-source {
   opacity: 1;
 }
 
-.loot-key-graphic {
+.loot-key-pickup > .loot-key-graphic {
   width: 100%;
   height: 100%;
   overflow: visible;
@@ -1701,6 +1982,42 @@ lia-loot-chest.loot-treasure-host--portal-source {
   100% { opacity: 0; transform: translate(-50%, -30px); }
 }
 
+@keyframes loot-exploration-idle {
+  0%, 42%, 100% { transform: translateY(0) rotate(0); }
+  48%, 92% { transform: translateY(-2px) rotate(-2deg); }
+}
+
+@keyframes loot-exploration-collect {
+  0%, 45% { opacity: 1; transform: scale(1) rotate(0); }
+  68% { opacity: 1; transform: scale(1.14) rotate(-8deg); }
+  100% { opacity: 0; transform: scale(0.42) rotate(14deg); }
+}
+
+@keyframes loot-exploration-reward {
+  0% { opacity: 0; transform: translate(-50%, 0); }
+  20%, 65% { opacity: 1; transform: translate(-50%, -14px); }
+  100% { opacity: 0; transform: translate(-50%, -30px); }
+}
+
+@keyframes loot-soil-dig {
+  0% { opacity: 1; transform: translate(0, 0) scale(1); }
+  35% { opacity: 1; transform: translate(-4px, 2px) scale(0.94); }
+  70% { opacity: 0.65; transform: translate(5px, 7px) scale(0.72); }
+  100% { opacity: 0; transform: translate(10px, 14px) scale(0.35); }
+}
+
+@keyframes loot-plant-water {
+  0%, 100% { transform: translateY(0) scale(1); }
+  40% { transform: translateY(3px) scale(0.92, 1.08); }
+  70% { transform: translateY(-4px) scale(1.08, 0.94); }
+}
+
+@keyframes loot-bloom-open {
+  0% { opacity: 1; transform: scale(1) rotate(0); }
+  55% { opacity: 1; transform: scale(1.14) rotate(4deg); }
+  100% { opacity: 0; transform: scale(0.45) rotate(-8deg); }
+}
+
 @keyframes loot-magic-dust {
   0%, 100% { opacity: 0.1; transform: translate(0, 0); }
   35% { opacity: 0.18; transform: translate(1px, -1px); }
@@ -1784,6 +2101,12 @@ lia-loot-chest.loot-treasure-host--portal-source {
   .loot-key-pickup--collected { opacity: 0; }
   .loot-magnifier-pickup { animation: none; }
   .loot-magnifier-pickup--collected { opacity: 0; }
+  .loot-exploration-pickup,
+  .loot-reveal-cover { animation: none; }
+  .loot-exploration-pickup--collected,
+  .loot-reveal-layer--digging > .loot-reveal-layer__cover,
+  .loot-reveal-layer--opening > .loot-reveal-layer__cover { opacity: 0; }
+  .loot-reveal-layer--watering > .loot-reveal-layer__cover { animation: none; }
   .loot-slide-portal { animation: none; }
   .loot-slide-portal__spark { animation: none; }
   .loot-magnifier-secret--dust::after { animation: none; }

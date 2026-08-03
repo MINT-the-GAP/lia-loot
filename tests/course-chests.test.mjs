@@ -3,18 +3,69 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import {
+  discoverCourseAchievementCatalog,
   discoverCourseLockDeclarations,
   discoverCourseResourceDeclaration,
   discoverCourseSecretSlideDeclarations,
   discoverCourseVersion,
   parseCourseAchievementsDeclaration,
+  parseCourseAchievementCatalog,
   parseCourseChestCatalogDeclarations,
   parseCourseChestDeclarations,
+  parseCourseKeyDeclarations,
   parseCourseLockCatalogDeclarations,
   parseCourseLockDeclarations,
   parseCourseResourceDeclaration,
   parseCourseSecretSlideDeclarations,
 } from "../src/course-chests.ts"
+
+test("hält Surface-Funde in geschlossenen Reveal-Containern zurück", () => {
+  const markdown = `
+# Fundkette
+@Schatztruhe(menu)
+@Erdhaufen(unsichtbar)
+@Schluessel(blau; translator)
+@Pflanze(zauberstaub)
+@Diamanttruhe(info)
+@Schloss(mode, gruen)
+@EndePflanze
+@EndeErdhaufen
+@Energiekiste(toc)
+`
+
+  assert.deepEqual(
+    parseCourseChestDeclarations(markdown).map(({ reward }) => reward),
+    ["gold", "diamonds", "energy"],
+    "der vollständige Katalog behält Funde hinter Gates",
+  )
+  assert.deepEqual(
+    parseCourseChestDeclarations(markdown, false).map(({ reward }) => reward),
+    ["gold", "energy"],
+    "aktive Source-Portale enthalten nur bereits freigelegte Funde",
+  )
+  assert.equal(parseCourseKeyDeclarations(markdown).length, 1)
+  assert.equal(parseCourseKeyDeclarations(markdown, false).length, 0)
+  assert.equal(parseCourseLockDeclarations(markdown).length, 1)
+  assert.equal(parseCourseLockDeclarations(markdown, false).length, 0)
+})
+
+test("schließt Reveal-Container nur in korrekter LIFO-Reihenfolge", () => {
+  const markdown = `
+@Erdhaufen
+@Pflanze
+@EndeErdhaufen
+@Schatztruhe(menu)
+@EndePflanze
+@Schatztruhe(info)
+@EndeErdhaufen
+@Schatztruhe(toc)
+`
+
+  assert.deepEqual(
+    parseCourseChestDeclarations(markdown, false).map(({ placement }) => placement),
+    ["toc"],
+  )
+})
 
 test("katalogisiert interne Live-Demos ohne sie als Source-Aufrufe zu aktivieren", () => {
   const markdown = [
@@ -59,6 +110,120 @@ test("katalogisiert interne Live-Demos ohne sie als Source-Aufrufe zu aktivieren
       { placement: "annotation; anker", reward: "energy" },
     ],
   )
+})
+
+test("haelt gueltige lootif-Ranges aktiv zurueck und vollstaendig im Katalog", () => {
+  const markdown = `
+# Bedingungen
+@lootif(Gold >= 2; spawn)
+@Schatztruhe(menu)
+@Schluessel(blau; translator)
+@Schloss(info, gruen)
+@lootif(Lupe gefunden; spawn)
+@Diamanttruhe
+@LootTruhe_(@uid,annotation; anker,energy)
+@LootSchloss_(@uid,annotationsbar,orange)
+@EndeLootif
+@Endelootif
+@lootif(Energie > 0; spawn)
+@Energiekiste
+@endlootif
+@lootif(Geheimfolie besucht; spawn)
+@Schatztruhe(toc)
+@EndLootIf
+`
+
+  assert.deepEqual(
+    parseCourseChestDeclarations(markdown).map(({ reward }) => reward),
+    ["gold", "diamonds", "energy", "gold"],
+  )
+  assert.deepEqual(parseCourseChestDeclarations(markdown, false), [])
+  assert.deepEqual(
+    parseCourseChestCatalogDeclarations(markdown).map(({ reward }) => reward),
+    ["gold", "diamonds", "energy", "gold", "energy"],
+  )
+  assert.equal(parseCourseKeyDeclarations(markdown).length, 1)
+  assert.equal(parseCourseKeyDeclarations(markdown, false).length, 0)
+  assert.equal(parseCourseLockDeclarations(markdown).length, 1)
+  assert.equal(parseCourseLockDeclarations(markdown, false).length, 0)
+  assert.equal(parseCourseLockCatalogDeclarations(markdown).length, 2)
+})
+
+test("verwirft ungueltige und unbalancierte lootif-Ranges fail-closed", () => {
+  const markdown = `
+# Fehlerhafte Bereiche
+@lootif(Unbekannter Trigger; spawn)
+@Schatztruhe(menu)
+@Endelootif
+@lootif(Gold >= 1; verschwinde)
+@Diamanttruhe
+@Endelootif
+@lootif(Gold >= 1; spawn; extra)
+@Energiekiste
+@Endelootif
+@lootif(Gold >= 1; spawn)
+@lootif(Unbekannt; spawn)
+@Schatztruhe(info)
+@Endelootif
+@Endelootif
+@lootif(Gold >= 1; spawn
+@Schatztruhe(classroom)
+
+# Naechste Folie
+@Endelootif
+@Energiekiste(toc)
+@lootif(Gold >= 1; spawn)
+@Schatztruhe(mode)
+`
+
+  assert.deepEqual(
+    parseCourseChestDeclarations(markdown).map(({ placement, reward }) => ({
+      placement,
+      reward,
+    })),
+    [{ placement: "toc", reward: "energy" }],
+  )
+  assert.deepEqual(
+    parseCourseChestCatalogDeclarations(markdown).map(
+      ({ placement, reward }) => ({ placement, reward }),
+    ),
+    [{ placement: "toc", reward: "energy" }],
+  )
+  assert.deepEqual(
+    parseCourseChestDeclarations(markdown, false).map(({ placement }) => placement),
+    ["toc"],
+  )
+})
+
+test("aktiviert kursweite Source-Makros nicht aus lootif-Ranges", () => {
+  const gatedOnly = `
+# Bedingt
+@lootif(Gold >= 1; spawn)
+@Ressourcen(99, 99, 99)
+@Geheimfolie
+@achievements
+@Endelootif
+`
+  assert.equal(parseCourseResourceDeclaration(gatedOnly), null)
+  assert.deepEqual(parseCourseSecretSlideDeclarations(gatedOnly), [])
+  assert.equal(parseCourseAchievementsDeclaration(gatedOnly), false)
+
+  const withActiveFallbacks = `${gatedOnly}
+# Aktiv
+@Ressourcen(4, 2, 1)
+@Geheimfolie
+@achievements
+`
+  assert.deepEqual(parseCourseResourceDeclaration(withActiveFallbacks), {
+    gold: 4,
+    diamonds: 2,
+    energy: 1,
+    section: 1,
+  })
+  assert.deepEqual(parseCourseSecretSlideDeclarations(withActiveFallbacks), [
+    { section: 1 },
+  ])
+  assert.equal(parseCourseAchievementsDeclaration(withActiveFallbacks), true)
 })
 
 test("findet Portal- und Inline-Kistentypen im Kursquelltext", () => {
@@ -422,6 +587,124 @@ Text @Geheimfolie
   assert.deepEqual(declarations, [{ section: 0 }])
 })
 
+test("katalogisiert alle verdeckten Itemfamilien und multipliziert Portaltruhen", () => {
+  const markdown = [
+    "# Fundkette",
+    "@Unsichtbar(A) und @Zauberstaub(B (C))",
+    "@Schatztruhe(menu; toc; menu; unsichtbar; erde-zauberstaub; pflanze)",
+    "@Schluessel(blau; translator; zauberstaub; erde-unsichtbar)",
+    "@Lupe(unsichtbar; pflanze-zauberstaub)",
+    "@Schaufel(erde; zauberstaub)",
+    "@Giesskanne(pflanze-unsichtbar)",
+    "@Erdhaufen(unsichtbar)",
+    "@Blume(zauberstaub)",
+    "@Diamanttruhe(unsichtbar)",
+    "@EndeBlume",
+    "@EndeErdhaufen",
+  ].join("\n")
+
+  assert.deepEqual(parseCourseAchievementCatalog(markdown), {
+    dust: 7,
+    plant: 5,
+    soil: 5,
+    solid: 8,
+  })
+})
+
+test("ignoriert Beispiele, ungültige Items und nicht korrekt gepaarte Ranges", () => {
+  const tick = String.fromCharCode(96)
+  const slash = String.fromCharCode(92)
+  const markdown = [
+    "<!--",
+    "@Unsichtbar(Kommentar)",
+    "@Schaufel(erde-unsichtbar)",
+    "-->",
+    "~~~markdown",
+    "@Zauberstaub(Fence)",
+    "@Pflanze(unsichtbar)",
+    "@EndePflanze",
+    "~~~",
+    "Text mit " + tick + "@Unsichtbar(Inline-Code)" + tick + ".",
+    "<script>",
+    "@Zauberstaub(Script)",
+    "</script>",
+    "<template>@Unsichtbar(Template)</template>",
+    "@@Unsichtbar(Ausgeschaltet)",
+    slash + "@Zauberstaub(Escaped)",
+    "@Unsichtbar(",
+    "@Schatztruhe(menu; unbekannt; unsichtbar)",
+    "@Schatztruhe(0; unsichtbar)",
+    "@Schluessel(blau; rot; unsichtbar)",
+    "@Lupe(unsichtbar; unbekannt)",
+    "@Giesskanne(unsichtbar; zauberstaub)",
+    "@Erdhaufen(unbekannt; unsichtbar)",
+    "@Zauberstaub(Inhalt einer ungültigen Range)",
+    "@EndeErdhaufen",
+    "@Schaufel(erde-unsichtbar; theme=rot)",
+    "@Zauberstaub(Echter Fund)",
+    "@Erdhaufen(unsichtbar)",
+    "@Pflanze(zauberstaub)",
+    "@EndeErdhaufen",
+    "@EndePflanze",
+  ].join("\n")
+
+  assert.deepEqual(parseCourseAchievementCatalog(markdown), {
+    dust: 1,
+    plant: 0,
+    soil: 1,
+    solid: 1,
+  })
+})
+
+test("katalogisiert interne Live-Makros ohne Definitionen mitzuzählen", () => {
+  const markdown = [
+    "<!--",
+    "@LootLupe_(@uid,unsichtbar)",
+    "@LootRevealStart_(@uid,erde,zauberstaub)",
+    "@LootRevealEnd_(erde)",
+    "-->",
+    "@LootTruhe_(@uid,menu; toc; erde-unsichtbar; zauberstaub,gold)",
+    "@LootSchluessel_(@uid,blau; pflanze-zauberstaub)",
+    "@LootLupe_(@uid,unsichtbar)",
+    "@LootWerkzeug_(@uid,shovel,erde; zauberstaub)",
+    "@LootRevealStart_(@uid,pflanze,unsichtbar)",
+    "@LootVersteckt_(@uid,dust,Text)",
+    "@LootRevealEnd_(pflanze)",
+  ].join("\n")
+
+  assert.deepEqual(parseCourseAchievementCatalog(markdown), {
+    dust: 5,
+    plant: 2,
+    soil: 3,
+    solid: 4,
+  })
+})
+
+test("zaehlt Achievement-Objekte nur in gueltig balancierten lootif-Ranges", () => {
+  const markdown = `
+@lootif(Gold >= 1; spawn)
+@Unsichtbar(Gueltiger Fund)
+@Erdhaufen(zauberstaub)
+@EndeErdhaufen
+@Endelootif
+@lootif(Unbekannt; spawn)
+@Zauberstaub(Ungueltiger Fund)
+@Endelootif
+@lootif(Lupe gefunden; spawn)
+@Pflanze(unsichtbar)
+
+# Ausserhalb
+@Schaufel(erde-unsichtbar)
+`
+
+  assert.deepEqual(parseCourseAchievementCatalog(markdown), {
+    dust: 1,
+    plant: 0,
+    soil: 2,
+    solid: 2,
+  })
+})
+
 test("erkennt das korrekt geschriebene Achievement-Makro und seine Aliasse", () => {
   assert.equal(parseCourseAchievementsDeclaration("@achievements"), true)
   assert.equal(parseCourseAchievementsDeclaration("@Achievements"), true)
@@ -448,7 +731,7 @@ test("enthält das geheime Labor als echte Live-Demo außerhalb des Codeblocks",
   const laboratoryHeadings = markdown.match(/^## Das geheime Labor\s*$/gmu) ?? []
 
   assert.equal(laboratoryHeadings.length, 2)
-  assert.deepEqual(declarations, [{ section: 11 }])
+  assert.deepEqual(declarations, [{ section: 12 }])
 })
 
 test("wiederholt die frühe Quelltextladung nach einem vorübergehenden Fehler", async () => {
@@ -465,7 +748,7 @@ test("wiederholt die frühe Quelltextladung nach einem vorübergehenden Fehler",
       return {
         ok: true,
         text: async () =>
-          "<!--\nversion: 3.2.1\n-->\n# Kurs\n@Ressourcen(7, 2, 0)\n@Schloss(info, gruen)\n@Geheimfolie\n",
+          "<!--\nversion: 3.2.1\n-->\n# Kurs\n@Ressourcen(7, 2, 0)\n@Schloss(info, gruen)\n@Geheimfolie\n@Erdhaufen(zauberstaub)\n@Zauberstaub(Inhalt)\n@EndeErdhaufen\n",
       }
     },
     setTimeout: (callback) => globalThis.setTimeout(callback, 0),
@@ -473,13 +756,20 @@ test("wiederholt die frühe Quelltextladung nach einem vorübergehenden Fehler",
   }
 
   try {
-    const [declarations, resources, secretSlides, version] = await Promise.all([
+    const [catalog, declarations, resources, secretSlides, version] = await Promise.all([
+      discoverCourseAchievementCatalog(),
       discoverCourseLockDeclarations(),
       discoverCourseResourceDeclaration(),
       discoverCourseSecretSlideDeclarations(),
       discoverCourseVersion(),
     ])
     assert.equal(fetchAttempts, 2)
+    assert.deepEqual(catalog, {
+      dust: 2,
+      plant: 0,
+      soil: 1,
+      solid: 0,
+    })
     assert.equal(declarations.length, 1)
     assert.equal(declarations[0].color, "green")
     assert.deepEqual(resources, {

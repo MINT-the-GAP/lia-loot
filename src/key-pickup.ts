@@ -22,6 +22,16 @@ import {
   type ConcealmentMode,
 } from "./concealment.ts"
 import {
+  parseExplorationOptions,
+  type RevealLayerOption,
+} from "./exploration-options.ts"
+import {
+  clearHostRevealLayers,
+  hostIsRevealBlocked,
+  REVEAL_CHANGED_EVENT,
+  setHostRevealLayers,
+} from "./exploration.ts"
+import {
   observeLiaSlideActivity,
   sectionFromLootId,
   sourceSlideIsActive,
@@ -49,6 +59,7 @@ interface KeyRequest {
   concealment: ConcealmentMode | null
   errors: string[]
   inline: boolean
+  layers: RevealLayerOption[]
   placement: SurfaceTarget | null
   requestedColor: string | null
   sourceHost: HTMLElement
@@ -60,6 +71,7 @@ interface KeyRequest {
 interface SurfaceKeyRequest {
   baseId: string
   concealment: ConcealmentMode | null
+  layers: RevealLayerOption[]
   placement: SurfaceTarget
   requestedColor: string | null
   sourceHost?: HTMLElement
@@ -71,6 +83,7 @@ export interface ParsedKeyPickupOptions {
   concealment: ConcealmentMode | null
   errors: string[]
   inline: boolean
+  layers: RevealLayerOption[]
   placement: SurfaceTarget | null
   requestedColor: string | null
   valid: boolean
@@ -81,6 +94,7 @@ let controller: KeyPickupController | null = null
 let runtimeId = 0
 const collectingIds = new Set<string>()
 const eligibleKeyIds = new Set<string>()
+const boundKeyButtons = new WeakSet<HTMLButtonElement>()
 const warnedInvalidSpecs = new Set<string>()
 const visibilityGate = new CollectibleVisibilityGate()
 const surfaceRequests = new Map<string, SurfaceKeyRequest>()
@@ -92,6 +106,8 @@ let sourceDiscovery: "idle" | "pending" | "complete" = "idle"
 let documentObserver: MutationObserver | null = null
 let syncTimer: number | null = null
 let slideActivityInstalled = false
+let revealListenerInstalled = false
+let pickupListenerInstalled = false
 
 function resolveBaseId(host: HTMLElement): string {
   const authoredId = host.getAttribute("data-key-id")?.trim()
@@ -139,37 +155,65 @@ function createKeyButton(
     `${KEY_COLOR_DETAILS[color].pickupLabel} einsammeln`,
   )
   button.append(createKeyGraphic(color), createRewardBadge())
-
-  button.addEventListener("click", (event) => {
-    if (
-      !controller ||
-      collectingIds.has(keyId) ||
-      !eligibleKeyIds.has(keyId)
-    ) {
-      return
-    }
-    collectingIds.add(keyId)
-
-    if (!controller.collect(keyId, color)) {
-      collectingIds.delete(keyId)
-      syncAllKeys()
-      return
-    }
-
-    const keyboardActivated = event.detail === 0
-    button.disabled = true
-    button.classList.add("loot-key-pickup--collected")
-    button.setAttribute("aria-label", KEY_COLOR_DETAILS[color].foundMessage)
-
-    window.setTimeout(() => {
-      collectingIds.delete(keyId)
-      button.remove()
-      syncAllKeys()
-      if (keyboardActivated) controller?.focusInventory()
-    }, COLLECT_DURATION)
-  })
-
+  bindKeyButton(button)
   return button
+}
+
+function keyButtonFromEvent(event: MouseEvent): HTMLButtonElement | null {
+  for (const candidate of event.composedPath()) {
+    if (
+      candidate instanceof HTMLButtonElement &&
+      candidate.hasAttribute("data-loot-key-button")
+    ) {
+      return candidate
+    }
+  }
+  return event.target instanceof Element
+    ? event.target.closest<HTMLButtonElement>("[data-loot-key-button]")
+    : null
+}
+
+function handleKeyButtonClick(event: MouseEvent): void {
+  const button = keyButtonFromEvent(event)
+  const keyId = button?.dataset.lootKeyButton
+  const rawColor = button?.dataset.lootKeyColor
+  if (
+    !button ||
+    !keyId ||
+    !rawColor ||
+    !(rawColor in KEY_COLOR_DETAILS) ||
+    !controller ||
+    collectingIds.has(keyId) ||
+    !eligibleKeyIds.has(keyId)
+  ) {
+    return
+  }
+  const color = rawColor as KeyColor
+  collectingIds.add(keyId)
+
+  if (!controller.collect(keyId, color)) {
+    collectingIds.delete(keyId)
+    syncAllKeys()
+    return
+  }
+
+  const keyboardActivated = event.detail === 0
+  button.disabled = true
+  button.classList.add("loot-key-pickup--collected")
+  button.setAttribute("aria-label", KEY_COLOR_DETAILS[color].foundMessage)
+
+  window.setTimeout(() => {
+    collectingIds.delete(keyId)
+    button.remove()
+    syncAllKeys()
+    if (keyboardActivated) controller?.focusInventory()
+  }, COLLECT_DURATION)
+}
+
+function bindKeyButton(button: HTMLButtonElement): void {
+  if (boundKeyButtons.has(button)) return
+  boundKeyButtons.add(button)
+  button.addEventListener("click", handleKeyButtonClick)
 }
 
 export function parseKeyPickupOptions(
@@ -178,7 +222,8 @@ export function parseKeyPickupOptions(
   const parsed = parseCollectibleOptions(
     rawSpecification.trim() === "@0" ? "" : rawSpecification,
   )
-  const concealment = extractConcealmentOptions(parsed.values)
+  const exploration = parseExplorationOptions(parsed.values)
+  const concealment = extractConcealmentOptions(exploration.values)
   const errors = [...parsed.errors, ...concealment.errors]
   let placement: SurfaceTarget | null = null
   let requestedColor: string | null = null
@@ -210,6 +255,7 @@ export function parseKeyPickupOptions(
     concealment: concealment.mode,
     errors,
     inline: placement === null,
+    layers: exploration.layers,
     placement,
     requestedColor,
     valid: errors.length === 0,
@@ -229,6 +275,7 @@ function readKeyRequest(host: HTMLElement): KeyRequest {
 }
 
 function clearKeyHost(host: HTMLElement): void {
+  clearHostRevealLayers(host)
   setHostConcealment(host, null)
   if (host.childNodes.length > 0) host.replaceChildren()
 }
@@ -249,11 +296,21 @@ function normalizedRequestedColor(requested: string | null): string {
 }
 
 function surfaceRequestSignature(request: SurfaceKeyRequest): string {
+  const layers =
+    request.layers.length === 0
+      ? "none"
+      : request.layers
+          .map(
+            (layer) =>
+              `${layer.kind}-${layer.concealment ?? "visible"}`,
+          )
+          .join(",")
   return [
     normalizedRequestedColor(request.requestedColor),
     request.placement,
     collectibleVisibilitySignature(request.visibility),
     request.concealment ?? "none",
+    layers,
   ].join(":")
 }
 
@@ -306,6 +363,7 @@ function asSurfaceRequest(request: KeyRequest): SurfaceKeyRequest {
   return {
     baseId: request.baseId,
     concealment: request.concealment,
+    layers: [...request.layers],
     placement: request.placement!,
     requestedColor: request.requestedColor,
     sourceHost: request.sourceHost,
@@ -355,6 +413,7 @@ function registerSourceDeclarations(
     const request: SurfaceKeyRequest = {
       baseId: declaration.baseId,
       concealment: parsed.concealment,
+      layers: [...parsed.layers],
       placement: parsed.placement,
       requestedColor: parsed.requestedColor,
       sourceSection: declaration.section,
@@ -397,6 +456,7 @@ function restoreInlineHost(host: HTMLElement): void {
 }
 
 function hideSurfaceSourceHost(host: HTMLElement): void {
+  clearHostRevealLayers(host)
   setHostConcealment(host, null)
   host.classList.add("loot-key-host--surface-source")
   host.setAttribute("aria-hidden", "true")
@@ -524,7 +584,7 @@ function ensureKeyTray(
 function ensureSurfaceKey(
   keyId: string,
   request: SurfaceKeyRequest,
-): void {
+): HTMLElement | null {
   const destination = surfaceTargetElement(request.placement, document)
   const partition = splitSurfaceKeyPlacements(allSurfacePlacements(), keyId)
   let wrapper = partition.primary as HTMLElement | null
@@ -533,7 +593,7 @@ function ensureSurfaceKey(
   )
   if (!destination) {
     removeSurfacePlacement(wrapper)
-    return
+    return null
   }
 
   const mount = surfaceTargetIsGrouped(request.placement)
@@ -548,10 +608,6 @@ function ensureSurfaceKey(
     wrapper.dataset.lootKeyPlacement = keyId
     wrapper.dataset.lootKeyLocation = request.placement
     if (listTarget) wrapper.setAttribute("role", "none")
-    wrapper.append(createKeyButton(keyId, color))
-  } else if (!buttonIn(wrapper, keyId, color)) {
-    setHostConcealment(wrapper, null)
-    wrapper.replaceChildren(createKeyButton(keyId, color))
   }
 
   if (wrapper.parentElement !== mount) {
@@ -559,7 +615,16 @@ function ensureSurfaceKey(
     mount.appendChild(wrapper)
     removeEmptyKeyTray(previousParent)
   }
-  setHostConcealment(wrapper, request.concealment)
+  const contentHost = setHostRevealLayers(wrapper, keyId, request.layers)
+  let button = buttonIn(contentHost, keyId, color)
+  if (!button) {
+    setHostConcealment(contentHost, null)
+    contentHost.replaceChildren(createKeyButton(keyId, color))
+    button = buttonIn(contentHost, keyId, color)
+  }
+  if (button) bindKeyButton(button)
+  setHostConcealment(contentHost, request.concealment)
+  return wrapper
 }
 
 function syncInlineKey(
@@ -589,15 +654,17 @@ function syncInlineKey(
     clearKeyHost(host)
     return
   }
-  eligibleKeyIds.add(keyId)
-
-  if (buttonIn(host, keyId, color)) {
-    setHostConcealment(host, request.concealment)
-    return
+  const contentHost = setHostRevealLayers(host, keyId, request.layers)
+  let button = buttonIn(contentHost, keyId, color)
+  if (!button) {
+    setHostConcealment(contentHost, null)
+    contentHost.replaceChildren(createKeyButton(keyId, color))
+    button = buttonIn(contentHost, keyId, color)
   }
-  setHostConcealment(host, null)
-  host.replaceChildren(createKeyButton(keyId, color))
-  setHostConcealment(host, request.concealment)
+  if (button) bindKeyButton(button)
+  setHostConcealment(contentHost, request.concealment)
+  if (!hostIsRevealBlocked(host)) eligibleKeyIds.add(keyId)
+  else eligibleKeyIds.delete(keyId)
 }
 
 function syncSurfaceKeys(): void {
@@ -627,9 +694,21 @@ function syncSurfaceKeys(): void {
     }
 
     activeIds.add(keyId)
-    if (visible && !collecting) eligibleKeyIds.add(keyId)
-    else eligibleKeyIds.delete(keyId)
-    if (!collecting) ensureSurfaceKey(keyId, request)
+    let wrapper = allSurfacePlacements().find(
+      (placement) => placement.dataset.lootKeyPlacement === keyId,
+    ) ?? null
+    if (!collecting) wrapper = ensureSurfaceKey(keyId, request)
+    if (visible && !collecting && wrapper && !hostIsRevealBlocked(wrapper)) {
+      eligibleKeyIds.add(keyId)
+    } else {
+      eligibleKeyIds.delete(keyId)
+    }
+    wrapper
+      ?.querySelector<HTMLElement>("[data-loot-key-button]")
+      ?.setAttribute(
+        "data-loot-key-eligible",
+        String(eligibleKeyIds.has(keyId)),
+      )
   }
 
   for (const placement of allSurfacePlacements()) {
@@ -654,6 +733,13 @@ function syncAllKeys(): void {
   >()
 
   for (const host of hosts) {
+    if (hostIsRevealBlocked(host, false)) {
+      const baseId = resolveBaseId(host)
+      pendingSurfaceRequests.delete(baseId)
+      surfaceRequests.delete(baseId)
+      matchedSourceHosts.delete(baseId)
+      continue
+    }
     const request = registerHost(host)
     if (!request.valid || !request.inline) continue
     const keyId = inlineKeyId(request.baseId)
@@ -708,13 +794,13 @@ class LootKeyElement extends HTMLElement {
   }
 
   connectedCallback(): void {
-    registerHost(this)
+    if (!hostIsRevealBlocked(this, false)) registerHost(this)
     scheduleSync()
   }
 
   attributeChangedCallback(): void {
     if (!this.isConnected) return
-    registerHost(this)
+    if (!hostIsRevealBlocked(this, false)) registerHost(this)
     scheduleSync()
   }
 }
@@ -725,6 +811,14 @@ export function installKeyPickups(nextController: KeyPickupController): void {
   if (!slideActivityInstalled) {
     slideActivityInstalled = true
     observeLiaSlideActivity(scheduleSync)
+  }
+  if (!revealListenerInstalled) {
+    revealListenerInstalled = true
+    document.addEventListener(REVEAL_CHANGED_EVENT, scheduleSync)
+  }
+  if (!pickupListenerInstalled) {
+    pickupListenerInstalled = true
+    document.addEventListener("click", handleKeyButtonClick, true)
   }
   if (!customElements.get(KEY_TAG)) {
     customElements.define(KEY_TAG, LootKeyElement)

@@ -15,6 +15,16 @@ import {
   type ConcealmentMode,
 } from "./concealment.ts"
 import {
+  parseExplorationOptions,
+  type RevealLayerOption,
+} from "./exploration-options.ts"
+import {
+  clearHostRevealLayers,
+  hostIsRevealBlocked,
+  REVEAL_CHANGED_EVENT,
+  setHostRevealLayers,
+} from "./exploration.ts"
+import {
   observeLiaSlideActivity,
   sectionFromLootId,
   sourceSlideIsActive,
@@ -48,7 +58,8 @@ type ChestLocation = ChestPlacement | "inline"
 
 interface TreasureChestController {
   active(reward: ResourceKind): boolean
-  catalogReady(total: number): void
+  catalogReady(totals: Readonly<Record<ResourceKind, number>>): void
+  classify?(chestId: string, reward: ResourceKind): void
   collected(chestId: string): boolean
   collect(chestId: string, reward: ResourceKind, amount: number): boolean
 }
@@ -59,6 +70,7 @@ interface HostRequest {
   concealment: ConcealmentMode | null
   errors: string[]
   inline: boolean
+  layers: RevealLayerOption[]
   placements: ChestPlacement[]
   reward: ResourceKind
   sourceHost: HTMLElement
@@ -70,6 +82,7 @@ interface HostRequest {
 interface PortalRequest {
   amount: number
   concealment: ConcealmentMode | null
+  layers: RevealLayerOption[]
   placements: Set<ChestPlacement>
   reward: ResourceKind
   sourceHost?: HTMLElement
@@ -102,6 +115,7 @@ let runtimeId = 0
 let sourceDiscovery: "idle" | "pending" | "complete" = "idle"
 let slideActivityInstalled = false
 let viewportListenersInstalled = false
+let revealListenerInstalled = false
 
 function removeEmptyPortalTray(candidate: HTMLElement | null): void {
   if (
@@ -421,6 +435,7 @@ export function parseTreasureChestOptions(rawSpecification: string): {
   concealment: ConcealmentMode | null
   errors: string[]
   inline: boolean
+  layers: RevealLayerOption[]
   placements: ChestPlacement[]
   valid: boolean
   visibility: CollectibleVisibilityRule
@@ -428,23 +443,26 @@ export function parseTreasureChestOptions(rawSpecification: string): {
   const amount = parseChestAmount(rawSpecification)
   const parsed = parseCollectibleOptions(amount.options)
   const concealment = extractConcealmentOptions(parsed.values)
+  const exploration = parseExplorationOptions(concealment.values)
   const errors = [
     ...amount.errors,
     ...parsed.errors,
     ...concealment.errors,
-    ...invalidPlacementErrors(concealment.values),
+    ...invalidPlacementErrors(exploration.values),
   ]
-  const placements = readPlacements(concealment.values)
-  const hasOptions = parsed.hasOptions || concealment.mode !== null
+  const placements = readPlacements(exploration.values)
+  const hasOptions =
+    parsed.hasOptions || concealment.mode !== null || exploration.layers.length > 0
   const inline =
     amount.options.trim() === "" ||
-    (hasOptions && concealment.values.length === 0)
+    (hasOptions && exploration.values.length === 0)
 
   return {
     amount: amount.amount,
     concealment: concealment.mode,
     errors,
     inline,
+    layers: exploration.layers,
     placements,
     valid: errors.length === 0,
     visibility: parsed.rule,
@@ -471,6 +489,24 @@ export function courseChestUnitCount(
   return total
 }
 
+export function courseChestUnitCounts(
+  declarations: readonly CourseChestDeclaration[],
+  templateAvailable: (target: TemplateTarget) => boolean = () => true,
+): Record<ResourceKind, number> {
+  const totals: Record<ResourceKind, number> = {
+    gold: 0,
+    diamonds: 0,
+    energy: 0,
+  }
+  for (const declaration of declarations) {
+    totals[declaration.reward] += courseChestUnitCount(
+      [declaration],
+      templateAvailable,
+    )
+  }
+  return totals
+}
+
 function readHostRequest(host: HTMLElement): HostRequest {
   const baseId = resolveBaseId(host)
   const reward = readReward(host)
@@ -484,6 +520,7 @@ function readHostRequest(host: HTMLElement): HostRequest {
     concealment: parsed.concealment,
     errors: parsed.errors,
     inline: parsed.inline,
+    layers: parsed.layers,
     placements: parsed.placements,
     reward,
     sourceHost: host,
@@ -496,7 +533,9 @@ function readHostRequest(host: HTMLElement): HostRequest {
 function portalSignature(request: PortalRequest): string {
   return `${request.reward}:${request.amount}:${[
     ...request.placements,
-  ].sort().join(";")}:${collectibleVisibilitySignature(request.visibility)}:${request.concealment ?? "none"}`
+  ].sort().join(";")}:${collectibleVisibilitySignature(request.visibility)}:${request.concealment ?? "none"}:${request.layers
+    .map((layer) => `${layer.kind}-${layer.concealment ?? "visible"}`)
+    .join(";")}`
 }
 
 function sourceMatchKey(
@@ -562,12 +601,19 @@ function registerSourceDeclarations(
     const request: PortalRequest = {
       amount: parsed.amount,
       concealment: parsed.concealment,
+      layers: parsed.layers,
       placements,
       reward: declaration.reward,
       sourceSection: declaration.section,
       visibility: parsed.visibility,
     }
     portalRequests.set(declaration.baseId, request)
+    for (const placement of placements) {
+      controller?.classify?.(
+        `${declaration.baseId}:${placement}`,
+        declaration.reward,
+      )
+    }
     sourceRequestIds.add(declaration.baseId)
     const signature = sourceMatchKey(declaration.section, request)
     sourceSignatureCounts.set(
@@ -577,7 +623,7 @@ function registerSourceDeclarations(
   }
 
   sourceDiscovery = "complete"
-  controller?.catalogReady(courseChestUnitCount(catalog))
+  controller?.catalogReady(courseChestUnitCounts(catalog))
   for (const [baseId, request] of pendingPortalRequests) {
     registerDomPortal(baseId, request)
   }
@@ -603,6 +649,7 @@ function registerHost(host: HTMLElement): HostRequest {
     pendingPortalRequests.delete(request.baseId)
     portalRequests.delete(request.baseId)
     matchedSourceHosts.delete(request.baseId)
+    clearHostRevealLayers(host)
     setHostConcealment(host, null)
     host.classList.add("loot-treasure-host--portal-source")
     host.setAttribute("aria-hidden", "true")
@@ -612,11 +659,14 @@ function registerHost(host: HTMLElement): HostRequest {
     portalRequests.delete(request.baseId)
     matchedSourceHosts.delete(request.baseId)
     host.classList.remove("loot-treasure-host--portal-source")
-    if (request.concealment === null) setHostConcealment(host, null)
+    if (request.layers.length === 0) {
+      clearHostRevealLayers(host)
+    }
   } else {
     const portalRequest: PortalRequest = {
       amount: request.amount,
       concealment: request.concealment,
+      layers: request.layers,
       placements: new Set(request.placements),
       reward: request.reward,
       sourceHost: request.sourceHost,
@@ -628,6 +678,7 @@ function registerHost(host: HTMLElement): HostRequest {
     } else {
       pendingPortalRequests.set(request.baseId, portalRequest)
     }
+    clearHostRevealLayers(host)
     setHostConcealment(host, null)
     host.classList.add("loot-treasure-host--portal-source")
     host.setAttribute("aria-hidden", "true")
@@ -688,6 +739,7 @@ function syncInline(
   request: HostRequest,
 ): void {
   if (!controller) return
+  controller.classify?.(chestId, request.reward)
 
   const opening = openingIds.has(chestId)
   const unavailable = controller.collected(chestId) && !opening
@@ -695,6 +747,7 @@ function syncInline(
   if (unavailable) {
     eligibleChestIds.delete(chestId)
     visibilityGate.forget(`chest:${request.baseId}`)
+    clearHostRevealLayers(host)
     setHostConcealment(host, null)
     if (host.childElementCount > 0) host.replaceChildren()
     return
@@ -706,23 +759,26 @@ function syncInline(
     sourceSlideIsActive(request.sourceSection, host),
     scheduleSync,
   )
-  if (visible) eligibleChestIds.add(chestId)
-  else eligibleChestIds.delete(chestId)
-
   if (!visible && !opening) {
-    if (host.childElementCount > 0) host.replaceChildren()
+    clearHostRevealLayers(host)
     setHostConcealment(host, null)
+    if (host.childElementCount > 0) host.replaceChildren()
+    eligibleChestIds.delete(chestId)
     return
   }
+  const contentHost = setHostRevealLayers(host, chestId, request.layers)
   if (
     !opening &&
-    !buttonIn(host, chestId, request.reward, request.amount)
+    !buttonIn(contentHost, chestId, request.reward, request.amount)
   ) {
-    host.replaceChildren(
+    setHostConcealment(contentHost, null)
+    contentHost.replaceChildren(
       createChestButton(chestId, "inline", request.reward, request.amount),
     )
   }
-  setHostConcealment(host, request.concealment)
+  setHostConcealment(contentHost, request.concealment)
+  if (visible && !hostIsRevealBlocked(host)) eligibleChestIds.add(chestId)
+  else eligibleChestIds.delete(chestId)
 }
 
 function portalDestination(
@@ -867,12 +923,12 @@ function ensurePortal(
   chestId: string,
   placement: ChestPlacement,
   request: PortalRequest,
-): void {
+): HTMLElement | null {
   const destination = portalDestination(placement, request)
   let wrapper = portalFor(chestId)
   if (!destination) {
     removePortal(wrapper)
-    return
+    return null
   }
 
   if (
@@ -901,15 +957,6 @@ function ensurePortal(
       wrapper.classList.add("nav__item", "lia-support-menu__item")
       wrapper.setAttribute("role", "none")
     }
-    wrapper.append(
-      createChestButton(
-        chestId,
-        placement,
-        request.reward,
-        request.amount,
-        ownerDocument,
-      ),
-    )
   }
 
   if (wrapper.parentElement !== mount) {
@@ -935,7 +982,20 @@ function ensurePortal(
   } else {
     delete wrapper.dataset.lootChestTemplatePosition
   }
-  setHostConcealment(wrapper, request.concealment)
+  const contentHost = setHostRevealLayers(wrapper, chestId, request.layers)
+  if (!buttonIn(contentHost, chestId, request.reward, request.amount)) {
+    setHostConcealment(contentHost, null)
+    contentHost.replaceChildren(
+      createChestButton(
+        chestId,
+        placement,
+        request.reward,
+        request.amount,
+        wrapper.ownerDocument,
+      ),
+    )
+  }
+  setHostConcealment(contentHost, request.concealment)
   if (destination.templateLayout === "floating") {
     positionTemplatePortal(
       wrapper,
@@ -948,6 +1008,7 @@ function ensurePortal(
       setPortalStyle(wrapper, property, "")
     }
   }
+  return wrapper
 }
 
 function syncPortals(): void {
@@ -964,6 +1025,7 @@ function syncPortals(): void {
 
     for (const placement of request.placements) {
       const chestId = `${baseId}:${placement}`
+      controller.classify?.(chestId, request.reward)
       const opening = openingIds.has(chestId)
       const unavailable = controller.collected(chestId) && !opening
 
@@ -974,17 +1036,27 @@ function syncPortals(): void {
       }
 
       activeIds.add(chestId)
-      if (visible && !unavailable) eligibleChestIds.add(chestId)
-      else eligibleChestIds.delete(chestId)
-
+      let wrapper = portalFor(chestId)
       if (unavailable) {
-        removePortal(portalFor(chestId))
+        removePortal(wrapper)
+        wrapper = null
       } else if (!opening) {
-        ensurePortal(
+        wrapper = ensurePortal(
           chestId,
           placement,
           request,
         )
+      }
+      if (
+        visible &&
+        !unavailable &&
+        !opening &&
+        wrapper &&
+        !hostIsRevealBlocked(wrapper)
+      ) {
+        eligibleChestIds.add(chestId)
+      } else {
+        eligibleChestIds.delete(chestId)
       }
     }
   }
@@ -1003,6 +1075,13 @@ function syncAll(): void {
   eligibleChestIds.clear()
   const hosts = document.querySelectorAll<HTMLElement>(CHEST_TAG)
   for (const host of hosts) {
+    if (hostIsRevealBlocked(host, false)) {
+      const baseId = resolveBaseId(host)
+      pendingPortalRequests.delete(baseId)
+      portalRequests.delete(baseId)
+      matchedSourceHosts.delete(baseId)
+      continue
+    }
     const request = registerHost(host)
     if (request.valid && request.inline) {
       syncInline(host, `${request.baseId}:inline`, request)
@@ -1036,14 +1115,14 @@ class LootTreasureChestElement extends HTMLElement {
   }
 
   connectedCallback(): void {
-    registerHost(this)
+    if (!hostIsRevealBlocked(this, false)) registerHost(this)
     scheduleSync()
   }
 
   attributeChangedCallback(): void {
     if (!this.isConnected) return
     eligibleChestIds.clear()
-    registerHost(this)
+    if (!hostIsRevealBlocked(this, false)) registerHost(this)
     scheduleSync()
   }
 }
@@ -1068,6 +1147,11 @@ export function installTreasureChests(
         window.setTimeout(scheduleSync, delay)
       }
     })
+  }
+
+  if (!revealListenerInstalled) {
+    revealListenerInstalled = true
+    document.addEventListener(REVEAL_CHANGED_EVENT, scheduleSync)
   }
 
   if (!customElements.get(CHEST_TAG)) {

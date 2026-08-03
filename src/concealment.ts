@@ -4,6 +4,15 @@ export const CONCEALMENT_ATTRIBUTE = "data-loot-concealment"
 export const CONCEALMENT_SELECTOR = `[${CONCEALMENT_ATTRIBUTE}]`
 export const CONCEALMENT_CHANGED_EVENT = "lia-loot:concealment-changed"
 
+const CONCEALMENT_ID_ATTRIBUTE = "data-loot-concealment-id"
+
+const CONCEALED_ITEM_ID_SELECTORS = [
+  ["data-loot-chest-button", "chest"],
+  ["data-loot-key-button", "key"],
+  ["data-loot-magnifier-button", "magnifier"],
+  ["data-loot-tool-pickup", "tool"],
+] as const
+
 const MODE_BY_OPTION: Readonly<Record<string, ConcealmentMode>> = {
   dust: "dust",
   solid: "solid",
@@ -56,6 +65,33 @@ export function concealmentModeOf(
   return value === "solid" || value === "dust" ? value : null
 }
 
+function usableId(value: string | null): string | null {
+  const id = value?.trim() ?? ""
+  return id && !id.startsWith("@") ? id : null
+}
+
+/** Returns the stable logical object represented by a concealed DOM host. */
+export function concealmentIdOf(host: HTMLElement): string | null {
+  const explicit = usableId(host.getAttribute(CONCEALMENT_ID_ATTRIBUTE))
+  if (explicit) return explicit
+
+  const authoredSecret = usableId(host.getAttribute("data-secret-id"))
+  if (authoredSecret) return `secret:${authoredSecret}`
+
+  const revealLayer = usableId(
+    host.getAttribute("data-loot-reveal-cover-slot"),
+  )
+  if (revealLayer) return `reveal:${revealLayer}`
+
+  for (const [attribute, prefix] of CONCEALED_ITEM_ID_SELECTORS) {
+    const item = host.querySelector<HTMLElement>(`[${attribute}]`)
+    const itemId = usableId(item?.getAttribute(attribute) ?? null)
+    if (itemId) return `${prefix}:${itemId}`
+  }
+
+  return null
+}
+
 export function concealedContentOf(host: HTMLElement): HTMLElement | null {
   return (
     [...host.children].find((child) =>
@@ -84,7 +120,7 @@ export function prepareConcealedHost(host: HTMLElement): ConcealmentMode | null 
   return mode
 }
 
-function announceConcealmentChange(host: HTMLElement): void {
+export function notifyConcealmentLayoutChanged(host: HTMLElement): void {
   host.dispatchEvent(
     new CustomEvent(CONCEALMENT_CHANGED_EVENT, {
       bubbles: true,
@@ -112,7 +148,7 @@ export function setHostConcealment(
     host.style.removeProperty("--loot-magnifier-y")
     host.removeAttribute("aria-hidden")
     host.inert = false
-    if (previousMode) announceConcealmentChange(host)
+    if (previousMode) notifyConcealmentLayoutChanged(host)
     return
   }
 
@@ -122,6 +158,6 @@ export function setHostConcealment(
     host.classList.remove("loot-magnifier-secret--under-lens")
     host.setAttribute("aria-hidden", "true")
     host.inert = true
-    announceConcealmentChange(host)
+    notifyConcealmentLayoutChanged(host)
   }
 }

@@ -3,15 +3,22 @@ import { createEmptyKeyCounts, KEY_COLORS } from "./key-colors.ts"
 import { liaCourseIdentity } from "./course-identity.ts"
 import type {
   AchievementState,
+  ChestRewardState,
   HighscoreState,
   KeyInventoryState,
   MagnifierState,
+  ResourceKind,
   ResourceState,
 } from "./types"
-import { ACHIEVEMENT_IDS } from "./types.ts"
+import {
+  ACHIEVEMENT_IDS,
+  LEGACY_ACHIEVEMENT_IDS,
+  RESOURCE_KINDS,
+} from "./types.ts"
 
 const STORAGE_PREFIX = "lia-loot:highscore:v1:"
 const RESOURCES_STORAGE_PREFIX = "lia-loot:resources:v1:"
+const CHEST_REWARDS_STORAGE_PREFIX = "lia-loot:chest-rewards:v1:"
 const KEY_INVENTORY_STORAGE_PREFIX = "lia-loot:key-inventory:v1:"
 const MAGNIFIER_STORAGE_PREFIX = "lia-loot:magnifier:v1:"
 const ACHIEVEMENTS_STORAGE_PREFIX = "lia-loot:achievements:v1:"
@@ -48,6 +55,10 @@ function storageKey(): string {
 
 function resourcesStorageKey(): string {
   return courseStorageKey(RESOURCES_STORAGE_PREFIX)
+}
+
+function chestRewardsStorageKey(): string {
+  return courseStorageKey(CHEST_REWARDS_STORAGE_PREFIX)
 }
 
 function keyInventoryStorageKey(): string {
@@ -203,6 +214,77 @@ export function saveResources(state: ResourceState): void {
   }
 }
 
+function normalizeChestRewardState(value: unknown): ChestRewardState | null {
+  if (!value || typeof value !== "object") return null
+  const state = value as Record<string, unknown>
+  if (
+    state.version !== 1 ||
+    !state.collected ||
+    typeof state.collected !== "object" ||
+    Array.isArray(state.collected)
+  ) {
+    return null
+  }
+
+  const rawCollected = state.collected as Record<string, unknown>
+  if (
+    Object.keys(rawCollected).some(
+      (reward) => !RESOURCE_KINDS.includes(reward as ResourceKind),
+    )
+  ) {
+    return null
+  }
+
+  const collected = {
+    gold: [] as string[],
+    diamonds: [] as string[],
+    energy: [] as string[],
+  }
+  const allIds = new Set<string>()
+  for (const reward of RESOURCE_KINDS) {
+    const rawIds = rawCollected[reward] ?? []
+    if (
+      !Array.isArray(rawIds) ||
+      !rawIds.every(
+        (chestId) => typeof chestId === "string" && chestId.trim().length > 0,
+      )
+    ) {
+      return null
+    }
+    const ids = rawIds.map((chestId: string) => chestId.trim())
+    if (new Set(ids).size !== ids.length) return null
+    for (const id of ids) {
+      if (allIds.has(id)) return null
+      allIds.add(id)
+    }
+    collected[reward] = ids
+  }
+
+  return { version: 1, collected }
+}
+
+export function loadChestRewards(): ChestRewardState | null {
+  try {
+    const raw = window.sessionStorage.getItem(chestRewardsStorageKey())
+    if (!raw) return null
+    const value: unknown = JSON.parse(raw)
+    return normalizeChestRewardState(value)
+  } catch {
+    return null
+  }
+}
+
+export function saveChestRewards(state: ChestRewardState): void {
+  try {
+    window.sessionStorage.setItem(
+      chestRewardsStorageKey(),
+      JSON.stringify(state),
+    )
+  } catch {
+    // Chest achievements still work in memory when browser storage is unavailable.
+  }
+}
+
 function normalizeKeyInventoryState(value: unknown): KeyInventoryState | null {
   if (!value || typeof value !== "object") return null
   const state = value as Record<string, unknown>
@@ -323,7 +405,17 @@ function normalizeAchievementState(value: unknown): AchievementState | null {
   const state = value as Record<string, unknown>
   if (state.version !== 1 || !Array.isArray(state.unlocked)) return null
 
-  const allowed = new Set<string>(ACHIEVEMENT_IDS)
+  if (
+    state.legacyAllChestsOpened !== undefined &&
+    typeof state.legacyAllChestsOpened !== "boolean"
+  ) {
+    return null
+  }
+
+  const allowed = new Set<string>([
+    ...ACHIEVEMENT_IDS,
+    ...LEGACY_ACHIEVEMENT_IDS,
+  ])
   if (
     !state.unlocked.every(
       (achievementId) =>
@@ -333,9 +425,18 @@ function normalizeAchievementState(value: unknown): AchievementState | null {
     return null
   }
 
-  const unlocked = [...state.unlocked] as AchievementState["unlocked"]
-  if (new Set(unlocked).size !== unlocked.length) return null
-  return { version: 1, unlocked }
+  const storedIds = [...state.unlocked] as string[]
+  if (new Set(storedIds).size !== storedIds.length) return null
+  const legacyAllChestsOpened =
+    state.legacyAllChestsOpened === true ||
+    storedIds.includes("all-chests-opened")
+  const active = new Set<string>(ACHIEVEMENT_IDS)
+  const unlocked = storedIds.filter((id) =>
+    active.has(id),
+  ) as AchievementState["unlocked"]
+  return legacyAllChestsOpened
+    ? { version: 1, unlocked, legacyAllChestsOpened: true }
+    : { version: 1, unlocked }
 }
 
 export function loadAchievements(): AchievementState | null {

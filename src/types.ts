@@ -1,17 +1,28 @@
 import type { KeyCounts } from "./key-colors"
 
 export type TrophyTier = "gold" | "silver" | "copper" | null
-export type ResourceKind = "gold" | "diamonds" | "energy"
+export const RESOURCE_KINDS = ["gold", "diamonds", "energy"] as const
+export type ResourceKind = (typeof RESOURCE_KINDS)[number]
+export type ResourceCounts = Record<ResourceKind, number>
 
 export const ACHIEVEMENT_IDS = [
   "all-quizzes-solved",
   "perfect-highscore",
-  "all-chests-opened",
+  "all-treasure-chests-opened",
+  "all-diamond-chests-opened",
+  "all-energy-chests-opened",
+  "all-invisible-objects-found",
+  "all-magic-dust-objects-found",
+  "all-soil-dug",
+  "all-plants-bloomed",
   "all-locks-opened",
   "secret-slide-found",
 ] as const
 
 export type AchievementId = (typeof ACHIEVEMENT_IDS)[number]
+
+export const LEGACY_ACHIEVEMENT_IDS = ["all-chests-opened"] as const
+export type LegacyAchievementId = (typeof LEGACY_ACHIEVEMENT_IDS)[number]
 
 export interface HighscoreConfig {
   maxPoints: number
@@ -42,6 +53,11 @@ export interface ResourceState {
   collectedChests: string[]
 }
 
+export interface ChestRewardState {
+  version: 1
+  collected: Record<ResourceKind, string[]>
+}
+
 export interface KeyInventoryState {
   version: 1
   keys: KeyCounts
@@ -57,6 +73,7 @@ export interface MagnifierState {
 export interface AchievementState {
   version: 1
   unlocked: AchievementId[]
+  legacyAllChestsOpened?: boolean
 }
 
 export interface HighscoreApi {

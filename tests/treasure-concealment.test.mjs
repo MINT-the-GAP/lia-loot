@@ -15,24 +15,37 @@ const {
 if (previousHTMLElement === undefined) delete globalThis.HTMLElement
 else globalThis.HTMLElement = previousHTMLElement
 
+function visibility(overrides = {}) {
+  return {
+    delayMs: 0,
+    onlyOnSlide: false,
+    onlyWithoutAnnotations: false,
+    themes: [],
+    variants: [],
+    ...overrides,
+  }
+}
+
 test("parst vollständig unsichtbare und staubverdeckte Inline-Truhen", () => {
   assert.deepEqual(parseTreasureChestOptions("unsichtbar"), {
     amount: 1,
     concealment: "solid",
     errors: [],
     inline: true,
+    layers: [],
     placements: [],
     valid: true,
-    visibility: { delayMs: 0, onlyOnSlide: false },
+    visibility: visibility(),
   })
   assert.deepEqual(parseTreasureChestOptions("zauberstaub; anker; 12s"), {
     amount: 1,
     concealment: "dust",
     errors: [],
     inline: true,
+    layers: [],
     placements: [],
     valid: true,
-    visibility: { delayMs: 12_000, onlyOnSlide: true },
+    visibility: visibility({ delayMs: 12_000, onlyOnSlide: true }),
   })
 })
 
@@ -44,9 +57,10 @@ test("parst eine positive Ganzzahl am Anfang als Belohnungsmenge", () => {
     concealment: null,
     errors: [],
     inline: true,
+    layers: [],
     placements: [],
     valid: true,
-    visibility: { delayMs: 0, onlyOnSlide: false },
+    visibility: visibility(),
   })
   assert.deepEqual(
     parseTreasureChestOptions("3; menu; anker; 1.5 Minuten"),
@@ -55,13 +69,38 @@ test("parst eine positive Ganzzahl am Anfang als Belohnungsmenge", () => {
       concealment: null,
       errors: [],
       inline: false,
+      layers: [],
       placements: ["menu"],
       valid: true,
-      visibility: { delayMs: 90_000, onlyOnSlide: true },
+      visibility: visibility({ delayMs: 90_000, onlyOnSlide: true }),
     },
   )
   assert.equal(parseTreasureChestOptions("3s").amount, 1)
   assert.equal(parseTreasureChestOptions("3s").visibility.delayMs, 3_000)
+})
+
+test("trennt Annotation-Portal und gemeinsame Sichtbarkeitsoptionen", () => {
+  assert.deepEqual(
+    parseTreasureChestOptions(
+      "2; annotation; theme-blau; lightmode; ohne-annotation; anker; 2s",
+    ),
+    {
+      amount: 2,
+      concealment: null,
+      errors: [],
+      inline: false,
+      layers: [],
+      placements: ["annotation"],
+      valid: true,
+      visibility: visibility({
+        delayMs: 2_000,
+        onlyOnSlide: true,
+        onlyWithoutAnnotations: true,
+        themes: ["blue"],
+        variants: ["light"],
+      }),
+    },
+  )
 })
 
 test("weist ungültige, doppelte und nachgestellte Mengen fail-closed zurück", () => {
@@ -91,9 +130,10 @@ test("kombiniert Verbergung mit Zeit, Anker und mehreren Portalzielen", () => {
       concealment: "dust",
       errors: [],
       inline: false,
+      layers: [],
       placements: ["toc", "mode"],
       valid: true,
-      visibility: { delayMs: 90_000, onlyOnSlide: true },
+      visibility: visibility({ delayMs: 90_000, onlyOnSlide: true }),
     },
   )
 })
@@ -106,10 +146,39 @@ test("parst alle zwölf Template-Ziele als unabhängige Portalplätze", () => {
     concealment: null,
     errors: [],
     inline: false,
+    layers: [],
     placements: [...TEMPLATE_TARGETS],
     valid: true,
-    visibility: { delayMs: 0, onlyOnSlide: false },
+    visibility: visibility(),
   })
+})
+
+test("bewahrt Erde und Pflanze in Optionsreihenfolge vor dem Enditem", () => {
+  assert.deepEqual(
+    parseTreasureChestOptions(
+      "3; translator; erde-unsichtbar; pflanze; anker; 12s; zauberstaub",
+    ),
+    {
+      amount: 3,
+      concealment: "dust",
+      errors: [],
+      inline: false,
+      layers: [
+        { kind: "soil", concealment: "solid" },
+        { kind: "plant", concealment: null },
+      ],
+      placements: ["translator"],
+      valid: true,
+      visibility: visibility({ delayMs: 12_000, onlyOnSlide: true }),
+    },
+  )
+
+  const nestedInline = parseTreasureChestOptions("erde; blume-zauberstaub")
+  assert.equal(nestedInline.inline, true)
+  assert.deepEqual(nestedInline.layers, [
+    { kind: "soil", concealment: null },
+    { kind: "plant", concealment: "dust" },
+  ])
 })
 
 test("weist doppelte und widersprüchliche Verbergungsoptionen fail-closed zurück", () => {
@@ -200,7 +269,7 @@ test("propagiert Portalmodi und räumt unsichtbare Inline-Hosts vollständig auf
 
   assert.match(
     source,
-    /wrapper\.append\(\s*createChestButton[\s\S]*?setHostConcealment\(wrapper, request\.concealment\)/u,
+    /const contentHost = setHostRevealLayers\(wrapper, chestId, request\.layers\)[\s\S]*?contentHost\.replaceChildren\(\s*createChestButton[\s\S]*?setHostConcealment\(contentHost, request\.concealment\)/u,
   )
   assert.match(
     source,

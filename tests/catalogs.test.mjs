@@ -15,7 +15,10 @@ import { requestedKeyColor } from "../src/key-colors.ts"
 
 const previousHTMLElement = globalThis.HTMLElement
 globalThis.HTMLElement ??= class {}
-const [{ courseLockUnitCount }, { courseChestUnitCount }] = await Promise.all([
+const [
+  { courseLockUnitCount },
+  { courseChestUnitCount, courseChestUnitCounts },
+] = await Promise.all([
   import("../src/object-lock.ts"),
   import("../src/treasure-chest.ts"),
 ])
@@ -72,6 +75,11 @@ test("zählt jede unabhängig sammelbare Truhe genau einmal", () => {
 `)
 
   assert.equal(courseChestUnitCount(declarations), 4)
+  assert.deepEqual(courseChestUnitCounts(declarations), {
+    gold: 1,
+    diamonds: 1,
+    energy: 2,
+  })
 })
 
 test("dedupliziert globale Schlösser und zählt lokale Makros einzeln", () => {
@@ -180,8 +188,8 @@ test("hält fremdabhängige README-Beispiele aus dem Livekatalog heraus", () => 
   const chestCatalog = parseCourseChestCatalogDeclarations(markdown)
   const lockCatalog = parseCourseLockCatalogDeclarations(markdown)
 
-  assert.equal(courseChestUnitCount(publicChests), 18)
-  assert.equal(courseChestUnitCount(chestCatalog), 18)
+  assert.equal(courseChestUnitCount(publicChests), 19)
+  assert.equal(courseChestUnitCount(chestCatalog), 19)
   assert.equal(courseLockUnitCount(publicLocks), 2)
   assert.equal(courseLockUnitCount(lockCatalog), 2)
 
@@ -190,8 +198,8 @@ test("hält fremdabhängige README-Beispiele aus dem Livekatalog heraus", () => 
     /^ {0,3}#{1,6}(?:\s+|$)/u.test(line)
   ).length
   assert.deepEqual(portalCalls, [
-    { macro: "Portal", section: 8, target: 10 },
-    { macro: "Einwegportal", section: 8, target: 8 },
+    { macro: "Portal", section: 9, target: 11 },
+    { macro: "Einwegportal", section: 9, target: 8 },
   ])
   assert.ok(
     portalCalls.every(
@@ -201,7 +209,7 @@ test("hält fremdabhängige README-Beispiele aus dem Livekatalog heraus", () => 
   )
   assert.match(
     markdown,
-    /^@Portal\(10\)\r?\n@Schloss\(portal, blau\)$/mu,
+    /^@Portal\(11\)\r?\n@Schloss\(portal, blau\)$/mu,
   )
 })
 
@@ -239,6 +247,11 @@ test("hält den Escape-Room als lösbaren anspruchsvollen Ressourcen-Parcours", 
   assert.match(markdown, /^@Highscore\(100, 6, 3, 45, 1\)$/mu)
 
   assert.equal(courseChestUnitCount(chests), 13)
+  assert.deepEqual(courseChestUnitCounts(chests), {
+    gold: 4,
+    diamonds: 2,
+    energy: 7,
+  })
   assert.deepEqual(
     Object.fromEntries(
       ["gold", "diamonds", "energy"].map((reward) => [
