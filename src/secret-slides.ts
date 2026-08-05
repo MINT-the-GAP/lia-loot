@@ -10,12 +10,17 @@ import {
   setLiaSlideAccessGuard,
 } from "./slide-activity.ts"
 import { navigateToLiaSection } from "./slide-navigation.ts"
+import {
+  isSequentialSlideNavigationKey,
+  preserveEditableSlideNavigation,
+} from "./slide-navigation-lock.ts"
 
 const SECRET_TAG = "lia-loot-secret-slide"
 const SEARCH_ID = "lia-input-search"
 const STATUS_ID = "lia-loot-secret-slide-status"
 const SECRET_LINK_CLASS = "loot-secret-slide-link"
 const FOUND_LINK_CLASS = "loot-secret-slide-link--found"
+const PUZZLE_BLOCKED_LINK_CLASS = "loot-puzzle-slide-link--blocked"
 const BLOCKED_ROOT_CLASS = "loot-secret-slide-blocked"
 const DISCOVERING_ROOT_CLASS = "loot-secret-slide-discovering"
 const DISCOVERY_FAILED_ROOT_CLASS = "loot-secret-slide-discovery-failed"
@@ -25,6 +30,8 @@ const GATE_MESSAGE_DELAY = 250
 const SWIPE_THRESHOLD = 150
 const SWIPE_RESTRAINT = 100
 const SWIPE_TIME_LIMIT = 300
+const SWIPE_INTERACTIVE_SELECTOR =
+  "a, button, input, textarea, select, [contenteditable]:not([contenteditable='false']), [draggable='true']"
 const TOC_LINK_SELECTOR =
   "#lia-toc .lia-toc__content > a.lia-toc__link[href*='#']"
 
@@ -52,6 +59,11 @@ interface SecretSlideController {
   found(section: number): void
 }
 
+export interface PuzzleSlideAccessGuard {
+  allowed(section: number): boolean
+  message(section: number): string
+}
+
 const secretSections = new Set<number>()
 const gatedElements = new Map<HTMLElement, GatedElementState>()
 let tocObserver: MutationObserver | null = null
@@ -70,6 +82,7 @@ let lastAcceptedSection: number | null = null
 let redirectingFromSection: number | null = null
 let gestureStart: GestureStart | null = null
 let controller: SecretSlideController | null = null
+let puzzleSlideAccessGuard: PuzzleSlideAccessGuard | null = null
 
 export function normalizeSecretTitle(value: string): string {
   return value
@@ -285,18 +298,29 @@ function syncInteractionGate(): void {
   }
 }
 
-function sectionFromLink(link: HTMLAnchorElement): number | null {
-  const href = link.getAttribute("href") ?? ""
-  let hash = href
-  try {
-    hash = new URL(href, window.location.href).hash
-  } catch {
-    // The regular expression below rejects malformed links.
-  }
+function sectionFromHash(hash: string): number | null {
   const match = /^#(\d+)$/.exec(hash)
   if (!match) return null
   const section = Number(match[1]) - 1
   return Number.isInteger(section) && section >= 0 ? section : null
+}
+
+function sectionFromLink(link: HTMLAnchorElement): number | null {
+  const href = link.getAttribute("href") ?? ""
+  try {
+    const current = new URL(window.location.href)
+    const target = new URL(href, current)
+    if (
+      target.origin !== current.origin ||
+      target.pathname !== current.pathname ||
+      target.search !== current.search
+    ) {
+      return null
+    }
+    return sectionFromHash(target.hash)
+  } catch {
+    return null
+  }
 }
 
 function tocLinks(): HTMLAnchorElement[] {
@@ -340,10 +364,16 @@ function syncTocLinks(): { links: HTMLAnchorElement[]; totalSections: number } {
     highestSection = Math.max(highestSection, section)
     const secret = secretSections.has(section)
     const found = secret && query !== "" && linkTitle(link) === query
+    const puzzleBlocked =
+      puzzleSlideAccessGuard !== null &&
+      !puzzleSlideAccessGuard.allowed(section)
     link.classList.toggle(SECRET_LINK_CLASS, secret)
     link.classList.toggle(FOUND_LINK_CLASS, found)
+    link.classList.toggle(PUZZLE_BLOCKED_LINK_CLASS, puzzleBlocked)
     if (secret) link.dataset.lootSecretSection = String(section)
     else delete link.dataset.lootSecretSection
+    if (puzzleBlocked) link.dataset.lootPuzzleSection = String(section)
+    else delete link.dataset.lootPuzzleSection
   }
 
   return { links, totalSections: highestSection + 1 }
@@ -374,9 +404,21 @@ function collectibleSlideAllowed(section: number | null): boolean {
   if (discoveryState !== "complete") return false
   return (
     section === null ||
-    !secretSections.has(section) ||
-    allowedCurrentSection === section
+    (puzzleSlideAccessGuard?.allowed(section) !== false &&
+      (!secretSections.has(section) || allowedCurrentSection === section))
   )
+}
+
+function puzzleFallbackSection(blockedSection: number): number | null {
+  for (let section = blockedSection; section >= 0; section -= 1) {
+    if (
+      puzzleSlideAccessGuard?.allowed(section) !== false &&
+      !secretSections.has(section)
+    ) {
+      return section
+    }
+  }
+  return null
 }
 
 function guardActiveSection(totalSections: number): void {
@@ -385,7 +427,31 @@ function guardActiveSection(totalSections: number): void {
     return
   }
   const section = activeSection()
-  if (section === null || totalSections <= 0) {
+  if (section === null) {
+    setRouteBlocked(false)
+    return
+  }
+
+  if (puzzleSlideAccessGuard?.allowed(section) === false) {
+    allowedCurrentSection = null
+    const fallback = puzzleFallbackSection(section)
+    if (fallback === null) {
+      console.warn(
+        "Loot: Hinter dem Puzzletor wurde keine erreichbare Fallback-Folie gefunden.",
+      )
+      showGateStatus(puzzleSlideAccessGuard.message(section), true)
+      setRouteBlocked(true)
+      return
+    }
+    showGateStatus(puzzleSlideAccessGuard.message(section))
+    setRouteBlocked(true)
+    if (redirectingFromSection === section) return
+    redirectingFromSection = section
+    navigateToLiaSection(fallback, "replace")
+    return
+  }
+
+  if (totalSections <= 0) {
     setRouteBlocked(false)
     return
   }
@@ -451,7 +517,7 @@ function syncAll(): void {
   guardActiveSection(totalSections)
   if (discoveryState === "complete") {
     enforceRootClasses()
-    hideGateStatus()
+    if (!routeBlocked) hideGateStatus()
   }
   syncInteractionGate()
   tocObserver?.takeRecords()
@@ -471,6 +537,10 @@ function eventElement(target: EventTarget | null): Element | null {
 function authorizeLink(link: HTMLAnchorElement): boolean {
   const section = sectionFromLink(link)
   if (section === null || !secretSections.has(section)) return false
+  if (puzzleSlideAccessGuard?.allowed(section) === false) {
+    announce(puzzleSlideAccessGuard.message(section))
+    return false
+  }
   const matches = exactSecretLinks()
   if (matches.length !== 1 || matches[0] !== link) {
     announce(
@@ -494,6 +564,41 @@ function authorizeLink(link: HTMLAnchorElement): boolean {
 
 function handleSecretLinkClick(event: MouseEvent): void {
   const target = eventElement(event.target)
+  const pagination = target?.closest<HTMLElement>(
+    "#lia-btn-prev, #lia-btn-next",
+  )
+  const active = pagination ? activeSection() : null
+  const paginationSection =
+    active === null
+      ? null
+      : active + (pagination?.id === "lia-btn-next" ? 1 : -1)
+  if (
+    paginationSection !== null &&
+    paginationSection >= 0 &&
+    puzzleSlideAccessGuard?.allowed(paginationSection) === false
+  ) {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    event.stopPropagation()
+    announce(puzzleSlideAccessGuard.message(paginationSection))
+    return
+  }
+  const directSlideLink = target?.closest<HTMLAnchorElement>(
+    "a[href*='#']",
+  )
+  const directSection = directSlideLink
+    ? sectionFromLink(directSlideLink)
+    : null
+  if (
+    directSection !== null &&
+    puzzleSlideAccessGuard?.allowed(directSection) === false
+  ) {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    event.stopPropagation()
+    announce(puzzleSlideAccessGuard.message(directSection))
+    return
+  }
   const link = target?.closest<HTMLAnchorElement>(
     `a.${SECRET_LINK_CLASS}`,
   )
@@ -504,18 +609,46 @@ function handleSecretLinkClick(event: MouseEvent): void {
   event.stopPropagation()
 }
 
+function sequentialNavigationDirection(
+  event: KeyboardEvent,
+): -1 | 1 | null {
+  if (typeof event.key !== "string") return null
+  if (!isSequentialSlideNavigationKey(event)) return null
+  const key = event.key.toLocaleLowerCase("en-US")
+  return event.key === "ArrowRight" || key === "n" ? 1 : -1
+}
+
+function stopSequentialNavigation(
+  event: KeyboardEvent,
+  message?: string,
+): void {
+  if (preserveEditableSlideNavigation(event)) return
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  event.stopPropagation()
+  if (message) announce(message)
+}
+
 function handleSearchEnter(event: KeyboardEvent): void {
-  const sequentialNavigation =
-    event.key === "ArrowLeft" ||
-    event.key === "ArrowRight" ||
-    (event.altKey &&
-      event.shiftKey &&
-      ["n", "p"].includes(event.key.toLocaleLowerCase("en-US")))
-  if (discoveryState !== "complete" && sequentialNavigation) {
-    event.preventDefault()
-    event.stopImmediatePropagation()
-    event.stopPropagation()
-    return
+  const direction = sequentialNavigationDirection(event)
+  if (direction !== null) {
+    if (discoveryState !== "complete") {
+      stopSequentialNavigation(event)
+      return
+    }
+    const section = activeSection()
+    const targetSection = section === null ? null : section + direction
+    if (
+      targetSection !== null &&
+      targetSection >= 0 &&
+      puzzleSlideAccessGuard?.allowed(targetSection) === false
+    ) {
+      stopSequentialNavigation(
+        event,
+        puzzleSlideAccessGuard.message(targetSection),
+      )
+      return
+    }
   }
 
   if (
@@ -556,12 +689,35 @@ export function permitPortalSlideNavigation(section: number): boolean {
   ) {
     return false
   }
+  if (puzzleSlideAccessGuard?.allowed(section) === false) return false
   if (secretSections.has(section)) storePermit(section)
   return true
 }
 
+export function portalSlideNavigationBlockMessage(section: number): string {
+  return puzzleSlideAccessGuard?.allowed(section) === false
+    ? puzzleSlideAccessGuard.message(section)
+    : "Das Portal wartet, bis die Kursnavigation vorbereitet ist."
+}
+
+export function setPuzzleSlideAccessGuard(
+  guard: PuzzleSlideAccessGuard | null,
+): void {
+  puzzleSlideAccessGuard = guard
+  scheduleSync()
+  refreshLiaSlideActivity()
+}
+
+export function refreshPuzzleSlideAccess(): void {
+  scheduleSync()
+  refreshLiaSlideActivity()
+}
+
 function startDiscoveryGesture(event: TouchEvent | MouseEvent): void {
-  if (discoveryState === "complete") {
+  if (
+    (discoveryState === "complete" && puzzleSlideAccessGuard === null) ||
+    eventElement(event.target)?.closest(SWIPE_INTERACTIVE_SELECTOR)
+  ) {
     gestureStart = null
     return
   }
@@ -587,7 +743,7 @@ function startDiscoveryGesture(event: TouchEvent | MouseEvent): void {
 function endDiscoveryGesture(event: TouchEvent | MouseEvent): void {
   const start = gestureStart
   gestureStart = null
-  if (!start || discoveryState === "complete") return
+  if (!start) return
   if (event instanceof MouseEvent) {
     if (start.kind !== "mouse") return
   } else if (start.kind !== "touch") {
@@ -603,13 +759,40 @@ function endDiscoveryGesture(event: TouchEvent | MouseEvent): void {
     Math.abs(distanceX) >= SWIPE_THRESHOLD &&
     Math.abs(distanceY) <= SWIPE_RESTRAINT
   if (!horizontalNavigation) return
+  let message: string | null = null
+  if (discoveryState === "complete") {
+    const section = activeSection()
+    const direction = distanceX < 0 ? 1 : -1
+    const targetSection = section === null ? null : section + direction
+    if (
+      targetSection === null ||
+      targetSection < 0 ||
+      puzzleSlideAccessGuard?.allowed(targetSection) !== false
+    ) {
+      return
+    }
+    message = puzzleSlideAccessGuard.message(targetSection)
+  }
   if (event.cancelable) event.preventDefault()
   event.stopImmediatePropagation()
   event.stopPropagation()
+  if (message) announce(message)
 }
 
 function cancelDiscoveryGesture(): void {
   gestureStart = null
+}
+
+function handleRouteChange(): void {
+  const section = sectionFromHash(window.location.hash)
+  if (
+    section !== null &&
+    puzzleSlideAccessGuard?.allowed(section) === false
+  ) {
+    showGateStatus(puzzleSlideAccessGuard.message(section))
+    setRouteBlocked(true)
+  }
+  scheduleSync()
 }
 
 function registerDeclarations(
@@ -745,7 +928,8 @@ export function installSecretSlides(
   document.addEventListener("mousedown", startDiscoveryGesture, true)
   document.addEventListener("mouseup", endDiscoveryGesture, true)
   window.addEventListener("blur", cancelDiscoveryGesture)
-  window.addEventListener("hashchange", scheduleSync)
+  window.addEventListener("hashchange", handleRouteChange)
+  window.addEventListener("popstate", handleRouteChange)
 
   attachTocObserver()
   documentObserver = new MutationObserver(handleDocumentMutations)

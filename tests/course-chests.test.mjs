@@ -611,6 +611,25 @@ test("katalogisiert alle verdeckten Itemfamilien und multipliziert Portaltruhen"
   })
 })
 
+test("zählt nur Puzzleteile eines vollständig gültigen Tors für Aggregaterfolge", () => {
+  const markdown = [
+    "# Puzzle",
+    "@Puzzleteil(rot; 1; zauberstaub; erde-unsichtbar)",
+    "@Puzzletor(rot; [[1]])",
+    "@Puzzleteil(blau; 1; zauberstaub; erde-unsichtbar)",
+    "@Puzzleteil(gelb; 1; zauberstaub)",
+    "@Puzzleteil(gelb; 1; zauberstaub)",
+    "@Puzzletor(gelb; [[1]])",
+  ].join("\n")
+
+  assert.deepEqual(parseCourseAchievementCatalog(markdown), {
+    dust: 1,
+    plant: 0,
+    soil: 1,
+    solid: 1,
+  })
+})
+
 test("ignoriert Beispiele, ungültige Items und nicht korrekt gepaarte Ranges", () => {
   const tick = String.fromCharCode(96)
   const slash = String.fromCharCode(92)
@@ -731,7 +750,7 @@ test("enthält das geheime Labor als echte Live-Demo außerhalb des Codeblocks",
   const laboratoryHeadings = markdown.match(/^## Das geheime Labor\s*$/gmu) ?? []
 
   assert.equal(laboratoryHeadings.length, 2)
-  assert.deepEqual(declarations, [{ section: 12 }])
+  assert.deepEqual(declarations, [{ section: 13 }])
 })
 
 test("wiederholt die frühe Quelltextladung nach einem vorübergehenden Fehler", async () => {

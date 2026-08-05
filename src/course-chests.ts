@@ -10,9 +10,22 @@ import {
 import { isKeyColorRequest, type KeyColor } from "./key-colors.ts"
 import { parseLockOptions } from "./lock-options.ts"
 import { parseLootIfOptions } from "./loot-if-options.ts"
+import { buildPuzzleCatalog } from "./puzzle-catalog.ts"
+import type {
+  CoursePuzzleDiscovery,
+  CoursePuzzleGateDeclaration,
+  CoursePuzzlePieceDeclaration,
+} from "./puzzle-declarations.ts"
+import { parsePuzzlePieceOptions } from "./puzzle-options.ts"
 import { resolveSurfaceTarget } from "./surface-targets.ts"
 import { resolveTemplateTarget } from "./template-targets.ts"
 import type { ResourceKind } from "./types"
+
+export type {
+  CoursePuzzleDiscovery,
+  CoursePuzzleGateDeclaration,
+  CoursePuzzlePieceDeclaration,
+} from "./puzzle-declarations.ts"
 
 export interface CourseChestDeclaration {
   baseId: string
@@ -74,7 +87,7 @@ const INTERNAL_CHEST_MACRO =
 const INTERNAL_LOCK_MACRO =
   /^\s*@LootSchloss_\s*\(\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]+)\s*\)\s*$/
 const ACHIEVEMENT_ITEM_MACRO =
-  /^\s*@(Schatztruhe|Diamanttruhe|Energiekiste|Schluessel|Lupe|Schaufel|Giesskanne)(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/iu
+  /^\s*@(Schatztruhe|Diamanttruhe|Energiekiste|Schluessel|Lupe|Schaufel|Giesskanne|Puzzleteil)(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/iu
 const INTERNAL_KEY_MACRO =
   /^\s*@LootSchluessel_\s*\(\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]*)\s*\)\s*$/iu
 const INTERNAL_MAGNIFIER_MACRO =
@@ -90,6 +103,10 @@ const INTERNAL_HIDDEN_MACRO =
 const RESOURCE_MACRO =
   /^\s*@Ressourcen\s*\(\s*([^,()\r\n]+?)\s*,\s*([^,()\r\n]+?)(?:\s*,\s*([^,()\r\n]+?))?\s*\)\s*$/
 const SECRET_SLIDE_MACRO = /^\s*@Geheimfolie\s*$/
+const PUZZLE_PIECE_MACRO =
+  /^\s*@Puzzleteil(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/iu
+const PUZZLE_GATE_MACRO =
+  /^\s*@Puzzletor(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/iu
 const ACHIEVEMENTS_MACRO =
   /^\s*@(achievements|erfolge)\s*$/i
 const NONNEGATIVE_NUMBER_LITERAL =
@@ -383,6 +400,27 @@ function addAchievementCatalog(
   target.solid += source.solid * multiplier
 }
 
+function validPuzzleAchievementSourceOrders(markdown: string): Set<number> {
+  const puzzleCatalog = buildPuzzleCatalog(
+    parseCoursePuzzleDeclarations(markdown),
+  )
+  const validColors = new Set(
+    puzzleCatalog.gates
+      .filter((gate) => gate.valid && gate.color !== null)
+      .map((gate) => gate.color!),
+  )
+  return new Set(
+    puzzleCatalog.pieces
+      .filter(
+        (piece) =>
+          piece.valid &&
+          piece.color !== null &&
+          validColors.has(piece.color),
+      )
+      .map((piece) => piece.sourceOrder),
+  )
+}
+
 function achievementCatalogForOptions(
   concealment: ConcealmentMode | null,
   layers: readonly RevealLayerOption[],
@@ -545,6 +583,12 @@ function publicItemAchievementCatalog(
     return chestAchievementCatalog(options)
   }
   if (name === "schluessel") return keyAchievementCatalog(options)
+  if (name === "puzzleteil") {
+    const parsed = parsePuzzlePieceOptions(options)
+    return parsed.valid
+      ? achievementCatalogForOptions(parsed.concealment, parsed.layers)
+      : null
+  }
   return simpleItemAchievementCatalog(options)
 }
 
@@ -667,10 +711,11 @@ export function parseCourseAchievementCatalog(
 ): CourseAchievementCatalog {
   const catalog = emptyCourseAchievementCatalog()
   const frames: AchievementCatalogFrame[] = []
+  const validPuzzleSources = validPuzzleAchievementSourceOrders(markdown)
   const currentCatalog = (): CourseAchievementCatalog =>
     frames[frames.length - 1]?.catalog ?? catalog
 
-  for (const line of visibleCourseLines(markdown)) {
+  for (const [sourceOrder, line] of visibleCourseLines(markdown).entries()) {
     if (!line.lootIfCatalogEligible) continue
     const start = achievementRevealStart(line.content)
     if (start) {
@@ -693,7 +738,12 @@ export function parseCourseAchievementCatalog(
       continue
     }
 
-    const publicItem = publicItemAchievementCatalog(line.content)
+    const invalidPuzzlePiece =
+      PUZZLE_PIECE_MACRO.test(line.content) &&
+      !validPuzzleSources.has(sourceOrder)
+    const publicItem = invalidPuzzlePiece
+      ? null
+      : publicItemAchievementCatalog(line.content)
     const item =
       publicItem === undefined
         ? internalItemAchievementCatalog(line.content)
@@ -951,6 +1001,39 @@ export function parseCourseSecretSlideDeclarations(
   return declarations
 }
 
+export function parseCoursePuzzleDeclarations(
+  markdown: string,
+): CoursePuzzleDiscovery {
+  const gates: CoursePuzzleGateDeclaration[] = []
+  const pieces: CoursePuzzlePieceDeclaration[] = []
+
+  for (const [sourceOrder, line] of visibleCourseLines(markdown).entries()) {
+    if (!line.lootIfCatalogEligible || line.section < 0) continue
+    const gated = line.revealDepth > 0 || line.lootIfDepth > 0
+    const piece = PUZZLE_PIECE_MACRO.exec(line.content)
+    if (piece) {
+      pieces.push({
+        gated,
+        options: (piece[1] ?? "").trim(),
+        section: line.section,
+        sourceOrder,
+      })
+      continue
+    }
+    const gate = PUZZLE_GATE_MACRO.exec(line.content)
+    if (gate) {
+      gates.push({
+        gated,
+        options: (gate[1] ?? "").trim(),
+        section: line.section,
+        sourceOrder,
+      })
+    }
+  }
+
+  return { gates, pieces }
+}
+
 export function parseCourseAchievementsDeclaration(markdown: string): boolean {
   return visibleCourseLines(markdown).some((line) =>
     line.lootIfCatalogEligible &&
@@ -1099,6 +1182,16 @@ export async function discoverCourseSecretSlideDeclarations(): Promise<
 > {
   const markdown = await loadCourseMarkdown()
   return markdown ? parseCourseSecretSlideDeclarations(markdown) : []
+}
+
+export async function requireCoursePuzzleDeclarations(): Promise<
+  CoursePuzzleDiscovery
+> {
+  const markdown = await loadCourseMarkdown()
+  if (markdown === null) {
+    throw new Error("Die LiaScript-Kursquelle konnte nicht geladen werden.")
+  }
+  return parseCoursePuzzleDeclarations(markdown)
 }
 
 export async function discoverCourseAchievementsDeclaration(): Promise<boolean> {

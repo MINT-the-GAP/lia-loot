@@ -43,6 +43,12 @@ test("startet mit einem leeren Schlüssel-Inventar", () => {
       yellow: 0,
       purple: 0,
       orange: 0,
+      magenta: 0,
+      white: 0,
+      black: 0,
+      turquoise: 0,
+      gray: 0,
+      brown: 0,
     },
     collectedKeys: [],
     unlockedLocks: [],
@@ -146,7 +152,7 @@ test("migriert alte Inventare ohne Schlossliste verlustfrei", () => {
   assert.deepEqual(restored.state().unlockedLocks, [])
 })
 
-test("verwaltet alle sechs Farben unabhängig", () => {
+test("verwaltet alle zwölf Farben unabhängig", () => {
   browserSession()
   const store = new KeyInventoryStore()
   KEY_COLORS.forEach((color, index) => {
@@ -211,6 +217,13 @@ test("ordnet deutsche und englische Farbnamen zu", () => {
   assert.equal(requestedKeyColor("gelb"), "yellow")
   assert.equal(requestedKeyColor("violett"), "purple")
   assert.equal(requestedKeyColor("orange"), "orange")
+  assert.equal(requestedKeyColor("magenta"), "magenta")
+  assert.equal(requestedKeyColor("weiß"), "white")
+  assert.equal(requestedKeyColor("BLACK"), "black")
+  assert.equal(requestedKeyColor("türkis"), "turquoise")
+  assert.equal(requestedKeyColor("grey"), "gray")
+  assert.equal(requestedKeyColor("braun"), "brown")
+  assert.equal(requestedKeyColor("brau"), "brown")
   assert.equal(requestedKeyColor("auto"), null)
   assert.equal(requestedKeyColor("@1"), null)
   assert.equal(isKeyColorRequest("gruen"), true)
@@ -280,6 +293,16 @@ test("migriert den versionslosen Altzustand genau einmal", () => {
   const migrated = new KeyInventoryStore()
   assert.equal(migrated.isKeyCollected("legacy:yellow"), true)
   assert.equal(migrated.isLockUnlocked("legacy:lock"), true)
+  for (const color of [
+    "magenta",
+    "white",
+    "black",
+    "turquoise",
+    "gray",
+    "brown",
+  ]) {
+    assert.equal(migrated.state().keys[color], 0)
+  }
   assert.equal(data.has(legacyKey), false)
 
   setLiaCourseVersion("2.0.0")

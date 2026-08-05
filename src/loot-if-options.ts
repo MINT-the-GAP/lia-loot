@@ -1,5 +1,6 @@
 import { resolveLockTarget, type LockTarget } from "./lock-targets.ts"
 import type { ResourceKind } from "./types.ts"
+import type { KeyColor } from "./key-colors.ts"
 
 export const LOOT_IF_ACTIONS = ["spawn"] as const
 export type LootIfAction = (typeof LOOT_IF_ACTIONS)[number]
@@ -37,6 +38,7 @@ export type LootIfCondition =
       value: number
     }
   | { kind: "lock-opened"; target: LockTarget }
+  | { kind: "puzzle-gate-opened"; color: KeyColor }
   | { kind: "secret-slide-visited" }
   | { kind: "magnifier-found" }
   | { kind: "word-highlighted"; color: MarkerColor; word: string | null }
@@ -181,6 +183,39 @@ function markerColor(value: string): MarkerColor | null {
   return aliases[key] ?? null
 }
 
+function puzzleColor(value: string): KeyColor | null {
+  const aliases: Readonly<Record<string, KeyColor>> = {
+    rot: "red",
+    red: "red",
+    blau: "blue",
+    blue: "blue",
+    grun: "green",
+    gruen: "green",
+    green: "green",
+    gelb: "yellow",
+    yellow: "yellow",
+    lila: "purple",
+    violett: "purple",
+    purple: "purple",
+    orange: "orange",
+    magenta: "magenta",
+    weiss: "white",
+    white: "white",
+    schwarz: "black",
+    black: "black",
+    turkis: "turquoise",
+    tuerkis: "turquoise",
+    turquoise: "turquoise",
+    grau: "gray",
+    gray: "gray",
+    grey: "gray",
+    braun: "brown",
+    brau: "brown",
+    brown: "brown",
+  }
+  return aliases[fixedKey(value)] ?? null
+}
+
 function comparisonMatch(
   trigger: string,
 ): { comparator: LootIfComparator; label: string; value: string } | null {
@@ -263,6 +298,20 @@ export function parseLootIfCondition(trigger: string): LootIfCondition | null {
     return { kind: "magnifier-found" }
   }
   if (key === "magnifier-found") return { kind: "magnifier-found" }
+
+  const puzzle =
+    /^\s*(?:puzzletor|puzzle-gate)\s*:\s*(.+?)\s*$/iu.exec(trigger) ??
+    /^\s*(rot(?:es)?|blau(?:es)?|gr(?:ü|ue)n(?:es)?|gelb(?:es)?|lila(?:farbenes)?|orangefarbenes|magentafarbenes|wei(?:ß|ss)es|schwarzes|t(?:ü|ue)rkisfarbenes|graues|braunes)\s+puzzletor\s+(?:geöffnet|geoeffnet)\s*$/iu.exec(
+      trigger,
+    )
+  if (puzzle) {
+    const color = puzzleColor(
+      puzzle[1]
+        .replace(/farbenes$/iu, "")
+        .replace(/es$/iu, ""),
+    )
+    if (color) return { kind: "puzzle-gate-opened", color }
+  }
 
   const highlighted = parseHighlightCondition(trigger)
   if (highlighted) return highlighted

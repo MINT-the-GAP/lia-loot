@@ -101,6 +101,11 @@ export const ACHIEVEMENTS: Readonly<
     title: "Schlossknacker",
     message: "Du hast alle Schlösser geöffnet.",
   },
+  "all-puzzle-gates-opened": {
+    id: "all-puzzle-gates-opened",
+    title: "Puzzlemeister",
+    message: "Du hast alle Puzzletore geöffnet.",
+  },
   "secret-slide-found": {
     id: "secret-slide-found",
     title: "Geheimnis entdeckt",
@@ -121,6 +126,8 @@ export class AchievementManager {
   private explorationCompleted = emptyExplorationCounts()
   private lockTotal: number | null = null
   private unlockedLocks = 0
+  private puzzleGateTotal: number | null = null
+  private solvedPuzzleGates = 0
   private secretFound = false
 
   constructor(store: AchievementStore, notify: AchievementNotifier) {
@@ -201,6 +208,17 @@ export class AchievementManager {
     this.evaluateLockProgress()
   }
 
+  puzzleCatalogReady(total: number, solved: number): void {
+    this.puzzleGateTotal = normalizedCount(total)
+    this.solvedPuzzleGates = normalizedCount(solved)
+    this.evaluatePuzzleProgress()
+  }
+
+  puzzleGateSolved(solved: number): void {
+    this.solvedPuzzleGates = normalizedCount(solved)
+    this.evaluatePuzzleProgress()
+  }
+
   secretSlideFound(): void {
     this.secretFound = true
     this.evaluate("secret-slide-found", true)
@@ -216,6 +234,7 @@ export class AchievementManager {
     this.evaluateChestProgress()
     this.evaluateExplorationProgress()
     this.evaluateLockProgress()
+    this.evaluatePuzzleProgress()
     this.evaluate("secret-slide-found", this.secretFound)
   }
 
@@ -265,6 +284,15 @@ export class AchievementManager {
       this.lockTotal !== null &&
         this.lockTotal > 0 &&
         this.unlockedLocks >= this.lockTotal,
+    )
+  }
+
+  private evaluatePuzzleProgress(): void {
+    this.evaluate(
+      "all-puzzle-gates-opened",
+      this.puzzleGateTotal !== null &&
+        this.puzzleGateTotal > 0 &&
+        this.solvedPuzzleGates >= this.puzzleGateTotal,
     )
   }
 

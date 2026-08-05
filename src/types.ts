@@ -1,4 +1,4 @@
-import type { KeyCounts } from "./key-colors"
+import type { KeyColor, KeyCounts } from "./key-colors"
 
 export type TrophyTier = "gold" | "silver" | "copper" | null
 export const RESOURCE_KINDS = ["gold", "diamonds", "energy"] as const
@@ -16,6 +16,7 @@ export const ACHIEVEMENT_IDS = [
   "all-soil-dug",
   "all-plants-bloomed",
   "all-locks-opened",
+  "all-puzzle-gates-opened",
   "secret-slide-found",
 ] as const
 
@@ -63,6 +64,17 @@ export interface KeyInventoryState {
   keys: KeyCounts
   collectedKeys: string[]
   unlockedLocks: string[]
+}
+
+export type PuzzleCollectedPieces = Record<KeyColor, number[]>
+export type PuzzlePlacements = Record<KeyColor, Array<number | null>>
+
+export interface PuzzleState {
+  version: 1
+  signature: string
+  collected: PuzzleCollectedPieces
+  placements: PuzzlePlacements
+  solvedGates: KeyColor[]
 }
 
 export interface MagnifierState {

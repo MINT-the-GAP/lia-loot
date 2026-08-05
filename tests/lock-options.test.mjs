@@ -24,6 +24,21 @@ test("liest Farbe und optionale Folienbindung unabhängig von der Reihenfolge", 
   })
 })
 
+test("unterstützt alle neuen Schlossfarben", () => {
+  for (const [authored, internal] of [
+    ["magenta", "magenta"],
+    ["weiß", "white"],
+    ["schwarz", "black"],
+    ["türkis", "turquoise"],
+    ["grau", "gray"],
+    ["braun", "brown"],
+  ]) {
+    const parsed = parseLockOptions(authored)
+    assert.equal(parsed.valid, true, authored)
+    assert.equal(parsed.color, internal, authored)
+  }
+})
+
 test("weist fehlende, mehrfache und unbekannte Schlosswerte fail-closed zurück", () => {
   for (const specification of [
     "",

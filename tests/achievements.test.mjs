@@ -77,6 +77,7 @@ test("wertet vor Aktivierung gesammelte Fakten in stabiler Reihenfolge aus", () 
       exploration(1, 1, 1, 1),
     )
     manager.lockCatalogReady(1, 1)
+    manager.puzzleCatalogReady(1, 1)
     manager.secretSlideFound()
     assert.deepEqual(notifications, [])
 
@@ -92,8 +93,25 @@ test("wertet vor Aktivierung gesammelte Fakten in stabiler Reihenfolge aus", () 
       "all-soil-dug",
       "all-plants-bloomed",
       "all-locks-opened",
+      "all-puzzle-gates-opened",
       "secret-slide-found",
     ])
+  })
+})
+
+test("vergibt den Puzzleerfolg erst nach allen gültigen Toren", () => {
+  withWindow("?puzzles", () => {
+    const notifications = []
+    const manager = new AchievementManager(
+      new AchievementStore(),
+      (achievement) => notifications.push(achievement.id),
+    )
+    manager.enable()
+    manager.puzzleCatalogReady(2, 0)
+    manager.puzzleGateSolved(1)
+    assert.deepEqual(notifications, [])
+    manager.puzzleGateSolved(2)
+    assert.deepEqual(notifications, ["all-puzzle-gates-opened"])
   })
 })
 

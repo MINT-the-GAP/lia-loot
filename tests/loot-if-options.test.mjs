@@ -115,6 +115,31 @@ test("parst Besuch einer Geheimfolie und Fund der Lupe", () => {
   }
 })
 
+test("parst ein geöffnetes Puzzletor über Farbe", () => {
+  assert.deepEqual(parseLootIfCondition("Puzzletor: rot"), {
+    kind: "puzzle-gate-opened",
+    color: "red",
+  })
+  assert.deepEqual(parseLootIfCondition("Blaues Puzzletor geöffnet"), {
+    kind: "puzzle-gate-opened",
+    color: "blue",
+  })
+  for (const [trigger, color] of [
+    ["Puzzletor: magenta", "magenta"],
+    ["Weißes Puzzletor geöffnet", "white"],
+    ["Schwarzes Puzzletor geöffnet", "black"],
+    ["Türkisfarbenes Puzzletor geöffnet", "turquoise"],
+    ["Graues Puzzletor geöffnet", "gray"],
+    ["Braunes Puzzletor geöffnet", "brown"],
+  ]) {
+    assert.deepEqual(parseLootIfCondition(trigger), {
+      kind: "puzzle-gate-opened",
+      color,
+    })
+  }
+  assert.equal(parseLootIfCondition("Puzzletor: pink"), null)
+})
+
 test("parst farbige Markierungen optional wortgenau", () => {
   for (const trigger of [
     "markiert:rot",

@@ -35,6 +35,7 @@ import {
 } from "./resource-bar.ts"
 import {
   observeLiaSlideActivity,
+  liaSlideIsAccessible,
   sectionFromLootId,
   sourceSlideIsActive,
 } from "./slide-activity.ts"
@@ -236,6 +237,12 @@ function syncMagnifier(host: HTMLElement): void {
   }
   if (hostIsRevealBlocked(host, false)) {
     eligibleMagnifierIds.delete(magnifierId)
+    host.hidden = true
+    return
+  }
+  if (!liaSlideIsAccessible(request.sourceSection)) {
+    eligibleMagnifierIds.delete(magnifierId)
+    clearHostRevealLayers(host)
     host.hidden = true
     return
   }

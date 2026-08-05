@@ -31,6 +31,10 @@ function blockClick(event: MouseEvent): void {
   event.stopImmediatePropagation()
 }
 
+function isAvailableAction(action: HTMLButtonElement): boolean {
+  return !action.disabled && action.closest("[inert]") === null
+}
+
 function trialCount(quiz: Element): number {
   const text = quiz.querySelector(CHECK_SELECTOR)?.textContent?.trim() ?? ""
   const match = text.match(/(?:^|\s)(\d+)\s*$/)
@@ -133,14 +137,14 @@ export function installQuizEventTracking(handlers: QuizEventHandlers): void {
   const pendingChecks = new WeakSet<Element>()
   const pendingHints = new WeakSet<Element>()
 
-  document.addEventListener(
+  window.addEventListener(
     "click",
     (event) => {
       const target = eventElement(event.target)
       if (!target) return
 
       const check = target.closest<HTMLButtonElement>(CHECK_SELECTOR)
-      if (check && !check.disabled) {
+      if (check && isAvailableAction(check)) {
         const quiz = check.closest(QUIZ_SELECTOR)
         if (
           !quiz ||
@@ -188,7 +192,7 @@ export function installQuizEventTracking(handlers: QuizEventHandlers): void {
       }
 
       const hint = target.closest<HTMLButtonElement>(HINT_SELECTOR)
-      if (hint && !hint.disabled) {
+      if (hint && isAvailableAction(hint)) {
         const quiz = hint.closest(QUIZ_SELECTOR)
         if (!quiz || !quiz.classList.contains("open")) return
         if (pendingHints.has(quiz)) {
@@ -223,7 +227,7 @@ export function installQuizEventTracking(handlers: QuizEventHandlers): void {
       }
 
       const resolve = target.closest<HTMLButtonElement>(RESOLVE_SELECTOR)
-      if (resolve && !resolve.disabled) {
+      if (resolve && isAvailableAction(resolve)) {
         const quiz = resolve.closest(QUIZ_SELECTOR)
         if (!quiz || !quiz.classList.contains("open")) return
         if (!handlers.useResolve()) blockClick(event)

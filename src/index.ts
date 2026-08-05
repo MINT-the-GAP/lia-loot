@@ -42,6 +42,8 @@ import { ResourceStore } from "./resource-store"
 import { createConfig } from "./score"
 import { installSecretSlides } from "./secret-slides"
 import { installSlidePortals } from "./slide-portal"
+import { installPuzzles } from "./puzzle-runtime"
+import { PuzzleStore } from "./puzzle-store"
 import { injectStyles } from "./style"
 import { HighscoreStore } from "./store"
 import { installTimerEventTracking } from "./timer-events"
@@ -61,6 +63,7 @@ function boot(): void {
   const explorationStore = new ExplorationStore()
   const lootIfStore = new LootIfStore()
   const achievementStore = new AchievementStore()
+  const puzzleStore = new PuzzleStore()
   const achievements = new AchievementManager(
     achievementStore,
     showAchievement,
@@ -206,9 +209,21 @@ function boot(): void {
       magnifierFound: () => magnifierStore.isCollected(),
       resourceState: () => resourceStore.state(),
       unlockedLockIds: () => keyInventoryStore.state().unlockedLocks,
+      openedPuzzleColors: () => puzzleStore.solvedColors(),
     },
     lootIfStore,
   )
+  installPuzzles(puzzleStore, {
+    catalogReady: (total, solved) => {
+      achievements.puzzleCatalogReady(total, solved)
+      refreshLootIf()
+    },
+    changed: refreshLootIf,
+    gateSolved: (solved) => {
+      achievements.puzzleGateSolved(solved)
+      refreshLootIf()
+    },
+  })
   installSecretSlides({
     found: () => {
       achievements.secretSlideFound()

@@ -43,6 +43,7 @@ const EDITABLE_NAVIGATION_SELECTOR = [
   ".ace_editor",
   ".CodeMirror",
 ].join(",")
+const EDITOR_NAVIGATION_SELECTOR = ".ace_editor, .CodeMirror"
 
 const installedDocuments = new WeakSet<Document>()
 const installedWindows = new WeakSet<Window>()
@@ -101,21 +102,98 @@ function eventElement(target: EventTarget | null): Element | null {
   return node.parentElement ?? null
 }
 
+function editableSlideNavigationBoundary(
+  target: EventTarget | null,
+): Element | null {
+  const element = eventElement(target)
+  if (!element) return null
+  const editor = element.closest(EDITOR_NAVIGATION_SELECTOR)
+  if (editor) return editor
+  if ((element as HTMLElement).isContentEditable) return element
+  return element.closest(EDITABLE_NAVIGATION_SELECTOR)
+}
+
 export function isEditableSlideNavigationTarget(
   target: EventTarget | null,
 ): boolean {
-  const element = eventElement(target)
-  if (!element) return false
-  if ((element as HTMLElement).isContentEditable) return true
-  return Boolean(element.closest(EDITABLE_NAVIGATION_SELECTOR))
+  return editableSlideNavigationBoundary(target) !== null
+}
+
+export function preserveEditableSlideNavigation(
+  event: KeyboardEvent,
+): boolean {
+  const boundary = editableSlideNavigationBoundary(event.target)
+  if (!boundary) return false
+
+  const properties = ["key", "code", "keyCode", "which"] as const
+  const originals = {
+    key: event.key,
+    code: event.code,
+    keyCode: event.keyCode,
+    which: event.which,
+  }
+  const neutral = {
+    key: "Unidentified",
+    code: "Unidentified",
+    keyCode: 0,
+    which: 0,
+  }
+  const descriptors = new Map<
+    (typeof properties)[number],
+    PropertyDescriptor | undefined
+  >()
+  const restoreProperties = (): void => {
+    for (const property of properties) {
+      const descriptor = descriptors.get(property)
+      if (descriptor) {
+        Object.defineProperty(event, property, descriptor)
+      } else {
+        delete (event as unknown as Record<string, unknown>)[property]
+      }
+    }
+  }
+
+  try {
+    for (const property of properties) {
+      descriptors.set(property, Object.getOwnPropertyDescriptor(event, property))
+      Object.defineProperty(event, property, {
+        configurable: true,
+        get: () => {
+          const current = event.currentTarget
+          const insideEditor =
+            current instanceof Node &&
+            (current === boundary || boundary.contains(current))
+          return insideEditor ? originals[property] : neutral[property]
+        },
+      })
+    }
+  } catch {
+    restoreProperties()
+    return false
+  }
+
+  const stopAfterEditableHandlers = (current: Event): void => {
+    if (current !== event) return
+    current.stopPropagation()
+    restoreProperties()
+  }
+  boundary.addEventListener("keydown", stopAfterEditableHandlers, {
+    once: true,
+  })
+  ;(event.view ?? window).setTimeout(() => {
+    boundary.removeEventListener("keydown", stopAfterEditableHandlers)
+    restoreProperties()
+  }, 0)
+  return true
 }
 
 function blockLockedSlideNavigation(event: KeyboardEvent): void {
   if (!navigationLocked || !isSequentialSlideNavigationKey(event)) return
 
-  // Preserve native cursor/widget behavior, but never let LiaScript's global
-  // swipe handler turn the same key into a slide transition.
-  if (!isEditableSlideNavigationTarget(event.target)) event.preventDefault()
+  // Let native editors and widgets process the key at their own boundary,
+  // then stop it before LiaScript's document-level navigation handler.
+  if (preserveEditableSlideNavigation(event)) return
+  event.preventDefault()
   event.stopImmediatePropagation()
   event.stopPropagation()
 }

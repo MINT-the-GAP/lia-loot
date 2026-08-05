@@ -33,6 +33,7 @@ import {
 } from "./exploration.ts"
 import {
   observeLiaSlideActivity,
+  liaSlideIsAccessible,
   sectionFromLootId,
   sourceSlideIsActive,
 } from "./slide-activity.ts"
@@ -642,6 +643,11 @@ function syncInlineKey(
 
   const { color } = resolveKeyAppearance(keyId, request.requestedColor)
   if (collectingIds.has(keyId)) return
+  if (!liaSlideIsAccessible(request.sourceSection)) {
+    eligibleKeyIds.delete(keyId)
+    clearKeyHost(host)
+    return
+  }
 
   const visible = visibilityGate.visible(
     `pickup:${keyId}`,
@@ -674,6 +680,11 @@ function syncSurfaceKeys(): void {
   for (const request of surfaceRequests.values()) {
     const keyId = surfaceKeyInstanceId(request.baseId, request.placement)
     const collecting = collectingIds.has(keyId)
+    if (!liaSlideIsAccessible(request.sourceSection) && !collecting) {
+      eligibleKeyIds.delete(keyId)
+      removeSurfacePlacements(keyId)
+      continue
+    }
     if (controller.collected(keyId) && !collecting) {
       eligibleKeyIds.delete(keyId)
       visibilityGate.forget(`pickup:${keyId}`)

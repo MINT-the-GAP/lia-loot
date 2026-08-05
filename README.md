@@ -89,6 +89,8 @@ script:   ./dist/index.js
 @Diamanttruhe: @LootTruhe_(@uid,@0,diamonds)
 @Energiekiste: @LootTruhe_(@uid,@0,energy)
 @Schluessel: @LootSchluessel_(@uid,@0)
+@Puzzleteil: @LootPuzzleteil_(@uid,@0)
+@Puzzletor: @LootPuzzletor_(@uid,@0)
 @Lupe: @LootLupe_(@uid,@0)
 @Schaufel: @LootWerkzeug_(@uid,shovel,@0)
 @Giesskanne: @LootWerkzeug_(@uid,watering-can,@0)
@@ -115,6 +117,18 @@ script:   ./dist/index.js
 @LootSchluessel_
 <lia-keep>
 <lia-loot-key data-key-id="@0" data-color="@1"></lia-loot-key>
+</lia-keep>
+@end
+
+@LootPuzzleteil_
+<lia-keep>
+<lia-loot-puzzle-piece data-piece-id="@0" data-options="@1"></lia-loot-puzzle-piece>
+</lia-keep>
+@end
+
+@LootPuzzletor_
+<lia-keep>
+<lia-loot-puzzle-gate data-gate-id="@0" data-options="@1"></lia-loot-puzzle-gate>
 </lia-keep>
 @end
 
@@ -177,6 +191,7 @@ Das Template erkennt nach dem Start automatisch:
 - fehlgeschlagene Klicks auf **Prüfen** bei nativen LiaScript-Quizzen,
 - jeden erstmals geöffneten nativen Hinweis `[[?]]`,
 - eingesammelte farbige Schlüssel für das persönliche Inventar,
+- nummerierte Puzzleteile und farbige Puzzletore als Fortschrittsgrenzen,
 - mit passenden Farbschlüsseln entsperrbare Bedienobjekte,
 - anklickbare Einweg- und Zweiwegportale zwischen Kursfolien,
 - das letzte native Quiz auf der letzten Kursseite als Abschlussaufgabe,
@@ -423,6 +438,7 @@ Die Sichtbarkeitsbedingungen gelten für alle echten Fund- und Freigabeobjekte:
 | Schlüssel | `@Schluessel` |
 | alle drei Truhenarten | `@Schatztruhe`, `@Diamanttruhe`, `@Energiekiste` |
 | Such- und Aktionswerkzeuge | `@Lupe`, `@Schaufel`, `@Giesskanne` |
+| Puzzleteile | `@Puzzleteil` |
 | freizugebende Bereiche | `@Erdhaufen`, `@Pflanze` und der Alias `@Blume` |
 
 Beispiele mit einzelnen und kombinierten Bedingungen:
@@ -571,6 +587,12 @@ Kursautorinnen und Kursautoren können eine Farbe gezielt festlegen:
 @Schluessel(gelb)
 @Schluessel(lila)
 @Schluessel(orange)
+@Schluessel(magenta)
+@Schluessel(weiss)
+@Schluessel(schwarz)
+@Schluessel(tuerkis)
+@Schluessel(grau)
+@Schluessel(braun)
 ```
 
 Die vollständige, eindeutige Grammatik lautet:
@@ -580,7 +602,10 @@ Die vollständige, eindeutige Grammatik lautet:
 ```
 
 Alle Optionen sind optional und reihenfolgeunabhängig. Zulässige Farben sind
-`rot`, `blau`, `gruen`, `gelb`, `lila` und `orange`. Als Oberflächenziel ist
+`rot`, `blau`, `gruen`, `gelb`, `lila`, `orange`, `magenta`, `weiss`,
+`schwarz`, `tuerkis`, `grau` und `braun`. Die natürlichen Schreibweisen
+`grün`, `weiß` und `türkis` sowie die englischen Farbnamen werden ebenfalls
+erkannt. Als Oberflächenziel ist
 höchstens eines der Ziele `toc`, `menu`, `classroom`, `info`, `translator` oder
 `mode` erlaubt. Ohne Ziel bleibt der Schlüssel ein Inline-Fund. `anker`, eine
 Dauer wie `30s` oder `1min` und genau eine der Verbergungsarten `unsichtbar` oder
@@ -636,6 +661,112 @@ Vier gezielt vorbereitete, sofort erkennbare Schlüssel – darunter zwei grüne
 @Schluessel(blau)
 @Schluessel(gruen)
 @Schluessel(gruen)
+
+## `@Puzzleteil` und `@Puzzletor`
+
+          --{{0}}--
+Mit Puzzleteilen lassen sich farbige Fortschrittstore bauen. Jedes Teil besitzt
+eine Farbe und eine eindeutige Zahl. Beim Anklicken verschwindet es von der
+Fundstelle und erscheint als auswählbarer Button in der Ressourcenleiste:
+
+```markdown
+@Puzzleteil(rot; 4)
+```
+
+Beide Puzzle-Makros stehen jeweils allein in einer eigenen Markdown-Zeile.
+
+Ein Tor legt mit einer Matrix fest, welche Teile benötigt werden und in welcher
+Anordnung sie am Ende liegen müssen:
+
+```markdown
+@Puzzletor(rot; [[2;3];[1;6];[5;4]])
+```
+
+Dieses Beispiel erzeugt ein Raster mit zwei Spalten und drei Zeilen. Die sechs
+Slots müssen zeilenweise mit `2, 3 / 1, 6 / 5, 4` belegt werden. Die Zahlen
+beschreiben die Zielanordnung, nicht die Reihenfolge, in der die Teile eingesetzt
+werden. Das Tor öffnet sich automatisch, sobald das Raster exakt stimmt.
+
+Die Bedienung funktioniert vollständig ohne Drag-and-drop: Wähle ein Teil in der
+Ressourcenleiste oder einen bereits belegten Slot und klicke danach auf den
+gewünschten Steckplatz. Ein belegter Zielslot gibt sein bisheriges Teil wieder an
+die Leiste zurück. Drag-and-drop steht zusätzlich zur Verfügung. Farbe, sichtbare
+Zahl, zugängliche Beschriftung und Fokusmarkierung kennzeichnen jedes Teil.
+
+Für ein Tor gelten folgende strikte Regeln:
+
+- Erlaubte Farben sind `rot`, `blau`, `gruen`, `gelb`, `lila`, `orange`,
+  `magenta`, `weiss`, `schwarz`, `tuerkis`, `grau` und `braun`. `grün`,
+  `weiß` und `türkis` sind ebenfalls zulässig.
+- Pro Farbe ist genau ein Tor zulässig.
+- Eine Matrix muss rechteckig sein und für `N` Slots jede Zahl von `1` bis
+  `N` genau einmal enthalten.
+- Ein Tor kann höchstens 16 Slots besitzen.
+- Zu jeder Matrixzahl muss genau ein gleichfarbiges `@Puzzleteil` vor dem
+  eigenen Tor deklariert sein. Fehlende, doppelte, verwaiste oder hinter dem
+  eigenen Tor liegende Teile sind Konfigurationsfehler.
+- Ein fehlerhaftes Tor bleibt geschlossen und zeigt die Diagnose direkt im Kurs
+  sowie in der Browserkonsole.
+
+Ohne Zusatzoption ist das Tor ein **Navigationstor**. Solange es geschlossen ist,
+sind alle späteren Folien hinter diesem Tor weder über Weiter, ToC, direkten
+Folien-Hash, Browserhistorie noch Portale erreichbar. Rückwärtsnavigation bleibt
+frei. Nach dem Öffnen werden die Folien bis einschließlich des nächsten noch
+geschlossenen Puzzletors sichtbar. Das letzte Tor reicht bis zum Dateiende.
+Geheimfolien bleiben unabhängig davon geheim.
+
+Es gibt bewusst kein `@EndePuzzletor`. Bei Navigationstoren bildet das nächste
+Puzzletor beziehungsweise das Dateiende die nächste Fortschrittsgrenze.
+
+Mit `anker` wird das Tor stattdessen zu einem **lokalen Inhaltstor**:
+
+```markdown
+@Puzzleteil(blau; 1)
+@Puzzleteil(blau; 2)
+
+@Puzzletor(blau; [[2;1]]; anker)
+
+Dieser Inhalt erscheint erst nach der richtigen Anordnung.
+
+# Nächste Überschrift
+```
+
+
+@Puzzleteil(blau; 1)
+@Puzzleteil(blau; 2)
+
+@Puzzletor(blau; [[2;1]]; anker)
+
+
+Ein geankertes Tor verändert weder Seitennavigation noch ToC. Es verbirgt nur den
+Inhalt nach seinem Aufruf bis zur nächsten Markdown-`#`-Überschrift. Gibt es
+keine weitere Überschrift, endet der Bereich am Dateiende. Mehrere Bereichs-Gates
+wie `@lootif`, `@Erdhaufen`, `@Pflanze` und ein geankertes Puzzletor werden
+UND-verknüpft: Das Öffnen eines Tors entfernt keine andere noch aktive Sperre.
+
+Puzzleteile unterstützen dieselben Fundoptionen wie andere echte Sammelobjekte:
+`anker`, Verzögerungen, Theme-, Farbmodus- und Annotationsbedingungen,
+`unsichtbar` oder `zauberstaub` sowie direkte `erde`-/`pflanze`-Schichten.
+Oberflächenziele wie `menu` oder `toc` sind nicht zulässig:
+
+```markdown
+@Puzzleteil(gruen; 3; anker; 12s; theme=blau; zauberstaub)
+@Puzzleteil(gruen; 1; erde-unsichtbar; pflanze)
+@Puzzleteil(gruen; 2)
+@Puzzletor(gruen; [[2;3;1]])
+```
+
+Sammlung, Belegung und geöffnete Tore bleiben im aktuellen Browser-Tab erhalten
+und sind an Kurs-URL, Kursversion und die vollständige Puzzlekonfiguration
+gebunden. Ändert sich Matrix oder Teilekatalog, startet dieses Puzzle sicher neu.
+
+Ein geöffnetes Tor kann außerdem bedingten Inhalt auslösen:
+
+```markdown
+@lootif(Puzzletor: rot; spawn)
+Das rote Tor wurde geöffnet.
+@Endelootif
+```
 
 ## `@Lupe`, `@Unsichtbar` und `@Zauberstaub`
 
@@ -796,6 +927,7 @@ und Zeitoptionen bleiben dabei erhalten:
 | alle Truhenbelohnungen und -ziele | `@Schatztruhe`, `@Diamanttruhe`, `@Energiekiste` |
 | Suchwerkzeug | `@Lupe` |
 | Aktionswerkzeuge | `@Schaufel`, `@Giesskanne` |
+| Puzzleteile | `@Puzzleteil` |
 
 ```markdown
 @Schluessel(blau; translator; erde-unsichtbar; pflanze; unsichtbar)
@@ -894,12 +1026,12 @@ das Schloss auf dem Zweiwegportal zur nächsten Folie:
 
 @Schluessel(blau; anker)
 
-@Portal(11)
+@Portal(12)
 @Schloss(portal, blau)
 
 Dieses Einwegportal führt zurück zur Lupenfolie und erzeugt dort keinen Rückweg:
 
-@Einwegportal(8)
+@Einwegportal(9)
 
 Portale selbst vergeben und verbrauchen weder Gold, Diamanten, Energie noch
 Schlüssel und werden nicht als Fundgegenstände gezählt. Ein Portalschloss ist
@@ -924,8 +1056,10 @@ Portal mit einem farbigen Pixelart-Schloss sperren:
 ```
 
 Das Ziel steht im ersten Parameter, die benötigte Schlüsselfarbe im zweiten. Für
-Schlösser stehen alle sechs Schlüsselfarben `rot`, `blau`, `gruen`, `gelb`, `lila`
-und `orange` zur Verfügung.
+Schlösser stehen alle zwölf Schlüsselfarben `rot`, `blau`, `gruen`, `gelb`,
+`lila`, `orange`, `magenta`, `weiss`, `schwarz`, `tuerkis`, `grau` und
+`braun` zur Verfügung. Natürliche Unicode- und englische Farbnamen werden
+ebenfalls erkannt.
 
 Globale Ziele sperren Elemente der LiaScript-Oberfläche:
 
@@ -1099,6 +1233,7 @@ nach einem Neuladen erhalten.
 | Energie, Gold oder Diamanten vergleichen | `Energie > 0`, `Gold <= 4`, `Diamanten = 2` |
 | geöffnete Kisten eines Typs vergleichen | `Schatztruhen >= 2`, `Diamanttruhen = 1`, `Energiekisten < 4` |
 | bestimmtes Schloss geöffnet | `Schloss: translator` – der Name entspricht dem ersten Argument von `@Schloss` |
+| bestimmtes Puzzletor geöffnet | `Puzzletor: rot` |
 | eine Geheimfolie besucht | `Geheime Folie besucht` |
 | Lupe gefunden | `Lupe gefunden` |
 | ein beliebiges Wort mit einer Farbe markiert | `markiert: gelb` |
@@ -1165,6 +1300,7 @@ Stapel und schieben ältere Meldungen nach oben; jede Meldung hat ihren eigenen 
 | Ausgrabungsprofi | `all-soil-dug` | Alle Erdhaufen wurden mit der Schaufel weggebuddelt. |
 | Grüner Daumen | `all-plants-bloomed` | Alle kleinen Pflanzen wurden mit der Gießkanne zum Blühen gebracht. Das anschließende Öffnen der Blüte ist dafür nicht erforderlich. |
 | Schlossknacker | `all-locks-opened` | Alle gültig deklarierten globalen, Template-, gegenstands- und quizlokalen Schlösser einschließlich der Live-Beispiele dieser README wurden mit passenden Schlüsseln geöffnet. |
+| Puzzlemeister | `all-puzzle-gates-opened` | Alle gültig deklarierten Puzzletore wurden korrekt zusammengesetzt und geöffnet. |
 | Geheimnis entdeckt | `secret-slide-found` | Eine Geheimfolie wurde nach exakter Suche tatsächlich geöffnet. |
 
 Als bewertbare Aufgaben zählen native Quizze mit **Prüfen** und **Auflösen**;

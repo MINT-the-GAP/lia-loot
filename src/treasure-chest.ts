@@ -26,6 +26,7 @@ import {
 } from "./exploration.ts"
 import {
   observeLiaSlideActivity,
+  liaSlideIsAccessible,
   sectionFromLootId,
   sourceSlideIsActive,
 } from "./slide-activity.ts"
@@ -752,6 +753,13 @@ function syncInline(
     if (host.childElementCount > 0) host.replaceChildren()
     return
   }
+  if (!liaSlideIsAccessible(request.sourceSection) && !opening) {
+    eligibleChestIds.delete(chestId)
+    clearHostRevealLayers(host)
+    setHostConcealment(host, null)
+    if (host.childElementCount > 0) host.replaceChildren()
+    return
+  }
 
   const visible = visibilityGate.visible(
     `chest:${request.baseId}`,
@@ -1016,6 +1024,14 @@ function syncPortals(): void {
 
   const activeIds = new Set<string>()
   for (const [baseId, request] of portalRequests) {
+    if (!liaSlideIsAccessible(request.sourceSection)) {
+      for (const placement of request.placements) {
+        const chestId = `${baseId}:${placement}`
+        eligibleChestIds.delete(chestId)
+        removePortal(portalFor(chestId))
+      }
+      continue
+    }
     const visible = visibilityGate.visible(
       `chest:${baseId}`,
       request.visibility,

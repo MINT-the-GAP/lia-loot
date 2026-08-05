@@ -135,7 +135,16 @@
     </button>
   </aside>
 
-  <main id="fixture-slide">
+  <nav id="lia-toc" hidden aria-hidden="true">
+    <div class="lia-toc__content">
+      <a id="focusedToc" class="lia-toc__link" href="#1">
+        Surface-Key-Testkurs
+      </a>
+    </div>
+  </nav>
+
+  <div class="lia-slide__container">
+  <main id="fixture-slide" class="lia-slide__content">
     <h1>Surface-Key-Testkurs</h1>
     <lia-loot-magnifier
       id="fixture-magnifier"
@@ -194,6 +203,7 @@
       ></lia-loot-chest>
     </section>
   </main>
+  </div>
 
   <script>
     ;(function prepareFixture() {

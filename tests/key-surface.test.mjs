@@ -63,6 +63,21 @@ test("bewahrt alle bisherigen Inline-Schluesselformen", () => {
   assert.equal(parseKeyPickupOptions("anker; 1min").valid, true)
 })
 
+test("akzeptiert alle neuen Schlüsselfarben als Inline-Funde", () => {
+  for (const authored of [
+    "magenta",
+    "weiß",
+    "schwarz",
+    "türkis",
+    "grau",
+    "braun",
+  ]) {
+    const parsed = parseKeyPickupOptions(authored)
+    assert.equal(parsed.valid, true, authored)
+    assert.equal(parsed.requestedColor, authored, authored)
+  }
+})
+
 test("trennt Schluesselfarbe und gemeinsame Sichtbarkeitsoptionen", () => {
   assert.deepEqual(
     parseKeyPickupOptions(

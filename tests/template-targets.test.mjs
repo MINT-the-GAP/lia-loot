@@ -690,7 +690,11 @@ test("portaliert Template-Truhen floating oder als echtes Menü-Kind", () => {
   )
   assert.match(
     styleSource,
-    /\.loot-object-lock-button--floating\s*\{[\s\S]*?position:\s*fixed;/u,
+    /\.loot-object-lock-button--floating\s*\{[\s\S]*?position:\s*fixed;[\s\S]*?z-index:\s*2147482000;/u,
+  )
+  assert.match(
+    styleSource,
+    /\.loot-object-lock-button--floating\.loot-object-lock-button--local\s*\{\s*z-index:\s*99;\s*\}/u,
   )
 })
 

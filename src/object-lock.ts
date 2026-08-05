@@ -159,6 +159,12 @@ const LOCK_COLOR_NAMES: Record<KeyColor, string> = {
   yellow: "Gelbes Schloss",
   purple: "Lilafarbenes Schloss",
   orange: "Orangefarbenes Schloss",
+  magenta: "Magentafarbenes Schloss",
+  white: "Weißes Schloss",
+  black: "Schwarzes Schloss",
+  turquoise: "Türkisfarbenes Schloss",
+  gray: "Graues Schloss",
+  brown: "Braunes Schloss",
 }
 
 const KEY_ACCUSATIVE_NAMES: Record<KeyColor, string> = {
@@ -168,6 +174,12 @@ const KEY_ACCUSATIVE_NAMES: Record<KeyColor, string> = {
   yellow: "gelben Schlüssel",
   purple: "lilafarbenen Schlüssel",
   orange: "orangefarbenen Schlüssel",
+  magenta: "magentafarbenen Schlüssel",
+  white: "weißen Schlüssel",
+  black: "schwarzen Schlüssel",
+  turquoise: "türkisfarbenen Schlüssel",
+  gray: "grauen Schlüssel",
+  brown: "braunen Schlüssel",
 }
 
 const KEY_NOMINATIVE_NAMES: Record<KeyColor, string> = {
@@ -177,6 +189,12 @@ const KEY_NOMINATIVE_NAMES: Record<KeyColor, string> = {
   yellow: "gelber Schlüssel",
   purple: "lilafarbener Schlüssel",
   orange: "orangefarbener Schlüssel",
+  magenta: "magentafarbener Schlüssel",
+  white: "weißer Schlüssel",
+  black: "schwarzer Schlüssel",
+  turquoise: "türkisfarbener Schlüssel",
+  gray: "grauer Schlüssel",
+  brown: "brauner Schlüssel",
 }
 
 const decorations = new Map<string, Decoration>()

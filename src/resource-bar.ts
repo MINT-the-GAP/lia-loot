@@ -1,4 +1,5 @@
 const BAR_ID = "lia-loot-resource-bar"
+const STATUS_ID = "lia-loot-resource-status"
 const HEADER_SELECTORS = ["header", ".lia-header", "[role='banner']"]
 type ResourceBarKind = "coins" | "gems" | "energy"
 
@@ -30,9 +31,23 @@ function resourceItem(kind: ResourceBarKind, label: string): HTMLDivElement {
 
 function statusMessage(): HTMLSpanElement {
   const status = document.createElement("span")
+  status.id = STATUS_ID
   status.className = "loot-resource-status"
   status.setAttribute("aria-live", "polite")
   status.setAttribute("aria-atomic", "true")
+  return status
+}
+
+function ensureResourceStatus(): HTMLElement {
+  const existing = document.getElementById(STATUS_ID)
+  if (existing) {
+    if (existing.parentElement !== document.body) {
+      document.body.appendChild(existing)
+    }
+    return existing
+  }
+  const status = statusMessage()
+  document.body.appendChild(status)
   return status
 }
 
@@ -52,7 +67,10 @@ function positionBar(bar: HTMLElement): void {
 
 export function installResourceBar(): HTMLElement {
   const existing = document.getElementById(BAR_ID)
-  if (existing) return existing
+  if (existing) {
+    ensureResourceStatus()
+    return existing
+  }
 
   const bar = document.createElement("aside")
   bar.id = BAR_ID
@@ -62,9 +80,9 @@ export function installResourceBar(): HTMLElement {
     resourceItem("coins", "Goldmünzen"),
     resourceItem("gems", "Diamanten"),
     resourceItem("energy", "Energie"),
-    statusMessage(),
   )
   document.body.appendChild(bar)
+  ensureResourceStatus()
   const updatePosition = () => positionBar(bar)
   updatePosition()
   window.addEventListener("resize", updatePosition, { passive: true })
@@ -85,9 +103,15 @@ export function refreshResourceBarVisibility(): void {
     bar.querySelector("[data-loot-magnifier-tool]") !== null
   const hasExplorationTool =
     bar.querySelector("[data-loot-tool-control]") !== null
+  const hasPuzzlePiece =
+    bar.querySelector("[data-loot-puzzle-inventory-piece]") !== null
   bar.classList.toggle(
     "loot-resource-bar--empty",
-    !hasVisibleResource && !hasKeys && !hasMagnifier && !hasExplorationTool,
+    !hasVisibleResource &&
+      !hasKeys &&
+      !hasMagnifier &&
+      !hasExplorationTool &&
+      !hasPuzzlePiece,
   )
 }
 
@@ -129,6 +153,7 @@ export function renderResources(
 }
 
 export function showInsufficientResource(kind: ResourceBarKind): void {
+  installResourceBar()
   const value = document.querySelector<HTMLElement>(`[data-loot-resource="${kind}"]`)
   const item = value?.parentElement
   const status = document.querySelector<HTMLElement>(".loot-resource-status")
@@ -152,8 +177,7 @@ export function showInsufficientResource(kind: ResourceBarKind): void {
 }
 
 export function announceResource(message: string): void {
-  const status = document.querySelector<HTMLElement>(".loot-resource-status")
-  if (!status) return
+  const status = ensureResourceStatus()
   status.textContent = ""
   window.setTimeout(() => {
     status.textContent = message

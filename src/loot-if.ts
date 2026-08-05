@@ -18,6 +18,7 @@ import {
   observeLiaSlideActivity,
 } from "./slide-activity.ts"
 import type { ResourceCounts, ResourceState } from "./types.ts"
+import type { KeyColor } from "./key-colors.ts"
 
 const START_TAG = "lia-loot-if-start"
 const END_LINK_SELECTOR = 'a[href="#lia-loot-if-end"]'
@@ -32,6 +33,7 @@ export interface LootIfController {
   magnifierFound(): boolean
   resourceState(): ResourceState | null
   unlockedLockIds(): readonly string[]
+  openedPuzzleColors(): readonly KeyColor[]
 }
 
 interface LootIfBinding {
@@ -564,6 +566,9 @@ function conditionMet(
   }
   if (condition.kind === "lock-opened") {
     return lockTargetOpened(condition.target)
+  }
+  if (condition.kind === "puzzle-gate-opened") {
+    return controller.openedPuzzleColors().includes(condition.color)
   }
   if (condition.kind === "secret-slide-visited") {
     return store.state().secretSlideVisited

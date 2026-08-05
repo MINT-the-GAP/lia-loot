@@ -76,6 +76,10 @@ export function sourceSlideIsActive(
   )
 }
 
+export function liaSlideIsAccessible(section: number | null): boolean {
+  return slideAccessGuard(section)
+}
+
 function notifyListeners(): void {
   for (const listener of listeners) listener()
 }

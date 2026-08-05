@@ -198,8 +198,8 @@ test("hält fremdabhängige README-Beispiele aus dem Livekatalog heraus", () => 
     /^ {0,3}#{1,6}(?:\s+|$)/u.test(line)
   ).length
   assert.deepEqual(portalCalls, [
-    { macro: "Portal", section: 9, target: 11 },
-    { macro: "Einwegportal", section: 9, target: 8 },
+    { macro: "Portal", section: 10, target: 12 },
+    { macro: "Einwegportal", section: 10, target: 9 },
   ])
   assert.ok(
     portalCalls.every(
@@ -209,7 +209,7 @@ test("hält fremdabhängige README-Beispiele aus dem Livekatalog heraus", () => 
   )
   assert.match(
     markdown,
-    /^@Portal\(11\)\r?\n@Schloss\(portal, blau\)$/mu,
+    /^@Portal\(12\)\r?\n@Schloss\(portal, blau\)$/mu,
   )
 })
 
@@ -228,9 +228,7 @@ test("hält den Escape-Room als lösbaren anspruchsvollen Ressourcen-Parcours", 
   const keyColors = visibleLines
     .map((line) =>
       requestedKeyColor(
-        /^@Schluessel\((rot|blau|gruen|gelb|lila|orange)(?:;|\))/u.exec(
-          line,
-        )?.[1],
+        /^@Schluessel\(\s*([^;)]+)(?:;|\))/u.exec(line)?.[1],
       ),
     )
     .filter((color) => color !== null)

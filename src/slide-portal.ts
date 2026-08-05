@@ -1,8 +1,10 @@
 import { createPortalGraphic } from "./portal-visual.ts"
-import { permitPortalSlideNavigation } from "./secret-slides.ts"
+import {
+  permitPortalSlideNavigation,
+  portalSlideNavigationBlockMessage,
+} from "./secret-slides.ts"
 import {
   navigateToLiaSection,
-  type SlideHistoryMode,
 } from "./slide-navigation.ts"
 import {
   parseSlidePortalOptions,
@@ -347,17 +349,6 @@ function focusDestination(section: number): void {
   focusTimer = window.setTimeout(tryFocusDestination, 0)
 }
 
-function navigate(section: number, historyMode: SlideHistoryMode): boolean {
-  if (!permitPortalSlideNavigation(section)) {
-    announce("Das Portal wartet, bis die Kursnavigation vorbereitet ist.")
-    return false
-  }
-  navigateToLiaSection(section, historyMode)
-  focusDestination(section)
-  scheduleSync()
-  return true
-}
-
 function activatePortal(portalId: string): void {
   const host = [...document.querySelectorAll<HTMLElement>(PORTAL_TAG)].find(
     (candidate) => resolvePortalId(candidate) === portalId,
@@ -375,12 +366,15 @@ function activatePortal(portalId: string): void {
   }
 
   if (request.mode === "one-way") {
-    clearRoute()
-    if (navigate(request.targetSection, "replace")) {
-      announce(
-        `Einwegportal zu Folie ${request.targetSlide} geöffnet.`,
-      )
+    if (!permitPortalSlideNavigation(request.targetSection)) {
+      announce(portalSlideNavigationBlockMessage(request.targetSection))
+      return
     }
+    clearRoute()
+    navigateToLiaSection(request.targetSection, "replace")
+    focusDestination(request.targetSection)
+    announce(`Einwegportal zu Folie ${request.targetSlide} geöffnet.`)
+    scheduleSync()
     return
   }
 
@@ -393,7 +387,7 @@ function activatePortal(portalId: string): void {
     version: 1,
   }
   if (!permitPortalSlideNavigation(request.targetSection)) {
-    announce("Das Portal wartet, bis die Kursnavigation vorbereitet ist.")
+    announce(portalSlideNavigationBlockMessage(request.targetSection))
     return
   }
   setRoute(route)

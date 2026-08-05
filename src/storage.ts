@@ -7,6 +7,7 @@ import type {
   HighscoreState,
   KeyInventoryState,
   MagnifierState,
+  PuzzleState,
   ResourceKind,
   ResourceState,
 } from "./types"
@@ -22,6 +23,7 @@ const CHEST_REWARDS_STORAGE_PREFIX = "lia-loot:chest-rewards:v1:"
 const KEY_INVENTORY_STORAGE_PREFIX = "lia-loot:key-inventory:v1:"
 const MAGNIFIER_STORAGE_PREFIX = "lia-loot:magnifier:v1:"
 const ACHIEVEMENTS_STORAGE_PREFIX = "lia-loot:achievements:v1:"
+const PUZZLE_STORAGE_PREFIX = "lia-loot:puzzles:v1:"
 
 function legacyCourseStorageKey(prefix: string): string {
   const course = `${window.location.origin}${window.location.pathname}${window.location.search}`
@@ -71,6 +73,10 @@ function magnifierStorageKey(): string {
 
 function achievementsStorageKey(): string {
   return courseStorageKey(ACHIEVEMENTS_STORAGE_PREFIX)
+}
+
+function puzzleStorageKey(): string {
+  return courseStorageKey(PUZZLE_STORAGE_PREFIX)
 }
 
 function isState(value: unknown): value is HighscoreState {
@@ -360,6 +366,100 @@ export function saveKeyInventory(state: KeyInventoryState): void {
     )
   } catch {
     // The key inventory still works in memory when browser storage is unavailable.
+  }
+}
+
+function normalizePuzzleState(value: unknown): PuzzleState | null {
+  if (!value || typeof value !== "object") return null
+  const state = value as Record<string, unknown>
+  if (
+    state.version !== 1 ||
+    typeof state.signature !== "string" ||
+    state.signature.length === 0 ||
+    state.signature.length > 512 ||
+    !state.collected ||
+    typeof state.collected !== "object" ||
+    Array.isArray(state.collected) ||
+    !state.placements ||
+    typeof state.placements !== "object" ||
+    Array.isArray(state.placements) ||
+    !Array.isArray(state.solvedGates)
+  ) {
+    return null
+  }
+
+  const rawCollected = state.collected as Record<string, unknown>
+  const rawPlacements = state.placements as Record<string, unknown>
+  const collected = Object.fromEntries(
+    KEY_COLORS.map((color) => [color, [] as number[]]),
+  ) as PuzzleState["collected"]
+  const placements = Object.fromEntries(
+    KEY_COLORS.map((color) => [color, [] as Array<number | null>]),
+  ) as PuzzleState["placements"]
+
+  for (const color of KEY_COLORS) {
+    const rawNumbers = rawCollected[color] ?? []
+    const rawSlots = rawPlacements[color] ?? []
+    if (
+      !Array.isArray(rawNumbers) ||
+      !rawNumbers.every(
+        (number) => Number.isInteger(number) && Number(number) >= 1 && Number(number) <= 16,
+      ) ||
+      new Set(rawNumbers).size !== rawNumbers.length ||
+      !Array.isArray(rawSlots) ||
+      rawSlots.length > 16 ||
+      !rawSlots.every(
+        (number) =>
+          number === null ||
+          (Number.isInteger(number) && Number(number) >= 1 && Number(number) <= 16),
+      )
+    ) {
+      return null
+    }
+    const placed = rawSlots.filter((number): number is number => number !== null)
+    if (
+      new Set(placed).size !== placed.length ||
+      placed.some((number) => !rawNumbers.includes(number))
+    ) {
+      return null
+    }
+    collected[color] = [...rawNumbers]
+    placements[color] = [...rawSlots]
+  }
+
+  if (
+    !state.solvedGates.every(
+      (color) => typeof color === "string" && KEY_COLORS.includes(color as typeof KEY_COLORS[number]),
+    ) ||
+    new Set(state.solvedGates).size !== state.solvedGates.length
+  ) {
+    return null
+  }
+
+  return {
+    version: 1,
+    signature: state.signature,
+    collected,
+    placements,
+    solvedGates: [...state.solvedGates] as PuzzleState["solvedGates"],
+  }
+}
+
+export function loadPuzzles(): PuzzleState | null {
+  try {
+    const raw = window.sessionStorage.getItem(puzzleStorageKey())
+    if (!raw) return null
+    return normalizePuzzleState(JSON.parse(raw))
+  } catch {
+    return null
+  }
+}
+
+export function savePuzzles(state: PuzzleState): void {
+  try {
+    window.sessionStorage.setItem(puzzleStorageKey(), JSON.stringify(state))
+  } catch {
+    // Puzzle progress still works in memory when browser storage is unavailable.
   }
 }
 

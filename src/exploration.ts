@@ -28,6 +28,7 @@ import {
 } from "./resource-bar.ts"
 import {
   observeLiaSlideActivity,
+  liaSlideIsAccessible,
   sectionFromLootId,
   sourceSlideIsActive,
 } from "./slide-activity.ts"
@@ -1046,6 +1047,11 @@ function syncToolPickup(host: HTMLElement): void {
     host.hidden = true
     return
   }
+  if (!liaSlideIsAccessible(request.sourceSection)) {
+    eligibleToolIds.delete(toolId)
+    host.hidden = true
+    return
+  }
   const visible = toolVisibility.visible(
     `tool:${toolId}`,
     request.visibility,
@@ -1294,6 +1300,10 @@ function syncRevealContainer(host: HTMLElement): void {
     !host.hasAttribute(RANGE_CONTROLLER_ATTRIBUTE) &&
     !ancestorRevealAllows(host)
   ) {
+    host.hidden = true
+    return
+  }
+  if (!liaSlideIsAccessible(request.sourceSection)) {
     host.hidden = true
     return
   }
