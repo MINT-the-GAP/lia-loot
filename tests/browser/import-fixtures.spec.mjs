@@ -82,6 +82,9 @@ test('prüft den lokalen Containerkurs und den öffentlichen Makrovertrag', asyn
   const revealStart = /^@LootRevealStart_\s*\r?\n([\s\S]*?)^@end$/mu.exec(
     templateHeader,
   )?.[1] ?? ''
+  const revealInline = /^@LootRevealInline_\s*\r?\n([\s\S]*?)^@end$/mu.exec(
+    templateHeader,
+  )?.[1] ?? ''
 
   expect(headerImports(markdown)).toEqual([lootImport])
   expect(markdown).toMatch(
@@ -102,9 +105,18 @@ test('prüft den lokalen Containerkurs und den öffentlichen Makrovertrag', asyn
     /^@Erdhaufen: @LootRevealStart_\(@uid,erde,@0\)$/mu,
   )
   expect(templateHeader).toMatch(
+    /^@Erdhaufen\.inline: @LootRevealInline_\(@uid,erde,@1,@0\)$/mu,
+  )
+  expect(templateHeader).toMatch(
     /^@Pflanze: @LootRevealStart_\(@uid,pflanze,@0\)$/mu,
   )
   expect(templateHeader).toMatch(/^@Blume: @Pflanze\(@0\)$/mu)
+  expect(templateHeader).toMatch(
+    /^@Pflanze\.inline: @LootRevealInline_\(@uid,pflanze,@1,@0\)$/mu,
+  )
+  expect(templateHeader).toMatch(
+    /^@Blume\.inline: @Pflanze\.inline\(@0,@1\)$/mu,
+  )
   expect(templateHeader).toMatch(
     /^@EndeErdhaufen: @LootRevealEnd_\(erde\)$/mu,
   )
@@ -128,6 +140,9 @@ test('prüft den lokalen Containerkurs und den öffentlichen Makrovertrag', asyn
   )
   expect(revealStart).toMatch(
     /<lia-keep>\s*<lia-loot-reveal-start[^>]*><\/lia-loot-reveal-start>\s*<\/lia-keep>/u,
+  )
+  expect(revealInline).toMatch(
+    /<lia-loot-reveal[^>]*data-reveal-layout='inline'[^>]*hidden[^>]*>@3<\/lia-loot-reveal>/u,
   )
   expect(templateHeader).toMatch(
     /@LootRevealEnd_\s*\[LOOT-REVEAL-END\]\(#lia-loot-reveal-end-@0\)\s*@end/u,

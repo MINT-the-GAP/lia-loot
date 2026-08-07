@@ -7,21 +7,24 @@ lia-loot-secret-slide {
   display: none !important;
 }
 
-.lia-toc__link.loot-secret-slide-link:not(.loot-secret-slide-link--found) {
+.loot-secret-slide-link:not(.loot-secret-slide-link--found),
+.loot-secret-slide-row:not(.loot-secret-slide-row--found) {
   display: none !important;
 }
 
-.lia-toc__link.loot-secret-slide-link--found {
+.loot-secret-slide-link--found {
   display: block !important;
 }
 
-.lia-toc__link.loot-puzzle-slide-link--blocked {
+.loot-puzzle-slide-link--blocked,
+.loot-puzzle-slide-row--blocked {
   display: none !important;
 }
 
 html.loot-secret-slide-discovering main.lia-slide__content,
 html.loot-secret-slide-discovering .lia-pagination,
 html.loot-secret-slide-discovering #lia-toc .lia-toc__content,
+html.loot-secret-slide-discovering #lia-toc #lia-bm-toc5,
 html.loot-secret-slide-discovering .loot-object-lock-button--local,
 html.loot-secret-slide-blocked main.lia-slide__content,
 html.loot-secret-slide-blocked .lia-pagination,
@@ -1593,6 +1596,17 @@ lia-loot-reveal {
   min-height: 44px;
   max-width: 100%;
   display: block;
+}
+
+lia-loot-reveal[data-reveal-layout=inline] {
+  width: auto;
+  display: inline-grid;
+  vertical-align: middle;
+}
+
+lia-loot-reveal[data-reveal-layout=inline]
+  > [data-loot-reveal-payload] {
+  width: auto;
 }
 
 lia-loot-reveal:not([data-loot-reveal-kind])

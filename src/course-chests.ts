@@ -8,7 +8,10 @@ import {
   type RevealLayerOption,
 } from "./exploration-options.ts"
 import { isKeyColorRequest, type KeyColor } from "./key-colors.ts"
-import { parseLockOptions } from "./lock-options.ts"
+import {
+  parseLockOptions,
+  parseLockSpecification,
+} from "./lock-options.ts"
 import { parseLootIfOptions } from "./loot-if-options.ts"
 import { buildPuzzleCatalog } from "./puzzle-catalog.ts"
 import type {
@@ -80,8 +83,7 @@ const CHEST_MACRO =
   /^\s*@(Schatztruhe|Diamanttruhe|Energiekiste)(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/
 const KEY_MACRO =
   /^\s*@Schluessel(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/
-const LOCK_MACRO =
-  /^\s*@Schloss\s*\(\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]+)\s*\)\s*$/
+const LOCK_MACRO = /^\s*@Schloss\s*\(\s*([^()\r\n]+)\s*\)\s*$/
 const INTERNAL_CHEST_MACRO =
   /^\s*@LootTruhe_\s*\(\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]*)\s*,\s*(gold|diamonds|energy)\s*\)\s*$/i
 const INTERNAL_LOCK_MACRO =
@@ -668,6 +670,47 @@ const DIRECT_HIDDEN_MACROS: Readonly<
   zauberstaub: "dust",
 }
 
+const DIRECT_INLINE_REVEAL_MACROS: Readonly<
+  Record<string, RevealContainerKind>
+> = {
+  "erdhaufen.inline": "soil",
+  "pflanze.inline": "plant",
+  "blume.inline": "plant",
+}
+
+function macroArguments(
+  line: string,
+  openingIndex: number,
+  closingIndex: number,
+): string[] {
+  const arguments_: string[] = []
+  let argumentStart = openingIndex + 1
+  let depth = 0
+
+  for (let index = argumentStart; index < closingIndex; index += 1) {
+    const character = line[index]
+    if (character.charCodeAt(0) === 92 && index + 1 < closingIndex) {
+      index += 1
+      continue
+    }
+    if (character === "(") {
+      depth += 1
+      continue
+    }
+    if (character === ")") {
+      depth = Math.max(0, depth - 1)
+      continue
+    }
+    if (character === "," && depth === 0) {
+      arguments_.push(line.slice(argumentStart, index).trim())
+      argumentStart = index + 1
+    }
+  }
+
+  arguments_.push(line.slice(argumentStart, closingIndex).trim())
+  return arguments_
+}
+
 function directHiddenAchievementCatalog(
   line: string,
 ): CourseAchievementCatalog {
@@ -698,6 +741,44 @@ function directHiddenAchievementCatalog(
       break
     }
   }
+  return catalog
+}
+
+function directInlineRevealAchievementCatalog(
+  line: string,
+): CourseAchievementCatalog {
+  const catalog = emptyCourseAchievementCatalog()
+  const normalized = line.toLocaleLowerCase("de-DE")
+
+  for (let index = 0; index < line.length; index += 1) {
+    if (
+      line[index] !== "@" ||
+      line[index - 1] === "@" ||
+      line[index - 1]?.charCodeAt(0) === 92
+    ) {
+      continue
+    }
+
+    for (const [name, kind] of Object.entries(
+      DIRECT_INLINE_REVEAL_MACROS,
+    )) {
+      if (normalized.slice(index + 1, index + 1 + name.length) !== name) {
+        continue
+      }
+      let openingIndex = index + 1 + name.length
+      while (/\s/u.test(line[openingIndex] ?? "")) openingIndex += 1
+      if (line[openingIndex] !== "(") break
+      const closingIndex = matchingParenthesis(line, openingIndex)
+      if (closingIndex === null) break
+
+      const options =
+        macroArguments(line, openingIndex, closingIndex)[1] ?? ""
+      const item = revealAchievementCatalog(kind, options)
+      if (item) addAchievementCatalog(catalog, item)
+      break
+    }
+  }
+
   return catalog
 }
 
@@ -749,6 +830,10 @@ export function parseCourseAchievementCatalog(
         ? internalItemAchievementCatalog(line.content)
         : publicItem
     if (item) addAchievementCatalog(currentCatalog(), item)
+    addAchievementCatalog(
+      currentCatalog(),
+      directInlineRevealAchievementCatalog(line.content),
+    )
 
     const internalHidden = INTERNAL_HIDDEN_MACRO.exec(line.content)
     if (internalHidden) currentCatalog()[internalHidden[2] as ConcealmentMode] += 1
@@ -845,8 +930,17 @@ export function parseCourseLockDeclarations(
     const match = LOCK_MACRO.exec(line.content)
     if (!match) continue
 
-    const target = match[1].trim()
-    const options = parseLockOptions(match[2])
+    const authored = match[1]
+    const separator = authored.indexOf(",")
+    const specification =
+      separator >= 0
+        ? parseLockSpecification(
+            authored.slice(0, separator),
+            authored.slice(separator + 1),
+          )
+        : parseLockSpecification(authored)
+    const { target } = specification
+    const options = specification
     if (!options.valid || !options.color) continue
     const invocation =
       `Schloss(${target.toLowerCase()},${options.color}` +

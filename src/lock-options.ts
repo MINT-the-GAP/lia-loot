@@ -8,6 +8,14 @@ export interface ParsedLockOptions {
   valid: boolean
 }
 
+export interface ParsedLockSpecification extends ParsedLockOptions {
+  target: string
+}
+
+function normalizeMacroPlaceholder(value: string): string {
+  return /^@\d+$/u.test(value.trim()) ? "" : value
+}
+
 export function parseLockOptions(rawSpecification: string): ParsedLockOptions {
   const values: string[] = []
   const errors: string[] = []
@@ -36,5 +44,34 @@ export function parseLockOptions(rawSpecification: string): ParsedLockOptions {
     errors,
     onlyOnSlide,
     valid: errors.length === 0 && color !== null,
+  }
+}
+
+/**
+ * Parses both supported lock spellings:
+ *
+ * - legacy: target and options arrive separately (`target, color; anker`)
+ * - compact: the complete declaration arrives in the target slot
+ *   (`target; color; anker`)
+ *
+ * LiaScript leaves a missing forwarded macro parameter as e.g. `@1`, so an
+ * unresolved options placeholder is treated like an empty options slot.
+ */
+export function parseLockSpecification(
+  rawTarget: string,
+  rawOptions = "",
+): ParsedLockSpecification {
+  let target = normalizeMacroPlaceholder(rawTarget).trim()
+  let optionSpecification = normalizeMacroPlaceholder(rawOptions).trim()
+
+  if (!optionSpecification) {
+    const [authoredTarget = "", ...authoredOptions] = target.split(";")
+    target = authoredTarget.trim()
+    optionSpecification = authoredOptions.join(";")
+  }
+
+  return {
+    target,
+    ...parseLockOptions(optionSpecification),
   }
 }

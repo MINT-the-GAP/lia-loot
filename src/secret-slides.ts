@@ -16,11 +16,15 @@ import {
 } from "./slide-navigation-lock.ts"
 
 const SECRET_TAG = "lia-loot-secret-slide"
-const SEARCH_ID = "lia-input-search"
+const TOC_SEARCH_SELECTOR =
+  "#lia-input-search, #lia-toc input[type='search'], #lia-toc input[role='searchbox']"
 const STATUS_ID = "lia-loot-secret-slide-status"
 const SECRET_LINK_CLASS = "loot-secret-slide-link"
 const FOUND_LINK_CLASS = "loot-secret-slide-link--found"
+const SECRET_ROW_CLASS = "loot-secret-slide-row"
+const FOUND_ROW_CLASS = "loot-secret-slide-row--found"
 const PUZZLE_BLOCKED_LINK_CLASS = "loot-puzzle-slide-link--blocked"
+const PUZZLE_BLOCKED_ROW_CLASS = "loot-puzzle-slide-row--blocked"
 const BLOCKED_ROOT_CLASS = "loot-secret-slide-blocked"
 const DISCOVERING_ROOT_CLASS = "loot-secret-slide-discovering"
 const DISCOVERY_FAILED_ROOT_CLASS = "loot-secret-slide-discovery-failed"
@@ -32,8 +36,10 @@ const SWIPE_RESTRAINT = 100
 const SWIPE_TIME_LIMIT = 300
 const SWIPE_INTERACTIVE_SELECTOR =
   "a, button, input, textarea, select, [contenteditable]:not([contenteditable='false']), [draggable='true']"
-const TOC_LINK_SELECTOR =
+const NATIVE_TOC_LINK_SELECTOR =
   "#lia-toc .lia-toc__content > a.lia-toc__link[href*='#']"
+const TOC_LINK_SELECTOR =
+  "#lia-toc a[href*='#']"
 
 interface SecretPermit {
   course: string
@@ -81,6 +87,7 @@ let allowedCurrentSection: number | null = null
 let lastAcceptedSection: number | null = null
 let redirectingFromSection: number | null = null
 let gestureStart: GestureStart | null = null
+let lastSearchInput: HTMLInputElement | null = null
 let controller: SecretSlideController | null = null
 let puzzleSlideAccessGuard: PuzzleSlideAccessGuard | null = null
 
@@ -134,6 +141,12 @@ export function publicFallbackSection(
       preferredDirection === 1 ? -1 : 1,
     )
   )
+}
+
+export function deduplicateSecretSections(
+  sections: Iterable<number>,
+): number[] {
+  return [...new Set(sections)]
 }
 
 function courseIdentity(): string {
@@ -242,7 +255,10 @@ function desiredGatedElements(): Set<HTMLElement> {
     ".loot-object-lock-button--local",
   ]
   if (discoveryState !== "complete") {
-    selectors.push("#lia-toc .lia-toc__content")
+    selectors.push(
+      "#lia-toc .lia-toc__content",
+      "#lia-toc #lia-bm-toc5",
+    )
   }
   const elements = new Set<HTMLElement>()
   for (const selector of selectors) {
@@ -331,31 +347,119 @@ function activeSection(): number | null {
   return activeLiaSection()
 }
 
+function isTocSearchInput(value: unknown): value is HTMLInputElement {
+  return (
+    value instanceof HTMLInputElement &&
+    value.matches(TOC_SEARCH_SELECTOR)
+  )
+}
+
+function searchInputIsUsable(input: HTMLInputElement): boolean {
+  if (!input.isConnected || input.disabled) return false
+
+  for (
+    let element: HTMLElement | null = input;
+    element;
+    element = element.parentElement
+  ) {
+    if (
+      element.hidden ||
+      element.inert ||
+      element.getAttribute("aria-hidden") === "true" ||
+      element.getAttribute("data-lia-bm-hidden") === "1"
+    ) {
+      return false
+    }
+
+    try {
+      const style = element.ownerDocument.defaultView?.getComputedStyle(element)
+      if (
+        style?.display === "none" ||
+        style?.visibility === "hidden" ||
+        style?.visibility === "collapse"
+      ) {
+        return false
+      }
+    } catch {
+      // A missing or inaccessible view must not disable an otherwise usable input.
+    }
+  }
+
+  return true
+}
+
+function tocSearchInputs(): HTMLInputElement[] {
+  return [
+    ...document.querySelectorAll<HTMLInputElement>(TOC_SEARCH_SELECTOR),
+  ]
+}
+
+function selectedSearchInput(): HTMLInputElement | null {
+  if (
+    lastSearchInput &&
+    isTocSearchInput(lastSearchInput) &&
+    searchInputIsUsable(lastSearchInput)
+  ) {
+    return lastSearchInput
+  }
+  const activeElement = document.activeElement
+  if (
+    isTocSearchInput(activeElement) &&
+    searchInputIsUsable(activeElement)
+  ) {
+    return activeElement
+  }
+  const inputs = tocSearchInputs().filter(searchInputIsUsable)
+  return (
+    inputs.find((input) => normalizeSecretTitle(input.value) !== "") ??
+    inputs[0] ??
+    null
+  )
+}
+
 function searchQuery(): string {
-  const input = document.getElementById(SEARCH_ID)
-  return input instanceof HTMLInputElement
-    ? normalizeSecretTitle(input.value)
-    : ""
+  return normalizeSecretTitle(selectedSearchInput()?.value ?? "")
 }
 
 function linkTitle(link: HTMLAnchorElement): string {
   return normalizeSecretTitle(link.textContent ?? "")
 }
 
-function exactSecretLinks(): HTMLAnchorElement[] {
-  const query = searchQuery()
+function exactSecretMatches(
+  links: readonly HTMLAnchorElement[] = tocLinks(),
+  query = searchQuery(),
+): number[] {
   if (!query) return []
-  return tocLinks().filter((link) => {
+  const nativeSections = new Set<number>()
+  for (const link of links) {
+    if (!link.matches(NATIVE_TOC_LINK_SELECTOR)) continue
     const section = sectionFromLink(link)
-    return (
-      section !== null && secretSections.has(section) && linkTitle(link) === query
-    )
-  })
+    if (section !== null && secretSections.has(section)) {
+      nativeSections.add(section)
+    }
+  }
+
+  const sections: number[] = []
+  for (const link of links) {
+    const section = sectionFromLink(link)
+    if (
+      section === null ||
+      !secretSections.has(section) ||
+      (nativeSections.has(section) &&
+        !link.matches(NATIVE_TOC_LINK_SELECTOR)) ||
+      linkTitle(link) !== query
+    ) {
+      continue
+    }
+    sections.push(section)
+  }
+  return deduplicateSecretSections(sections)
 }
 
 function syncTocLinks(): { links: HTMLAnchorElement[]; totalSections: number } {
   const links = tocLinks()
   const query = searchQuery()
+  const foundSections = new Set(exactSecretMatches(links, query))
   let highestSection = -1
 
   for (const link of links) {
@@ -363,7 +467,7 @@ function syncTocLinks(): { links: HTMLAnchorElement[]; totalSections: number } {
     if (section === null) continue
     highestSection = Math.max(highestSection, section)
     const secret = secretSections.has(section)
-    const found = secret && query !== "" && linkTitle(link) === query
+    const found = secret && foundSections.has(section)
     const puzzleBlocked =
       puzzleSlideAccessGuard !== null &&
       !puzzleSlideAccessGuard.allowed(section)
@@ -374,6 +478,16 @@ function syncTocLinks(): { links: HTMLAnchorElement[]; totalSections: number } {
     else delete link.dataset.lootSecretSection
     if (puzzleBlocked) link.dataset.lootPuzzleSection = String(section)
     else delete link.dataset.lootPuzzleSection
+
+    const navigationRow = link.closest<HTMLElement>("#lia-bm-toc5 .bm-row")
+    if (navigationRow) {
+      navigationRow.classList.toggle(SECRET_ROW_CLASS, secret)
+      navigationRow.classList.toggle(FOUND_ROW_CLASS, found)
+      navigationRow.classList.toggle(
+        PUZZLE_BLOCKED_ROW_CLASS,
+        puzzleBlocked,
+      )
+    }
   }
 
   return { links, totalSections: highestSection + 1 }
@@ -528,21 +642,28 @@ function scheduleSync(): void {
   syncTimer = window.setTimeout(syncAll, 0)
 }
 
+function syncBeforePaint(): void {
+  if (syncTimer !== null) {
+    window.clearTimeout(syncTimer)
+    syncTimer = null
+  }
+  syncAll()
+}
+
 function eventElement(target: EventTarget | null): Element | null {
   if (target instanceof Element) return target
   if (target instanceof Node) return target.parentElement
   return null
 }
 
-function authorizeLink(link: HTMLAnchorElement): boolean {
-  const section = sectionFromLink(link)
-  if (section === null || !secretSections.has(section)) return false
+function authorizeSection(section: number): boolean {
+  if (!secretSections.has(section)) return false
   if (puzzleSlideAccessGuard?.allowed(section) === false) {
     announce(puzzleSlideAccessGuard.message(section))
     return false
   }
-  const matches = exactSecretLinks()
-  if (matches.length !== 1 || matches[0] !== link) {
+  const matches = exactSecretMatches()
+  if (matches.length !== 1 || matches[0] !== section) {
     announce(
       matches.length > 1
         ? "Der Folienname ist nicht eindeutig. Verwende eindeutige Titel für Geheimfolien."
@@ -599,11 +720,10 @@ function handleSecretLinkClick(event: MouseEvent): void {
     announce(puzzleSlideAccessGuard.message(directSection))
     return
   }
-  const link = target?.closest<HTMLAnchorElement>(
-    `a.${SECRET_LINK_CLASS}`,
-  )
-  if (!link) return
-  if (authorizeLink(link)) return
+  const link = target?.closest<HTMLAnchorElement>(TOC_LINK_SELECTOR)
+  const section = link ? sectionFromLink(link) : null
+  if (section === null || !secretSections.has(section)) return
+  if (authorizeSection(section)) return
   event.preventDefault()
   event.stopImmediatePropagation()
   event.stopPropagation()
@@ -630,6 +750,7 @@ function stopSequentialNavigation(
 }
 
 function handleSearchEnter(event: KeyboardEvent): void {
+  if (isTocSearchInput(event.target)) lastSearchInput = event.target
   const direction = sequentialNavigationDirection(event)
   if (direction !== null) {
     if (discoveryState !== "complete") {
@@ -658,13 +779,12 @@ function handleSearchEnter(event: KeyboardEvent): void {
     event.ctrlKey ||
     event.metaKey ||
     event.shiftKey ||
-    !(event.target instanceof HTMLInputElement) ||
-    event.target.id !== SEARCH_ID
+    !isTocSearchInput(event.target)
   ) {
     return
   }
 
-  const matches = exactSecretLinks()
+  const matches = exactSecretMatches()
   if (matches.length === 0) return
   event.preventDefault()
   event.stopImmediatePropagation()
@@ -675,10 +795,15 @@ function handleSearchEnter(event: KeyboardEvent): void {
     )
     return
   }
-  const section = sectionFromLink(matches[0])
-  if (section !== null && authorizeLink(matches[0])) {
+  const section = matches[0]
+  if (authorizeSection(section)) {
     navigateToLiaSection(section, "push")
   }
+}
+
+function handleTocSearchInput(event: Event): void {
+  if (isTocSearchInput(event.target)) lastSearchInput = event.target
+  scheduleSync()
 }
 
 export function permitPortalSlideNavigation(section: number): boolean {
@@ -822,7 +947,7 @@ function renderedMarkerSection(marker: HTMLElement): number | null {
 function registerRenderedMarker(marker: HTMLElement): void {
   const section = renderedMarkerSection(marker)
   if (section !== null) secretSections.add(section)
-  scheduleSync()
+  syncBeforePaint()
 }
 
 function completeDiscovery(
@@ -830,7 +955,7 @@ function completeDiscovery(
 ): void {
   registerDeclarations(declarations)
   sourceDeclarationsReady = true
-  syncAll()
+  syncBeforePaint()
 }
 
 function failDiscovery(error: unknown): void {
@@ -851,20 +976,20 @@ function attachTocObserver(): void {
   tocObserver?.disconnect()
   observedToc = toc
   if (!toc) return
-  tocObserver = new MutationObserver(scheduleSync)
+  tocObserver = new MutationObserver(syncBeforePaint)
   tocObserver.observe(toc, {
     attributeFilter: ["class", "href", "id"],
     attributes: true,
     childList: true,
     subtree: true,
   })
-  scheduleSync()
+  syncBeforePaint()
 }
 
 function addedGateElement(node: Node): boolean {
   if (!(node instanceof Element)) return false
   const selector =
-    "main.lia-slide__content, .lia-pagination, .loot-object-lock-button--local, #lia-toc .lia-toc__content"
+    "main.lia-slide__content, .lia-pagination, .loot-object-lock-button--local, #lia-toc .lia-toc__content, #lia-toc #lia-bm-toc5"
   return node.matches(selector) || node.querySelector(selector) !== null
 }
 
@@ -915,7 +1040,7 @@ export function installSecretSlides(
 
   document.addEventListener("click", handleSecretLinkClick, true)
   document.addEventListener("keydown", handleSearchEnter, true)
-  document.addEventListener("input", scheduleSync)
+  document.addEventListener("input", handleTocSearchInput)
   document.addEventListener("touchstart", startDiscoveryGesture, {
     capture: true,
     passive: true,

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { parseLockOptions } from "../src/lock-options.ts"
+import {
+  parseLockOptions,
+  parseLockSpecification,
+} from "../src/lock-options.ts"
 
 test("liest Farbe und optionale Folienbindung unabhängig von der Reihenfolge", () => {
   assert.deepEqual(parseLockOptions("gruen"), {
@@ -53,4 +56,23 @@ test("weist fehlende, mehrfache und unbekannte Schlosswerte fail-closed zurück"
     assert.equal(parsed.color, null, specification)
     assert.ok(parsed.errors.length > 0, specification)
   }
+})
+
+test("liest alte Komma- und neue Semikolon-Schreibweise gleichwertig", () => {
+  const expected = {
+    color: "blue",
+    errors: [],
+    onlyOnSlide: true,
+    target: "Seitenwechsel",
+    valid: true,
+  }
+
+  assert.deepEqual(
+    parseLockSpecification("Seitenwechsel", "blue; anker"),
+    expected,
+  )
+  assert.deepEqual(
+    parseLockSpecification("Seitenwechsel; blue; anker", "@1"),
+    expected,
+  )
 })

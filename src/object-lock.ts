@@ -3,7 +3,7 @@ import {
   type CourseLockDeclaration,
 } from "./course-chests.ts"
 import type { KeyColor } from "./key-colors.ts"
-import { parseLockOptions } from "./lock-options.ts"
+import { parseLockSpecification } from "./lock-options.ts"
 import {
   isGlobalLockTarget,
   isItemLockTarget,
@@ -330,8 +330,12 @@ function registerHost(host: HTMLElement): LockRequest | null {
     persistentHostRequests.delete(baseId)
     return null
   }
-  const target = resolveLockTarget(host.getAttribute("data-target"))
-  const options = parseLockOptions(host.getAttribute("data-color") ?? "")
+  const specification = parseLockSpecification(
+    host.getAttribute("data-target") ?? "",
+    host.getAttribute("data-color") ?? "",
+  )
+  const target = resolveLockTarget(specification.target)
+  const options = specification
 
   host.classList.add("loot-object-lock-host")
   if (host.getAttribute("aria-hidden") !== "true") {

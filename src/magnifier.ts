@@ -17,6 +17,7 @@ import {
   parseExplorationOptions,
   type RevealLayerOption,
 } from "./exploration-options.ts"
+import { normalizeHiddenMacroArgumentText } from "./hidden-arguments.ts"
 import {
   clearHostRevealLayers,
   hostIsRevealBlocked,
@@ -327,6 +328,7 @@ function updateSecretTarget(
   target: HTMLElement,
   position: PointerPosition | null,
 ): void {
+  normalizeHiddenMacroArguments(target)
   const mode = prepareConcealedHost(target)
   if (!mode) return
   const content = concealedContentOf(target)
@@ -549,10 +551,12 @@ class LootHiddenElement extends HTMLElement {
   }
 
   connectedCallback(): void {
+    normalizeHiddenMacroArguments(this)
     updateSecretTarget(this, pointing ? lastPointer : null)
     this.childObserver ??= new MutationObserver(() => {
       queueMicrotask(() => {
         if (this.isConnected) {
+          normalizeHiddenMacroArguments(this)
           updateSecretTarget(this, pointing ? lastPointer : null)
         }
       })
@@ -560,6 +564,7 @@ class LootHiddenElement extends HTMLElement {
     this.childObserver.observe(this, { childList: true })
     queueMicrotask(() => {
       if (this.isConnected) {
+        normalizeHiddenMacroArguments(this)
         updateSecretTarget(this, pointing ? lastPointer : null)
       }
     })
@@ -572,6 +577,18 @@ class LootHiddenElement extends HTMLElement {
   attributeChangedCallback(): void {
     if (this.isConnected) {
       updateSecretTarget(this, pointing ? lastPointer : null)
+    }
+  }
+}
+
+function normalizeHiddenMacroArguments(host: HTMLElement): void {
+  const content = concealedContentOf(host)
+  const roots = content ? [host, content] : [host]
+  for (const root of roots) {
+    for (const node of root.childNodes) {
+      if (!(node instanceof Text) || node.nodeValue === null) continue
+      const normalized = normalizeHiddenMacroArgumentText(node.nodeValue)
+      if (normalized !== node.nodeValue) node.nodeValue = normalized
     }
   }
 }

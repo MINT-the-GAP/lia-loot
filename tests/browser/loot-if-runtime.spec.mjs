@@ -142,7 +142,7 @@ test("reagiert auf ein wirklich geöffnetes Schloss und eine eingesammelte Lupe"
   await expect(magnifierContent).toBeVisible()
 })
 
-test("erkennt Nutzer-Markierfarbe, exaktes Wort und den echten Geheimfolienbesuch", async ({
+test("dedupliziert native und geklonte Geheimlinks mit der Navigation-Suche", async ({
   page,
 }) => {
   await openCase(page, "facts")
@@ -160,13 +160,60 @@ test("erkennt Nutzer-Markierfarbe, exaktes Wort und den echten Geheimfolienbesuc
   await expect(markerColor).toBeVisible()
   await expect(markerWord).toBeVisible()
 
-  await expect(page.locator('a[href="#2"]')).toHaveClass(
-    /loot-secret-slide-link/u,
+  const nativeSecretLink = page.locator(
+    '#lia-toc .lia-toc__content > a[href="#2"]',
   )
-  await page.locator("#lia-input-search").fill("Verborgener Garten")
-  await page.locator('a[href="#2"]').click()
+  const navigationSecretLink = page.locator(
+    '#lia-bm-toc5 a[href="#2"]',
+  )
+  const navigationSecretRow = navigationSecretLink.locator("xpath=..")
+  const navigationSearch = page.locator("#lia-bm-toc5 .bm-search")
+  const clearNavigationSearch = page.getByRole("button", {
+    name: "Suche löschen",
+  })
+
+  await expect(nativeSecretLink).toHaveClass(/loot-secret-slide-link/u)
+  await expect(navigationSecretLink).toHaveClass(/loot-secret-slide-link/u)
+  await expect(navigationSecretRow).toHaveClass(/loot-secret-slide-row/u)
+  await expect(nativeSecretLink).not.toBeVisible()
+  await expect(navigationSecretLink).not.toBeVisible()
+
+  await navigationSearch.fill("Verborgener")
+  await expect(navigationSecretLink).not.toHaveClass(
+    /loot-secret-slide-link--found/u,
+  )
+  await expect(navigationSecretRow).not.toHaveClass(
+    /loot-secret-slide-row--found/u,
+  )
+  await expect(navigationSecretLink).not.toBeVisible()
+
+  await navigationSearch.fill("Verborgener Garten")
+  await expect(nativeSecretLink).toHaveClass(
+    /loot-secret-slide-link--found/u,
+  )
+  await expect(navigationSecretLink).toHaveClass(
+    /loot-secret-slide-link--found/u,
+  )
+  await expect(navigationSecretRow).toHaveClass(
+    /loot-secret-slide-row--found/u,
+  )
+  await expect(navigationSecretLink).toBeVisible()
+
+  await clearNavigationSearch.click()
+  await expect(navigationSearch).toHaveValue("")
+  await expect(navigationSecretLink).not.toHaveClass(
+    /loot-secret-slide-link--found/u,
+  )
+  await expect(navigationSecretRow).not.toHaveClass(
+    /loot-secret-slide-row--found/u,
+  )
+  await expect(navigationSecretLink).not.toBeVisible()
+
+  await navigationSearch.fill("Verborgener Garten")
+  await navigationSecretLink.click()
   await expect(page.getByRole("heading", { name: "Verborgener Garten" })).toBeVisible()
-  await page.locator('a[href="#1"]').click()
+  await navigationSearch.fill("")
+  await page.locator('#lia-bm-toc5 a[href="#1"]').click()
   await expect(page.getByRole("heading", { name: "Geheim- und Marker-Trigger" })).toBeVisible()
   await expect(secret).toBeVisible()
 

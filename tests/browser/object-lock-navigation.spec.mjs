@@ -92,7 +92,11 @@ test("sperrt echte sequenzielle Tastatur- und Wischgestennavigation bis zum Aufs
   const navigationLock = page.locator(
     "[data-loot-lock-button][data-loot-lock-target=seitenwechsel]",
   )
+  const tocLock = page.locator(
+    "[data-loot-lock-button][data-loot-lock-target=toc]",
+  )
   await expect(navigationLock).toBeVisible()
+  await expect(tocLock).toBeVisible()
 
   await page.evaluate(() => {
     const anchor = document.querySelector(
@@ -148,18 +152,30 @@ test("sperrt echte sequenzielle Tastatur- und Wischgestennavigation bis zum Aufs
   await page.mouse.up()
   await expectSecondSlide(secondHeading, firstHeading, thirdHeading)
 
+  await page.locator("[data-loot-slide-portal-button]").click()
+  await expect(thirdHeading).toBeVisible()
+  await expect(navigationLock).not.toBeVisible()
+  await expect(tocLock).not.toBeVisible()
+  await page.locator("[data-loot-slide-portal-return-button]").click()
+  await expectSecondSlide(secondHeading, firstHeading, thirdHeading)
+  await expect(navigationLock).toBeVisible()
+  await expect(tocLock).toBeVisible()
+
+  await page
+    .locator("[data-loot-key-button][data-loot-key-color=blue]")
+    .first()
+    .click()
+  await tocLock.click()
+  await expect(tocLock).not.toBeVisible({ timeout: 10_000 })
+
   const tocButton = page.locator("#lia-btn-toc")
   await tocButton.click()
   await expect(page.locator("#lia-toc .lia-toc__content")).toBeVisible()
   await tocButton.click()
 
-  await page.locator("[data-loot-slide-portal-button]").click()
-  await expect(thirdHeading).toBeVisible()
-  await page.locator("[data-loot-slide-portal-return-button]").click()
-  await expectSecondSlide(secondHeading, firstHeading, thirdHeading)
-  await expect(navigationLock).toBeVisible()
-
-  await page.locator("[data-loot-key-button][data-loot-key-color=orange]").click()
+  await page
+    .locator("[data-loot-key-button][data-loot-key-color=blue]")
+    .click()
   await navigationLock.click()
   await expect(navigationLock).not.toBeVisible({ timeout: 10_000 })
 

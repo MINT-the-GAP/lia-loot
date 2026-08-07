@@ -411,6 +411,8 @@ test("bindet globale Schlösser nur mit anker an ihre Quellfolie", () => {
 # Abschnitt A
 @Schloss(boardmodefontbutton, gruen)
 @Schloss(textmarkerbutton, gelb; anker)
+@Schloss(Seitenwechsel; blue; anker)
+@Schloss(TOC; blue; anker)
 @LootSchloss_(@uid,annotationsbar,orange; anker)
 @Schloss(info, rot; 12s)
 @Schloss(menu, blau; ankerr)
@@ -438,6 +440,18 @@ test("bindet globale Schlösser nur mit anker an ihre Quellfolie", () => {
         onlyOnSlide: true,
         section: 0,
       },
+      {
+        target: "Seitenwechsel",
+        color: "blue",
+        onlyOnSlide: true,
+        section: 0,
+      },
+      {
+        target: "TOC",
+        color: "blue",
+        onlyOnSlide: true,
+        section: 0,
+      },
     ],
   )
   assert.deepEqual(
@@ -459,6 +473,18 @@ test("bindet globale Schlösser nur mit anker an ihre Quellfolie", () => {
       {
         target: "textmarkerbutton",
         color: "yellow",
+        onlyOnSlide: true,
+        section: 0,
+      },
+      {
+        target: "Seitenwechsel",
+        color: "blue",
+        onlyOnSlide: true,
+        section: 0,
+      },
+      {
+        target: "TOC",
+        color: "blue",
         onlyOnSlide: true,
         section: 0,
       },
@@ -608,6 +634,53 @@ test("katalogisiert alle verdeckten Itemfamilien und multipliziert Portaltruhen"
     plant: 5,
     soil: 5,
     solid: 8,
+  })
+})
+
+test("katalogisiert Inline-Erde und -Pflanzen im Fliesstext", () => {
+  const markdown = [
+    "# Inline",
+    "Vor @Erdhaufen.inline(Hinweis (mit Klammer)) nach.",
+    "Neben @Pflanze.inline(Bluetennotiz, unsichtbar; anker) weiter.",
+    "Dazu @Blume.inline(Bluete, zauberstaub; 12s).",
+    "Zwei: @Erdhaufen.inline(A, zauberstaub) und @Pflanze.inline(B).",
+  ].join("\n")
+
+  assert.deepEqual(parseCourseAchievementCatalog(markdown), {
+    dust: 2,
+    plant: 3,
+    soil: 2,
+    solid: 1,
+  })
+})
+
+test("ignoriert maskierte und ungueltige Inline-Reveals fail-closed", () => {
+  const tick = String.fromCharCode(96)
+  const slash = String.fromCharCode(92)
+  const markdown = [
+    "<!-- @Erdhaufen.inline(Kommentar) -->",
+    "```markdown",
+    "@Pflanze.inline(Fence)",
+    "```",
+    "Text mit " + tick + "@Blume.inline(Inline-Code)" + tick + ".",
+    "@@Erdhaufen.inline(Ausgeschaltet)",
+    slash + "@Pflanze.inline(Escaped)",
+    "@Erdhaufen.inline(Offen",
+    "@Pflanze.inline(X, unbekannt)",
+    "@Blume.inline(X, unsichtbar; zauberstaub)",
+    "@Erdhaufen(unbekannt)",
+    "@Pflanze.inline(in ungueltiger Range)",
+    "@EndeErdhaufen",
+    "@Erdhaufen",
+    "Text @Pflanze.inline(gueltig, zauberstaub)",
+    "@EndeErdhaufen",
+  ].join("\n")
+
+  assert.deepEqual(parseCourseAchievementCatalog(markdown), {
+    dust: 1,
+    plant: 1,
+    soil: 1,
+    solid: 0,
   })
 })
 

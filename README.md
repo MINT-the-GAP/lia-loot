@@ -95,16 +95,19 @@ script:   ./dist/index.js
 @Schaufel: @LootWerkzeug_(@uid,shovel,@0)
 @Giesskanne: @LootWerkzeug_(@uid,watering-can,@0)
 @Erdhaufen: @LootRevealStart_(@uid,erde,@0)
+@Erdhaufen.inline: @LootRevealInline_(@uid,erde,@1,@0)
 @EndeErdhaufen: @LootRevealEnd_(erde)
 @Pflanze: @LootRevealStart_(@uid,pflanze,@0)
 @Blume: @Pflanze(@0)
+@Pflanze.inline: @LootRevealInline_(@uid,pflanze,@1,@0)
+@Blume.inline: @Pflanze.inline(@0,@1)
 @EndePflanze: @LootRevealEnd_(pflanze)
 @EndeBlume: @LootRevealEnd_(pflanze)
 @Portal: @LootPortal_(@uid,@0,two-way)
 @Einwegportal: @LootPortal_(@uid,@0,one-way)
 @Einbahnportal: @LootPortal_(@uid,@0,one-way)
-@Unsichtbar: @LootVersteckt_(@uid,solid,@0)
-@Zauberstaub: @LootVersteckt_(@uid,dust,@0)
+@Unsichtbar: @LootVersteckt_(@uid,solid,`@0LIALOOTHIDDEN7QARGSEP1X9END@1LIALOOTHIDDEN7QARGSEP2X9END@2LIALOOTHIDDEN7QARGSEP3X9END@3LIALOOTHIDDEN7QARGSEP4X9END@4LIALOOTHIDDEN7QARGSEP5X9END@5LIALOOTHIDDEN7QARGSEP6X9END@6LIALOOTHIDDEN7QARGSEP7X9END@7LIALOOTHIDDEN7QARGSEP8X9END@8LIALOOTHIDDEN7QARGSEP9X9END@9`)
+@Zauberstaub: @LootVersteckt_(@uid,dust,`@0LIALOOTHIDDEN7QARGSEP1X9END@1LIALOOTHIDDEN7QARGSEP2X9END@2LIALOOTHIDDEN7QARGSEP3X9END@3LIALOOTHIDDEN7QARGSEP4X9END@4LIALOOTHIDDEN7QARGSEP5X9END@5LIALOOTHIDDEN7QARGSEP6X9END@6LIALOOTHIDDEN7QARGSEP7X9END@7LIALOOTHIDDEN7QARGSEP8X9END@8LIALOOTHIDDEN7QARGSEP9X9END@9`)
 @Schloss: @LootSchloss_(@uid,@0,@1)
 @Geheimfolie: @LootGeheimfolie_(@uid)
 
@@ -148,6 +151,10 @@ script:   ./dist/index.js
 <lia-keep>
 <lia-loot-reveal-start data-reveal-id='@0' data-reveal-kind='@1' data-options='@1; @2'></lia-loot-reveal-start>
 </lia-keep>
+@end
+
+@LootRevealInline_
+<lia-loot-reveal data-reveal-id='@0' data-options='@1; @2' data-reveal-layout='inline' hidden>@3</lia-loot-reveal>
 @end
 
 @LootRevealEnd_
@@ -820,10 +827,18 @@ aber ein sehr schwaches, flimmerndes Pixelmuster als Suchhinweis:
 @Schluessel(lila; zauberstaub)
 ```
 
-Bei Inhalten mit Kommas gelten die üblichen LiaScript-Makroregeln; der komplette
-Parameter kann dafür in Backticks gesetzt werden. Die Verbergung ist ein visueller
-Spieleffekt und keine Zugriffssperre: Der Inhalt bleibt im Kursquelltext und im DOM
-vorhanden.
+Kommas im einzeiligen Inhalt bleiben erhalten:
+
+```markdown
+@Unsichtbar(Hallo, das hier ist ein Test)
+@Zauberstaub(Eins, zwei, drei, vier)
+```
+
+Bis zu neun ungeschützte Kommas werden direkt zusammengesetzt. Für noch mehr
+Kommas oder komplexe Inhalte kann der vollständige Parameter nach den
+LiaScript-Makroregeln in Backticks gesetzt werden. Die Verbergung ist ein
+visueller Spieleffekt und keine Zugriffssperre: Der Inhalt bleibt im
+Kursquelltext und im DOM vorhanden.
 
 Sammle zuerst diese Lupe ein und aktiviere sie anschließend in der Leiste:
 
@@ -877,6 +892,26 @@ bewusst einen zusätzlichen Schritt: Zuerst wird die kleine Pflanze mit der
 Gießkanne zum Blühen gebracht. Erst ein anschließender Klick auf die Blüte gibt
 den Inhalt frei. `@Blume` ist ein Alias für `@Pflanze`; geschlossen wird diese
 Form wahlweise mit `@EndePflanze` oder dem passenden Alias `@EndeBlume`.
+
+Für kurze Fundstellen im Fließtext stehen die ungepaarten Varianten
+`@Erdhaufen.inline`, `@Pflanze.inline` und `@Blume.inline` bereit. Ihr
+erstes Argument ist der Inhalt; das optionale zweite Argument enthält dieselben
+Sichtbarkeits- und Verzögerungsoptionen wie der jeweilige Block-Container.
+Das Komma zwischen beiden Argumenten trennt Inhalt und Optionen:
+
+```markdown
+Vor dem Fund liegt @Erdhaufen.inline(ein vergrabener Hinweis) mitten im Satz.
+
+Nebenan wächst @Pflanze.inline(eine sprechende Blüte, zauberstaub; anker; 12s).
+
+@Blume.inline(gleiche Kurzform wie Pflanze)
+```
+
+Auch inline wird ein Erdhaufen einmal mit der Schaufel freigelegt. Die Pflanze
+wird zuerst mit der Gießkanne zum Blühen gebracht und gibt ihren Inhalt erst
+nach einem Klick auf die Blüte frei. Für mehrzeiligen oder beliebigen
+blockweisen LiaScript-Inhalt bleiben die oben gezeigten Start-/Endmakros die
+passende Form.
 
 Ohne Zusatzoption sind Erdhaufen und kleine Pflanze sichtbar. Mit `unsichtbar`
 werden sie erst im aktiven Lupenkreis sichtbar; `zauberstaub` hinterlässt dort
@@ -1053,9 +1088,11 @@ Portal mit einem farbigen Pixelart-Schloss sperren:
 
 ```markdown
 @Schloss(info, gruen)
+@Schloss(info; gruen)
 ```
 
-Das Ziel steht im ersten Parameter, die benötigte Schlüsselfarbe im zweiten. Für
+Ziel und Schlüsselfarbe können wie bisher durch ein Komma oder vollständig durch
+Semikolons getrennt werden. Beide Schreibweisen sind gleichwertig. Für
 Schlösser stehen alle zwölf Schlüsselfarben `rot`, `blau`, `gruen`, `gelb`,
 `lila`, `orange`, `magenta`, `weiss`, `schwarz`, `tuerkis`, `grau` und
 `braun` zur Verfügung. Natürliche Unicode- und englische Farbnamen werden
@@ -1070,12 +1107,17 @@ Folie des Aufrufs:
 ```markdown
 @Schloss(boardmodefontbutton, gruen)
 @Schloss(boardmodefontbutton, gruen; anker)
+@Schloss(boardmodefontbutton; gruen; anker)
+@Schloss(Seitenwechsel; blue; anker)
+@Schloss(TOC; blue; anker)
 ```
 
-Der erste Aufruf sperrt den Board-Mode-Button auf allen Folien, der zweite nur auf
-seiner Quellfolie. Das gilt ebenso für globale LiaScript-Menüs sowie Marker und
-Annotation. Bereits von sich aus folienlokale Template- und Quizziele bleiben
-unabhängig davon lokal.
+Der erste Aufruf sperrt den Board-Mode-Button auf allen Folien, die weiteren
+Aufrufe mit `anker` nur auf ihrer jeweiligen Quellfolie. Damit sind insbesondere
+auch das Inhaltsverzeichnis und die Seitenwechsel-Sperre außerhalb dieser Folie
+frei. Das gilt ebenso für globale LiaScript-Menüs sowie Marker und Annotation.
+Bereits von sich aus folienlokale Template- und Quizziele bleiben unabhängig
+davon lokal.
 
 | Ziel | Gesperrtes Bedienobjekt |
 |:--|:--|

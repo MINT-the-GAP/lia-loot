@@ -11,8 +11,10 @@ Diese Folie dient zum kontrollierten Einstieg auf Folie 2.
 
 ## Gesperrte Foliennavigation
 
-@Schluessel(orange)
-@Schloss(seitenwechsel, orange; anker)
+@Schluessel(blau)
+@Schluessel(blau)
+@Schloss(Seitenwechsel; blue; anker)
+@Schloss(TOC; blue; anker)
 
 <input id="navigation-input" aria-label="Testeingabe" value="AB" />
 

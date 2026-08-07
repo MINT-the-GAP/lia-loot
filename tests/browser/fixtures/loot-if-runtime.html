@@ -139,11 +139,60 @@
           range("marker-word-result", "markiert: rot: Photosynthese; spawn", result("marker-word-content", "Markerwort erfüllt")),
           range("secret-result", "Geheime Folie besucht; spawn", result("secret-content", "Geheimfolie erfüllt")),
         ].join("")
-        document.querySelector('#lia-toc a[href="#1"]').textContent =
+        const nativeToc = document.querySelector("#lia-toc .lia-toc__content")
+        nativeToc.querySelector('a[href="#1"]').textContent =
           "Geheim- und Marker-Trigger"
-        document.querySelector("#lia-toc .lia-toc__content").insertAdjacentHTML(
+        nativeToc.insertAdjacentHTML(
           "beforeend",
           '<a class="lia-toc__link" href="#2">Verborgener Garten</a>',
+        )
+        document.getElementById("lia-toc").insertAdjacentHTML(
+          "beforeend",
+          [
+            '<div id="lia-bm-toc5">',
+            '<ul class="bm-list">',
+            '<li><div class="bm-row" data-key="h:1"><a href="#1">Geheim- und Marker-Trigger</a></div></li>',
+            '<li><div class="bm-row" data-key="h:2"><a href="#2">Verborgener Garten</a></div></li>',
+            '</ul>',
+            '<div class="bm-footer">',
+            '<label class="bm-search-shell">',
+            '<span>Navigation durchsuchen</span>',
+            '<input class="bm-search" type="search" aria-label="Suche im Inhaltsverzeichnis">',
+            '</label>',
+            '<button class="bm-search-clear" type="button" aria-label="Suche löschen">Suche löschen</button>',
+            '</div>',
+            '</div>',
+          ].join(""),
+        )
+        nativeToc.style.display = "none"
+        nativeToc.dataset.liaBmHidden = "1"
+        const nativeSearch = document.getElementById("lia-input-search")
+        nativeSearch.style.display = "none"
+        nativeSearch.dataset.liaBmHidden = "1"
+
+        const navigationSearch = document.querySelector("#lia-bm-toc5 .bm-search")
+        document.querySelector("#lia-bm-toc5 .bm-search-clear").addEventListener(
+          "click",
+          function clearNavigationSearch() {
+            navigationSearch.value = ""
+            navigationSearch.dispatchEvent(new Event("input", { bubbles: true }))
+            navigationSearch.focus()
+          },
+        )
+        document.querySelectorAll("#lia-bm-toc5 a[href*='#']").forEach(
+          function mirrorNavigationLink(link) {
+            link.addEventListener(
+              "click",
+              function clickNativeLink(event) {
+                event.preventDefault()
+                const original = nativeToc.querySelector(
+                  'a[href="' + link.getAttribute("href") + '"]',
+                )
+                if (original) original.click()
+              },
+              true,
+            )
+          },
         )
         const secretSlide = document.createElement("main")
         secretSlide.className = "lia-slide__content"

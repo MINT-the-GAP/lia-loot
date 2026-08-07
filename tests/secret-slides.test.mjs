@@ -2,10 +2,16 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  deduplicateSecretSections,
   nextPublicSection,
   normalizeSecretTitle,
   publicFallbackSection,
 } from "../src/secret-slides.ts"
+
+test("dedupliziert native und geklonte Geheimlinks pro Folie", () => {
+  assert.deepEqual(deduplicateSecretSections([2, 2, 4, 2, 4]), [2, 4])
+  assert.deepEqual(deduplicateSecretSections([4, 2]), [4, 2])
+})
 
 test("normalisiert Geheimtitel exakt, aber tolerant für Unicode und Leerraum", () => {
   assert.equal(
