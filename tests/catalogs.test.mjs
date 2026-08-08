@@ -95,6 +95,17 @@ test("dedupliziert globale Schlösser und zählt lokale Makros einzeln", () => {
   assert.equal(courseLockUnitCount(declarations), 4)
 })
 
+test("zählt mehrere Pentomino-Quizschlösser derselben Folie einzeln", () => {
+  const declarations = parseCourseLockDeclarations(`
+# Zwei Pentomino-Quizze
+
+@Schloss(pentominoquiz, rot)
+@Schloss(PentominoDockQuizAuswahlN, rot)
+`)
+
+  assert.equal(courseLockUnitCount(declarations), 2)
+})
+
 test("zählt jedes Portalschloss einzeln und ignoriert Beispiele sowie Kommentare", () => {
   const declarations = parseCourseLockDeclarations(`
 # Abschnitt A

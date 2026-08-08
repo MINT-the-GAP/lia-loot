@@ -3,6 +3,10 @@ import test from "node:test"
 
 import { AchievementStore } from "../src/achievement-store.ts"
 import { AchievementManager } from "../src/achievements.ts"
+import {
+  setLiaCourseRevision,
+  setLiaCourseVersion,
+} from "../src/course-identity.ts"
 
 function storageWindow(search) {
   const values = new Map()
@@ -196,7 +200,7 @@ test("vergibt keinen Katalogerfolg für einen leeren Katalog", () => {
   })
 })
 
-test("migriert den alten Gesamttruhenerfolg nur auf vorhandene Truhentypen", () => {
+test("verwendet den alten Gesamttruhenerfolg nicht als aktuellen Fortschritt", () => {
   withWindow("?legacy-chests", (browser) => {
     const seed = new AchievementStore()
     seed.unlock("perfect-highscore")
@@ -225,10 +229,32 @@ test("migriert den alten Gesamttruhenerfolg nur auf vorhandene Truhentypen", () 
     assert.deepEqual(notifications, [])
 
     manager.chestCatalogReady(chests(3, 0, 2), chests(0, 0, 0))
+    assert.deepEqual(notifications, [])
+
+    manager.chestCollected(chests(3, 0, 2))
     assert.deepEqual(notifications, [
       "all-treasure-chests-opened",
       "all-energy-chests-opened",
     ])
+  })
+})
+
+test("übernimmt freigeschaltete Erfolge nicht in einen geänderten Kursstand", () => {
+  withWindow("?achievement-revision", () => {
+    try {
+      setLiaCourseVersion("1.0.0")
+      setLiaCourseRevision("source-old")
+      const oldCourse = new AchievementStore()
+      oldCourse.unlock("all-invisible-objects-found")
+
+      setLiaCourseRevision("source-current")
+      assert.deepEqual(new AchievementStore().state(), {
+        version: 1,
+        unlocked: [],
+      })
+    } finally {
+      setLiaCourseVersion("0.0.1")
+    }
   })
 })
 

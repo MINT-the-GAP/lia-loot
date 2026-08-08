@@ -39,7 +39,7 @@ const EXPECTED_TEMPLATE_TARGETS = [
   "freeze",
 ]
 
-test("definiert sieben Kern-, zwölf Template-, drei Quiz- und ein Item-Schlossziel", () => {
+test("definiert sieben Kern-, zwölf Template-, vier Quiz- und ein Item-Schlossziel", () => {
   assert.deepEqual(CORE_GLOBAL_TARGETS, [
     "toc",
     "mode",
@@ -52,7 +52,12 @@ test("definiert sieben Kern-, zwölf Template-, drei Quiz- und ein Item-Schlossz
   assert.deepEqual([...TEMPLATE_TARGETS], EXPECTED_TEMPLATE_TARGETS)
   assert.deepEqual([...GLOBAL_LOCK_TARGETS], CORE_GLOBAL_TARGETS)
   assert.deepEqual([...TEMPLATE_LOCK_TARGETS], EXPECTED_TEMPLATE_TARGETS)
-  assert.deepEqual([...LOCAL_LOCK_TARGETS], ["check", "resolve", "hint"])
+  assert.deepEqual([...LOCAL_LOCK_TARGETS], [
+    "check",
+    "resolve",
+    "hint",
+    "pentominoquiz",
+  ])
   assert.deepEqual([...ITEM_LOCK_TARGETS], ["portal"])
 
   const allTargets = [
@@ -62,8 +67,8 @@ test("definiert sieben Kern-, zwölf Template-, drei Quiz- und ein Item-Schlossz
     ...ITEM_LOCK_TARGETS,
   ]
   assert.equal(GLOBAL_LOCK_TARGETS.length, 7)
-  assert.equal(allTargets.length, 23)
-  assert.equal(new Set(allTargets).size, 23)
+  assert.equal(allTargets.length, 24)
+  assert.equal(new Set(allTargets).size, 24)
 })
 
 test("löst jeden kanonischen Zielnamen unverändert auf", () => {
@@ -94,6 +99,10 @@ test("normalisiert sinnvolle deutsche Aliase, Umlaute und Trennzeichen", () => {
     ["Aufl\u00f6sen", "resolve"],
     ["L\u00f6sung", "resolve"],
     ["Hinweis", "hint"],
+    ["PentominoQuiz", "pentominoquiz"],
+    ["Pentomino-Quiz-N", "pentominoquiz"],
+    ["PentominoDockQuiz", "pentominoquiz"],
+    ["Pentomino Dock Quiz Auswahl N", "pentominoquiz"],
     ["Portal", "portal"],
     ["Folien-Portal", "portal"],
     ["slide_portal", "portal"],

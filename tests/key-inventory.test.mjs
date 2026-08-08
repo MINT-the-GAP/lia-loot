@@ -10,7 +10,10 @@ import {
 } from "../src/key-colors.ts"
 import { KeyInventoryStore } from "../src/inventory-store.ts"
 import { ResourceStore } from "../src/resource-store.ts"
-import { setLiaCourseVersion } from "../src/course-identity.ts"
+import {
+  setLiaCourseRevision,
+  setLiaCourseVersion,
+} from "../src/course-identity.ts"
 
 function browserSession() {
   setLiaCourseVersion("0.0.1")
@@ -265,6 +268,23 @@ test("trennt Inventare derselben Kurs-URL nach Kursversion", () => {
   const restoredFirstVersion = new KeyInventoryStore()
   assert.equal(restoredFirstVersion.isKeyCollected("kurs:gelb"), true)
   assert.equal(restoredFirstVersion.isKeyCollected("kurs:orange"), false)
+})
+
+test("zählt alte Schloss-IDs nicht in einem geänderten Kursstand weiter", () => {
+  browserSession()
+  try {
+    setLiaCourseVersion("1.0.0")
+    setLiaCourseRevision("source-old")
+    const oldCourse = new KeyInventoryStore()
+    oldCourse.collectKey("old-key-1", "red")
+    oldCourse.useKeyForLock("old-lock-1", "red")
+
+    setLiaCourseRevision("source-current")
+    const currentCourse = new KeyInventoryStore()
+    assert.deepEqual(currentCourse.state().unlockedLocks, [])
+  } finally {
+    setLiaCourseVersion("0.0.1")
+  }
 })
 
 test("migriert den versionslosen Altzustand genau einmal", () => {

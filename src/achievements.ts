@@ -116,7 +116,6 @@ export const ACHIEVEMENTS: Readonly<
 export class AchievementManager {
   private readonly store: AchievementStore
   private readonly notify: AchievementNotifier
-  private readonly legacyAllChestsOpened: boolean
   private enabled = false
   private allQuizzesCompleted = false
   private perfectHighscore = false
@@ -133,8 +132,6 @@ export class AchievementManager {
   constructor(store: AchievementStore, notify: AchievementNotifier) {
     this.store = store
     this.notify = notify
-    this.legacyAllChestsOpened =
-      store.state().legacyAllChestsOpened === true
   }
 
   enable(): void {
@@ -245,7 +242,6 @@ export class AchievementManager {
         CHEST_ACHIEVEMENT_BY_REWARD[reward],
         total,
         this.collectedChests[reward],
-        this.legacyAllChestsOpened && total !== null && total > 0,
       )
     }
   }
@@ -268,13 +264,12 @@ export class AchievementManager {
     achievementId: AchievementId,
     total: number | null,
     completed: number,
-    migrated = false,
   ): void {
     this.evaluate(
       achievementId,
       total !== null &&
         total > 0 &&
-        (migrated || completed >= total),
+        completed >= total,
     )
   }
 

@@ -15,7 +15,12 @@ export const GLOBAL_LOCK_TARGETS = [
   "seitenwechsel",
 ] as const
 
-export const LOCAL_LOCK_TARGETS = ["check", "resolve", "hint"] as const
+export const LOCAL_LOCK_TARGETS = [
+  "check",
+  "resolve",
+  "hint",
+  "pentominoquiz",
+] as const
 export const ITEM_LOCK_TARGETS = ["portal"] as const
 export const TEMPLATE_LOCK_TARGETS = TEMPLATE_TARGETS
 
@@ -66,6 +71,12 @@ const TARGET_ALIASES: Readonly<Record<string, LockTarget>> = {
   solution: "resolve",
   hint: "hint",
   hinweis: "hint",
+  pentominoquiz: "pentominoquiz",
+  pentominoquizn: "pentominoquiz",
+  pentominodockquiz: "pentominoquiz",
+  pentominodockquizn: "pentominoquiz",
+  pentominodockquizauswahl: "pentominoquiz",
+  pentominodockquizauswahln: "pentominoquiz",
   portal: "portal",
   folienportal: "portal",
   slideportal: "portal",

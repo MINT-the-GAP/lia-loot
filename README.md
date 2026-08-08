@@ -1083,8 +1083,8 @@ Rückportal eines Zweiwegportals bleibt ungesperrt.
 
           --{{0}}--
 Mit `@Schloss` lässt sich ein globales Bedienobjekt, eine Fläche aus einem direkt
-importierten Template, eine lokale Quiz-Aktion oder ein direkt davor stehendes
-Portal mit einem farbigen Pixelart-Schloss sperren:
+importierten Template, eine lokale Quiz-Aktion, ein vollständiges Pentomino-Quiz
+oder ein direkt davor stehendes Portal mit einem farbigen Pixelart-Schloss sperren:
 
 ```markdown
 @Schloss(info, gruen)
@@ -1149,13 +1149,27 @@ Bei aktivierter Energie kostet der erste erfolgreiche Klick auf diesen Startbutt
 genau eine Energie; ein gesperrter oder wegen Energiemangel blockierter Klick startet
 den Countdown nicht.
 
-Für Quizze gibt es drei lokale Ziele:
+Für Quizze gibt es drei lokale Aktionsziele und ein Ziel für das vollständige
+Pentomino-Quiz:
 
-| Ziel | Gesperrte Quiz-Aktion |
+| Ziel | Gesperrter Bereich |
 |:--|:--|
 | `check` | Prüfen |
 | `resolve` | Auflösen |
 | `hint` | Hinweis |
+| `pentominoquiz` | Pentomino-Spielfeld oder -Dock einschließlich der zugehörigen LiaScript-Quizaktionen |
+
+Bei direkt importiertem `lia-pentominos` folgt das Schloss unmittelbar auf das
+jeweilige Pentomino-Quiz. Auch mehrere Pentomino-Quizze auf derselben Folie bleiben
+unabhängig. Als Ziel werden neben `pentominoquiz` auch die Makronamen
+`PentominoQuiz`, `PentominoQuizN`, `PentominoDockQuiz`,
+`PentominoDockQuizN`, `PentominoDockQuizAuswahl` und
+`PentominoDockQuizAuswahlN` erkannt:
+
+```markdown
+@PentominoQuiz(3,`name=Lock-I2;type=I2;numbers=[1,2]`)
+@Schloss(pentominoquiz, rot)
+```
 
 Für ein Portal gibt es ein weiteres folienlokales Ziel:
 
@@ -1264,8 +1278,8 @@ Der Trigger steht vor dem Semikolon. Dahinter wird derzeit ausschließlich die
 Aktion `spawn` unterstützt: Der gesamte Bereich ist zuvor weder sichtbar noch
 bedienbar und erscheint beim ersten Erfüllen dauerhaft. Ein späteres Absinken
 einer Ressource lässt bereits erschienenen Inhalt nicht wieder verschwinden. Der
-Spawn-Zustand bleibt kurs- und versionsgebunden im aktuellen Browser-Tab auch
-nach einem Neuladen erhalten.
+Spawn-Zustand bleibt kurs-, versions- und quellstandgebunden im aktuellen
+Browser-Tab auch nach einem Neuladen erhalten.
 
 | Gewünschter Trigger | Kanonische Schreibweise im ersten Feld |
 |:--|:--|
@@ -1364,6 +1378,12 @@ Kategorie existiert. Fehlt eine bestimmte Kistenart oder besitzt der Kurs kein
 unsichtbares Objekt, keinen Zauberstaub, keine Erde beziehungsweise keine Pflanze,
 vergibt er den jeweils zugehörigen Erfolg daher nicht beim Start. Jeder Erfolg wird
 pro Browser-Tab genau einmal gespeichert und beim Neuladen nicht erneut eingeblendet.
+
+Gespeicherter Fortschritt ist an Kurs-URL, deklarierte Kursversion und einen
+automatischen Fingerabdruck der tatsächlich geladenen Markdownquelle gebunden.
+Ändert sich der Kursquelltext, beginnt der neue Quellstand mit einem eigenen
+Zustand. Veraltete Fund-, Truhen- oder Schloss-IDs können dadurch keinen
+„alle“-Erfolg des überarbeiteten Kurses vorzeitig auslösen.
 
 ## `@Highscore`
 

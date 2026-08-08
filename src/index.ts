@@ -24,8 +24,8 @@ import { installObjectLocks } from "./object-lock"
 import {
   discoverCourseAchievementCatalog,
   discoverCourseAchievementsDeclaration,
+  discoverCourseIdentity,
   discoverCourseResourceDeclaration,
-  discoverCourseVersion,
 } from "./course-chests"
 import { prepareLiaCourseIdentity } from "./course-identity"
 import { hideHighscore, showHighscore } from "./popup"
@@ -418,7 +418,7 @@ function claimRuntime(): LootRuntimeState | null {
 
 async function start(runtime: LootRuntimeState): Promise<void> {
   try {
-    await prepareLiaCourseIdentity(discoverCourseVersion)
+    await prepareLiaCourseIdentity(discoverCourseIdentity)
     boot()
     if (window.__LIA_LOOT_RUNTIME__ === runtime) runtime.status = "ready"
   } catch (error) {

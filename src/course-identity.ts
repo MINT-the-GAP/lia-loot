@@ -5,7 +5,13 @@ interface LiaCourseRuntime {
   onReady?: (metadata: unknown) => unknown
 }
 
+export interface LiaCourseSourceIdentity {
+  version: string
+  revision?: string
+}
+
 let preparedVersion: string | null = null
+let preparedRevision: string | null = null
 
 function normalizedVersion(value: unknown): string | null {
   if (typeof value !== "string") return null
@@ -39,6 +45,11 @@ export function courseVersionFromMetadata(metadata: unknown): string | null {
 
 export function setLiaCourseVersion(version: unknown): void {
   preparedVersion = normalizedVersion(version) ?? DEFAULT_LIA_COURSE_VERSION
+  preparedRevision = null
+}
+
+export function setLiaCourseRevision(revision: unknown): void {
+  preparedRevision = normalizedVersion(revision)
 }
 
 export function liaCourseVersion(): string {
@@ -58,12 +69,34 @@ function liaCourseUrl(): string {
 }
 
 export function liaCourseIdentity(): string {
-  return `${liaCourseUrl()}::version=${encodeURIComponent(liaCourseVersion())}`
+  const versioned =
+    `${liaCourseUrl()}::version=${encodeURIComponent(liaCourseVersion())}`
+  return preparedRevision
+    ? `${versioned}::revision=${encodeURIComponent(preparedRevision)}`
+    : versioned
+}
+
+function normalizedSourceIdentity(
+  value: string | LiaCourseSourceIdentity | null,
+): LiaCourseSourceIdentity | null {
+  if (typeof value === "string") {
+    const version = normalizedVersion(value)
+    return version ? { version } : null
+  }
+  if (!value || typeof value !== "object") return null
+
+  const version = normalizedVersion(value.version)
+  const revision = normalizedVersion(value.revision)
+  if (!version) return null
+  return revision ? { version, revision } : { version }
 }
 
 export async function prepareLiaCourseIdentity(
-  loadSourceVersion: () => Promise<string | null>,
+  loadSourceIdentity: () => Promise<
+    string | LiaCourseSourceIdentity | null
+  >,
   fallbackAfterMs = 15_000,
+  sourceGraceAfterReadyMs = 750,
 ): Promise<string> {
   if (preparedVersion) return preparedVersion
 
@@ -82,16 +115,14 @@ export async function prepareLiaCourseIdentity(
     lia.onReady = readyWrapper
   })
 
-  const sourceVersion = new Promise<string>((resolve) => {
-    void Promise.resolve()
-      .then(loadSourceVersion)
-      .then((version) => {
-        const normalized = normalizedVersion(version)
-        if (normalized) resolve(normalized)
-      })
-      .catch(() => {
-        // Ready metadata or the bounded fallback still determine the version.
-      })
+  const sourceAttempt = Promise.resolve()
+    .then(loadSourceIdentity)
+    .then(normalizedSourceIdentity)
+    .catch(() => null)
+  const sourceIdentity = new Promise<LiaCourseSourceIdentity>((resolve) => {
+    void sourceAttempt.then((identity) => {
+      if (identity) resolve(identity)
+    })
   })
   const fallbackVersion = new Promise<string>((resolve) => {
     fallbackTimer = globalThis.setTimeout(
@@ -100,12 +131,45 @@ export async function prepareLiaCourseIdentity(
     )
   })
 
-  const version = await Promise.race([
-    readyVersion,
-    sourceVersion,
-    fallbackVersion,
+  const selected = await Promise.race([
+    sourceIdentity.then((identity) => ({
+      kind: "source" as const,
+      identity,
+    })),
+    readyVersion.then((version) => ({ kind: "ready" as const, version })),
+    fallbackVersion.then((version) => ({
+      kind: "fallback" as const,
+      version,
+    })),
   ])
-  setLiaCourseVersion(version)
+
+  let identity: LiaCourseSourceIdentity
+  if (selected.kind === "source") {
+    identity = selected.identity
+  } else if (selected.kind === "ready") {
+    let graceTimer: ReturnType<typeof globalThis.setTimeout> | null = null
+    const duringGrace = await Promise.race([
+      sourceAttempt,
+      new Promise<null>((resolve) => {
+        graceTimer = globalThis.setTimeout(
+          () => resolve(null),
+          Math.max(0, sourceGraceAfterReadyMs),
+        )
+      }),
+    ])
+    if (graceTimer !== null) globalThis.clearTimeout(graceTimer)
+    identity = {
+      version: selected.version,
+      ...(duringGrace?.revision
+        ? { revision: duringGrace.revision }
+        : {}),
+    }
+  } else {
+    identity = { version: selected.version }
+  }
+
+  setLiaCourseVersion(identity.version)
+  if (identity.revision) setLiaCourseRevision(identity.revision)
 
   if (fallbackTimer !== null) globalThis.clearTimeout(fallbackTimer)
   if (lia && readyWrapper && lia.onReady === readyWrapper) {

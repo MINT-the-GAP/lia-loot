@@ -1,6 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import {
+  setLiaCourseRevision,
+  setLiaCourseVersion,
+} from "../src/course-identity.ts"
 import { ResourceStore } from "../src/resource-store.ts"
 
 function browserSession() {
@@ -210,6 +214,31 @@ test("merkt sich eine eingesammelte Schatztruhe beim Neuladen", () => {
   const state = restored.configure(1, 0)
   assert.equal(state.gold, 2)
   assert.deepEqual(state.collectedChests, ["kurs:menu"])
+})
+
+test("zählt alte Truhen-IDs nicht in einem geänderten Kursstand weiter", () => {
+  browserSession()
+  try {
+    setLiaCourseVersion("1.0.0")
+    setLiaCourseRevision("source-old")
+    const oldCourse = new ResourceStore()
+    oldCourse.configure(0, 0)
+    oldCourse.collectChest("old-gold-1")
+    oldCourse.collectChest("old-gold-2")
+    oldCourse.collectChest("old-gold-3")
+
+    setLiaCourseRevision("source-current")
+    const currentCourse = new ResourceStore()
+    currentCourse.configure(0, 0)
+    currentCourse.collectChest("current-gold-1")
+    assert.deepEqual(currentCourse.collectedChestCounts(), {
+      gold: 1,
+      diamonds: 0,
+      energy: 0,
+    })
+  } finally {
+    setLiaCourseVersion("0.0.1")
+  }
 })
 
 test("merkt sich Diamantbelohnung und Diamanttruhe beim Neuladen", () => {

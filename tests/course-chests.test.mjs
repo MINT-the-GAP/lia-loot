@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import {
+  courseSourceRevision,
   discoverCourseAchievementCatalog,
+  discoverCourseIdentity,
   discoverCourseLockDeclarations,
   discoverCourseResourceDeclaration,
   discoverCourseSecretSlideDeclarations,
@@ -18,6 +20,17 @@ import {
   parseCourseResourceDeclaration,
   parseCourseSecretSlideDeclarations,
 } from "../src/course-chests.ts"
+
+test("bindet den Kurszustand stabil an den tatsächlichen Quelltext", () => {
+  const unix = "<!--\nversion: 1.2.3\n-->\n# Kurs\n@Unsichtbar(A)\n"
+  const windows = unix.replaceAll("\n", "\r\n")
+
+  assert.equal(courseSourceRevision(unix), courseSourceRevision(windows))
+  assert.notEqual(
+    courseSourceRevision(unix),
+    courseSourceRevision(unix.replace("@Unsichtbar(A)", "@Unsichtbar(B)")),
+  )
+})
 
 test("hält Surface-Funde in geschlossenen Reveal-Containern zurück", () => {
   const markdown = `
@@ -797,6 +810,25 @@ test("zaehlt Achievement-Objekte nur in gueltig balancierten lootif-Ranges", () 
   })
 })
 
+test("lässt ungeschlossene Reveal-Bereiche nicht in die nächste Folie reichen", () => {
+  const markdown = `
+# Unvollständig
+@Erdhaufen(unsichtbar)
+@Unsichtbar(Nicht erreichbar)
+
+# Nächste Folie
+@Unsichtbar(Echter Fund)
+`
+
+  assert.deepEqual(parseCourseAchievementCatalog(markdown), {
+    dust: 0,
+    plant: 0,
+    soil: 0,
+    solid: 1,
+  })
+  assert.deepEqual(parseCourseChestDeclarations(markdown, false), [])
+})
+
 test("erkennt das korrekt geschriebene Achievement-Makro und seine Aliasse", () => {
   assert.equal(parseCourseAchievementsDeclaration("@achievements"), true)
   assert.equal(parseCourseAchievementsDeclaration("@Achievements"), true)
@@ -848,8 +880,9 @@ test("wiederholt die frühe Quelltextladung nach einem vorübergehenden Fehler",
   }
 
   try {
-    const [catalog, declarations, resources, secretSlides, version] = await Promise.all([
+    const [catalog, identity, declarations, resources, secretSlides, version] = await Promise.all([
       discoverCourseAchievementCatalog(),
+      discoverCourseIdentity(),
       discoverCourseLockDeclarations(),
       discoverCourseResourceDeclaration(),
       discoverCourseSecretSlideDeclarations(),
@@ -861,6 +894,12 @@ test("wiederholt die frühe Quelltextladung nach einem vorübergehenden Fehler",
       plant: 0,
       soil: 1,
       solid: 0,
+    })
+    assert.deepEqual(identity, {
+      version: "3.2.1",
+      revision: courseSourceRevision(
+        "<!--\nversion: 3.2.1\n-->\n# Kurs\n@Ressourcen(7, 2, 0)\n@Schloss(info, gruen)\n@Geheimfolie\n@Erdhaufen(zauberstaub)\n@Zauberstaub(Inhalt)\n@EndeErdhaufen\n",
+      ),
     })
     assert.equal(declarations.length, 1)
     assert.equal(declarations[0].color, "green")

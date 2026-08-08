@@ -1,6 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import {
+  setLiaCourseRevision,
+  setLiaCourseVersion,
+} from "../src/course-identity.ts"
 import { ExplorationStore } from "../src/exploration-store.ts"
 
 function browserSession(search = "?exploration=1", data = new Map()) {
@@ -109,6 +113,27 @@ test("trennt Exploration zwischen unterschiedlichen Kurs-URLs", () => {
     wateredPlants: [],
     openedPlants: [],
   })
+})
+
+test("zählt alte Fund-IDs nicht in einem geänderten Kursstand weiter", () => {
+  browserSession("?course-revision=1")
+  try {
+    setLiaCourseVersion("1.0.0")
+    setLiaCourseRevision("source-old")
+    const oldCourse = new ExplorationStore()
+    oldCourse.findConcealedObject("old-solid-1", "solid")
+    oldCourse.findConcealedObject("old-solid-2", "solid")
+    oldCourse.findConcealedObject("old-solid-3", "solid")
+
+    setLiaCourseRevision("source-current")
+    const currentCourse = new ExplorationStore()
+    currentCourse.findConcealedObject("current-solid-1", "solid")
+    assert.deepEqual(currentCourse.state().foundInvisibleObjects, [
+      "current-solid-1",
+    ])
+  } finally {
+    setLiaCourseVersion("0.0.1")
+  }
 })
 
 test("liefert eine defensive Zustandskopie", () => {

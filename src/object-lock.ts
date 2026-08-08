@@ -40,6 +40,9 @@ const LOCK_TAG = "lia-loot-lock"
 const PORTAL_TAG = "lia-loot-slide-portal"
 const PORTAL_BUTTON_SELECTOR = "[data-loot-slide-portal-button]"
 const QUIZ_SELECTOR = ".lia-quiz"
+const PENTOMINO_QUIZ_MARKER_SELECTOR =
+  ".lia-pentomino-quiz[data-board-id], " +
+  ".lia-pentomino-dock-quiz[data-board-id]"
 const STATUS_ID = "lia-loot-lock-status"
 const UNLOCK_DURATION = 620
 const FEEDBACK_DURATION = 2200
@@ -131,7 +134,10 @@ const SUPPORT_TARGETS: Readonly<
   },
 }
 
-const QUIZ_ACTION_SELECTORS: Record<LocalLockTarget, string> = {
+const QUIZ_ACTION_SELECTORS: Record<
+  Exclude<LocalLockTarget, "pentominoquiz">,
+  string
+> = {
   check: ".lia-quiz__control .lia-quiz__check",
   resolve: ".lia-quiz__control .lia-quiz__resolve",
   hint: ".lia-quiz__control .lia-quiz__hint",
@@ -148,6 +154,7 @@ const TARGET_NAMES: Record<LockTarget, string> = {
   check: "Prüfen",
   resolve: "Auflösen",
   hint: "Hinweis",
+  pentominoquiz: "Pentomino-Quiz",
   portal: "Portal",
   ...TEMPLATE_TARGET_LABELS,
 }
@@ -598,9 +605,127 @@ function isVisibleAction(quiz: HTMLElement, action: HTMLElement): boolean {
   return visible
 }
 
+interface PentominoRuntimeWindow extends Window {
+  LiaPentomino?: { checkQuiz?: unknown }
+  __boards?: Record<string, { containerObj?: unknown } | undefined>
+}
+
+interface PentominoQuizBinding {
+  controls: HTMLElement[]
+  focusCandidates: HTMLElement[]
+  primary: HTMLElement
+}
+
+function directSlideChild(element: HTMLElement): HTMLElement | null {
+  const slide = element.closest<HTMLElement>("main.lia-slide__content")
+  if (!slide) return null
+
+  let child = element
+  while (child.parentElement && child.parentElement !== slide) {
+    child = child.parentElement
+  }
+  return child.parentElement === slide ? child : null
+}
+
+function pentominoMarkerForQuiz(quiz: HTMLElement): HTMLElement | null {
+  const quizWrapper = directSlideChild(quiz)
+  const task = quizWrapper?.previousElementSibling
+  if (
+    !(task instanceof HTMLElement) ||
+    !task.classList.contains("lia-pentomino-quiz-task")
+  ) {
+    return null
+  }
+
+  const markers = task.querySelectorAll<HTMLElement>(
+    PENTOMINO_QUIZ_MARKER_SELECTOR,
+  )
+  return markers.length === 1 ? markers[0] : null
+}
+
+function pentominoBinding(quiz: HTMLElement): PentominoQuizBinding | null {
+  const marker = pentominoMarkerForQuiz(quiz)
+  const view = quiz.ownerDocument.defaultView as PentominoRuntimeWindow | null
+  if (!marker || typeof view?.LiaPentomino?.checkQuiz !== "function") {
+    return null
+  }
+
+  const boardId = marker.dataset.boardId?.trim()
+  const board = boardId ? view.__boards?.[boardId]?.containerObj : null
+  if (
+    !(board instanceof HTMLElement) ||
+    !board.isConnected ||
+    board.ownerDocument !== quiz.ownerDocument
+  ) {
+    return null
+  }
+
+  const boardRoot = board.getRootNode()
+  const boardHost =
+    boardRoot instanceof ShadowRoot && boardRoot.host instanceof HTMLElement
+      ? boardRoot.host
+      : null
+  if (
+    !boardHost?.isConnected ||
+    boardHost.ownerDocument !== quiz.ownerDocument ||
+    !boardHost.matches("jsx-graph")
+  ) {
+    return null
+  }
+
+  let primary = boardHost
+  let primaryControl: HTMLElement | null = board.querySelector<HTMLElement>(
+    ".lia-pentomino-rotate-button > button",
+  )
+  if (marker.classList.contains("lia-pentomino-dock-quiz")) {
+    const dockId = marker.dataset.dockMarkerId?.trim()
+    const dock = dockId ? quiz.ownerDocument.getElementById(dockId) : null
+    const workspace = dock?.closest<HTMLElement>(
+      ".lia-pentomino-workspace",
+    )
+    if (
+      !(dock instanceof HTMLElement) ||
+      !dock.classList.contains("lia-pentomino-dock") ||
+      !workspace?.contains(boardHost)
+    ) {
+      return null
+    }
+    primary = workspace
+    primaryControl = workspace.querySelector<HTMLElement>(
+      ".lia-pentomino-dock-toggle",
+    )
+  } else if (!marker.classList.contains("lia-pentomino-quiz")) {
+    return null
+  }
+
+  const quizCheck = quiz.querySelector<HTMLElement>(".lia-quiz__check")
+  return {
+    primary,
+    controls: [primary, quiz, ...(primaryControl ? [primaryControl] : [])],
+    focusCandidates: [primaryControl, quizCheck, primary, quiz].filter(
+      (element): element is HTMLElement => element !== null,
+    ),
+  }
+}
+
 function localBinding(request: LockRequest): TargetBinding | null {
   if (!request.quiz || !request.quiz.isConnected) return null
   if (!isLocalLockTarget(request.target)) return null
+
+  if (request.target === "pentominoquiz") {
+    const component = pentominoBinding(request.quiz)
+    if (!component) return null
+    return {
+      slotKey: `local:${quizRuntimeKey(request.quiz)}:${request.target}`,
+      root: component.primary,
+      anchor: component.primary,
+      controls: component.controls,
+      contents: [],
+      mode: "floating",
+      focusCandidates: component.focusCandidates,
+    }
+  }
+
   const action = request.quiz.querySelector<HTMLElement>(
     QUIZ_ACTION_SELECTORS[request.target],
   )

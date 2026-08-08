@@ -23,6 +23,7 @@ import { parsePuzzlePieceOptions } from "./puzzle-options.ts"
 import { resolveSurfaceTarget } from "./surface-targets.ts"
 import { resolveTemplateTarget } from "./template-targets.ts"
 import type { ResourceKind } from "./types"
+import type { LiaCourseSourceIdentity } from "./course-identity.ts"
 
 export type {
   CoursePuzzleDiscovery,
@@ -283,6 +284,13 @@ function hash(value: string): string {
   return (result >>> 0).toString(36)
 }
 
+export function courseSourceRevision(markdown: string): string {
+  const normalized = markdown
+    .replace(/^\uFEFF/u, "")
+    .replace(/\r\n?/gu, "\n")
+  return `${normalized.length.toString(36)}-${hash(normalized)}`
+}
+
 export function parseCourseVersion(markdown: string): string {
   const header = /^\s*<!--([\s\S]*?)-->/u.exec(
     markdown.replace(/^\uFEFF/u, ""),
@@ -343,6 +351,7 @@ function visibleCourseLines(markdown: string): VisibleCourseLine[] {
       // Runtime ranges are scoped to one rendered LiaScript slide. An open
       // source range must therefore never capture declarations on a later one.
       lootIfFrames = []
+      revealContainers.length = 0
     }
     if (isLootIfEnd(visibleLine)) {
       const frame = lootIfFrames.pop()
@@ -793,10 +802,15 @@ export function parseCourseAchievementCatalog(
   const catalog = emptyCourseAchievementCatalog()
   const frames: AchievementCatalogFrame[] = []
   const validPuzzleSources = validPuzzleAchievementSourceOrders(markdown)
+  let currentSection: number | null = null
   const currentCatalog = (): CourseAchievementCatalog =>
     frames[frames.length - 1]?.catalog ?? catalog
 
   for (const [sourceOrder, line] of visibleCourseLines(markdown).entries()) {
+    if (line.section !== currentSection) {
+      frames.length = 0
+      currentSection = line.section
+    }
     if (!line.lootIfCatalogEligible) continue
     const start = achievementRevealStart(line.content)
     if (start) {
@@ -1179,7 +1193,7 @@ async function fetchCourseMarkdown(): Promise<string | null> {
 
   try {
     const response = await load(sourceUrl, {
-      cache: "default",
+      cache: "no-cache",
       credentials: "same-origin",
       signal: abort.signal,
     })
@@ -1235,6 +1249,18 @@ export async function discoverCourseKeyDeclarations(): Promise<
 export async function discoverCourseVersion(): Promise<string | null> {
   const markdown = await loadCourseMarkdown()
   return markdown ? parseCourseVersion(markdown) : null
+}
+
+export async function discoverCourseIdentity(): Promise<
+  LiaCourseSourceIdentity | null
+> {
+  const markdown = await loadCourseMarkdown()
+  return markdown
+    ? {
+        version: parseCourseVersion(markdown),
+        revision: courseSourceRevision(markdown),
+      }
+    : null
 }
 
 export async function discoverCourseLockDeclarations(): Promise<

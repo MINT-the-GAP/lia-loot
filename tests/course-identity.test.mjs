@@ -4,6 +4,7 @@ import test from "node:test"
 import {
   courseVersionFromMetadata,
   liaCourseIdentity,
+  setLiaCourseRevision,
   setLiaCourseVersion,
 } from "../src/course-identity.ts"
 
@@ -73,6 +74,105 @@ test("trennt dieselbe Kurs-URL nach der deklarierten Kursversion", () => {
     )
   } finally {
     setLiaCourseVersion("0.0.1")
+    globalThis.window = previousWindow
+  }
+})
+
+test("trennt dieselbe URL und Version nach dem Quelltext-Fingerprint", () => {
+  const previousWindow = globalThis.window
+  try {
+    globalThis.window = {
+      LIA: { defaultCourseURL: "https://courses.example/raum-a.md" },
+      location: {
+        href: "https://viewer.example/#1",
+        pathname: "/",
+        search: "",
+      },
+    }
+    setLiaCourseVersion("2.7.0")
+    setLiaCourseRevision("source-a")
+    const first = liaCourseIdentity()
+    setLiaCourseRevision("source-b")
+    const second = liaCourseIdentity()
+
+    assert.equal(
+      first,
+      "https://courses.example/raum-a.md::version=2.7.0::revision=source-a",
+    )
+    assert.equal(
+      second,
+      "https://courses.example/raum-a.md::version=2.7.0::revision=source-b",
+    )
+    assert.notEqual(first, second)
+  } finally {
+    setLiaCourseVersion("0.0.1")
+    globalThis.window = previousWindow
+  }
+})
+
+test("übernimmt Version und Revision atomar aus derselben Kursquelle", async () => {
+  const previousWindow = globalThis.window
+  const identity = await import(
+    `../src/course-identity.ts?source-identity=${Date.now()}`,
+  )
+  try {
+    globalThis.window = {
+      LIA: { defaultCourseURL: "https://courses.example/source.md" },
+      location: {
+        href: "https://viewer.example/#1",
+        pathname: "/",
+        search: "",
+      },
+    }
+    assert.equal(
+      await identity.prepareLiaCourseIdentity(async () => ({
+        version: "6.1.0",
+        revision: "markdown-abc",
+      })),
+      "6.1.0",
+    )
+    assert.equal(
+      identity.liaCourseIdentity(),
+      "https://courses.example/source.md::version=6.1.0::revision=markdown-abc",
+    )
+  } finally {
+    globalThis.window = previousWindow
+  }
+})
+
+test("wartet nach frühem Ready kurz auf den laufenden Quellfingerprint", async () => {
+  const previousWindow = globalThis.window
+  const identity = await import(
+    `../src/course-identity.ts?source-grace=${Date.now()}`,
+  )
+  let resolveSource
+  try {
+    globalThis.window = {
+      LIA: { defaultCourseURL: "https://courses.example/grace.md" },
+      location: {
+        href: "https://viewer.example/#1",
+        pathname: "/",
+        search: "",
+      },
+    }
+    const prepared = identity.prepareLiaCourseIdentity(
+      () =>
+        new Promise((resolve) => {
+          resolveSource = resolve
+        }),
+      1_000,
+      100,
+    )
+    await new Promise((resolve) => setImmediate(resolve))
+    globalThis.window.LIA.onReady({ version: "7.0.0" })
+    resolveSource({ version: "6.9.0", revision: "source-late" })
+
+    assert.equal(await prepared, "7.0.0")
+    assert.equal(
+      identity.liaCourseIdentity(),
+      "https://courses.example/grace.md::version=7.0.0::revision=source-late",
+    )
+  } finally {
     globalThis.window = previousWindow
   }
 })
