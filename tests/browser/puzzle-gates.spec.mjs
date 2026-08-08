@@ -97,6 +97,7 @@ async function collectPieces(page, color, numbers) {
         `[data-loot-puzzle-inventory-piece="${color}:${number}"]`,
       ),
     ).toBeVisible()
+    await expect(pickup).toHaveCount(0)
   }
 
   const inventory = page.locator(

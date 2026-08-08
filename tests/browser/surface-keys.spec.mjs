@@ -180,7 +180,9 @@ test("menu und classroom bleiben über Remount, Schloss, Reload und Kursversion 
       .map((key) => decodeURIComponent(key)),
   )
   expect(
-    inventoryStorageKeys.some((key) => key.endsWith("::version=1.0.0")),
+    inventoryStorageKeys.some((key) =>
+      /::version=1\.0\.0::revision=[^:]+$/u.test(key),
+    ),
   ).toBe(true)
 
   await page.reload({ waitUntil: "domcontentloaded" })

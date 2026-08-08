@@ -6,7 +6,7 @@ const testOrigin = "http://127.0.0.1:4173"
 const editorPath = "/node_modules/@liascript/editor/dist/index.html"
 const lootImport = "../../../README.md"
 const freezeImport =
-  "https://raw.githubusercontent.com/MINT-the-GAP/lia-freeze-v2/34d908c845347cf7e9ed65d90fbd4928dbfa45b9/README.md"
+  "https://raw.githubusercontent.com/MINT-the-GAP/lia-freeze-v2/c5598e0531a12fa491ff61e7d2dc83aa1dfc4880/README.md"
 
 const revealFixture = {
   file: new URL('./fixtures/reveal-chain.md', import.meta.url),

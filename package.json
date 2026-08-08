@@ -4,7 +4,7 @@
   "type": "module",
   "description": "LiaScript gamification plugin with a configurable highscore, time penalties, and trophy popup",
   "scripts": {
-    "build": "parcel build src/index.ts --dist-dir dist --no-scope-hoist",
+    "build": "parcel build src/index.ts --dist-dir dist --no-scope-hoist --no-cache",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "test:browser": "playwright test",
     "test:stress": "npm run build && node tests/run-browser-stress.mjs",
