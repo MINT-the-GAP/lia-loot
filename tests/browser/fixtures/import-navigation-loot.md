@@ -12,6 +12,10 @@ import: ../../../README.md
 
 Diese öffentliche Startfolie muss ohne Freigabe erreichbar bleiben.
 
+@Ressourcen(0, 0)
+@Schatztruhe(toc)
+@Schluessel(blau; toc)
+
 ## Verborgener Navigationsgarten
 
 @Geheimfolie

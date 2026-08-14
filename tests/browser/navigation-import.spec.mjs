@@ -78,9 +78,41 @@ async function expectImportedNavigation(page, fixture) {
   const clearNavigationSearch = page.locator(
     "#lia-bm-toc5 .bm-search-clear",
   )
+  const navigationList = page.locator("#lia-bm-toc5 > .bm-list")
+  const navigationFooter = page.locator("#lia-bm-toc5 > .bm-footer")
+  const tocFinds = navigationList.locator(
+    "[data-loot-chest-portal][data-loot-chest-location=toc], [data-loot-key-placement][data-loot-key-location=toc]",
+  )
 
   await expect(nativeSecretLink).toHaveCount(1)
   await expect(navigationSecretLink).toHaveCount(1)
+  await expect(tocFinds).toHaveCount(2)
+  await expect(tocFinds.nth(0)).toBeVisible()
+  await expect(tocFinds.nth(1)).toBeVisible()
+  await expect(navigationFooter).toBeVisible()
+
+  const tocLayout = await page.evaluate(() => {
+    const list = document.querySelector("#lia-bm-toc5 > .bm-list")
+    const footer = document.querySelector("#lia-bm-toc5 > .bm-footer")
+    const finds = list?.querySelectorAll(
+      "[data-loot-chest-portal][data-loot-chest-location=toc], [data-loot-key-placement][data-loot-key-location=toc]",
+    )
+    const lastFind = finds?.item((finds?.length ?? 1) - 1)
+    lastFind?.scrollIntoView({ block: "nearest" })
+    const findRect = lastFind?.getBoundingClientRect()
+    const footerRect = footer?.getBoundingClientRect()
+    const listRect = list?.getBoundingClientRect()
+    return {
+      findBottom: findRect?.bottom ?? Number.NaN,
+      findTop: findRect?.top ?? Number.NaN,
+      footerTop: footerRect?.top ?? Number.NaN,
+      listTop: listRect?.top ?? Number.NaN,
+    }
+  })
+
+  expect(Number.isFinite(tocLayout.findTop)).toBe(true)
+  expect(tocLayout.findTop).toBeGreaterThanOrEqual(tocLayout.listTop - 0.5)
+  expect(tocLayout.findBottom).toBeLessThanOrEqual(tocLayout.footerTop + 0.5)
   await expect(nativeSecretLink).toHaveClass(/loot-secret-slide-link/u)
   await expect(navigationSecretLink).toHaveClass(/loot-secret-slide-link/u)
   await expect(navigationSecretRow).toHaveClass(/loot-secret-slide-row/u)

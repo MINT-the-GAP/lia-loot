@@ -8,6 +8,7 @@ import {
 } from "../src/course-chests.ts"
 import {
   resolveSurfaceTarget,
+  surfaceTargetElement,
   SURFACE_TARGETS,
 } from "../src/surface-targets.ts"
 
@@ -24,6 +25,39 @@ const {
 } = await import("../src/key-pickup.ts")
 if (previousHTMLElement === undefined) delete globalThis.HTMLElement
 else globalThis.HTMLElement = previousHTMLElement
+
+test("setzt TOC-Funde in die scrollbare lia-navigation-Liste", () => {
+  const enhancedToc = { id: "enhanced" }
+  const nativeToc = { id: "native" }
+  const enhancedQueries = []
+  const enhancedDocument = {
+    querySelector(selector) {
+      enhancedQueries.push(selector)
+      return selector === "#lia-toc #lia-bm-toc5 > .bm-list"
+        ? enhancedToc
+        : nativeToc
+    },
+  }
+
+  assert.equal(surfaceTargetElement("toc", enhancedDocument), enhancedToc)
+  assert.deepEqual(enhancedQueries, [
+    "#lia-toc #lia-bm-toc5 > .bm-list",
+  ])
+
+  const fallbackQueries = []
+  const fallbackDocument = {
+    querySelector(selector) {
+      fallbackQueries.push(selector)
+      return selector === "#lia-toc .lia-toc__content" ? nativeToc : null
+    },
+  }
+
+  assert.equal(surfaceTargetElement("toc", fallbackDocument), nativeToc)
+  assert.deepEqual(fallbackQueries, [
+    "#lia-toc #lia-bm-toc5 > .bm-list",
+    "#lia-toc .lia-toc__content",
+  ])
+})
 
 function visibility(overrides = {}) {
   return {

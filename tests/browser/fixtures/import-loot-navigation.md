@@ -12,6 +12,10 @@ import: https://raw.githubusercontent.com/MINT-the-GAP/lia-navigation/7881ba6fac
 
 Diese öffentliche Startfolie muss ohne Freigabe erreichbar bleiben.
 
+@Ressourcen(0, 0)
+@Schatztruhe(toc)
+@Schluessel(blau; toc)
+
 ## Verborgener Navigationsgarten
 
 @Geheimfolie

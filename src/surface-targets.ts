@@ -96,6 +96,12 @@ export function surfaceTargetElement(
   target: SurfaceTarget,
   documentRoot: Document = document,
 ): HTMLElement | null {
+  if (target === "toc") {
+    const enhancedToc = documentRoot.querySelector<HTMLElement>(
+      "#lia-toc #lia-bm-toc5 > .bm-list",
+    )
+    if (enhancedToc) return enhancedToc
+  }
   return documentRoot.querySelector<HTMLElement>(BY_ID.get(target)!.selector)
 }
 
