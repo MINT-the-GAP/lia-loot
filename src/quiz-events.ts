@@ -1,3 +1,6 @@
+import { onCourseMarkdownChange } from "./course-chests.ts"
+import { observeLiaSlideActivity } from "./slide-activity.ts"
+
 const CHECK_SELECTOR = ".lia-quiz__check"
 const HINT_SELECTOR = ".lia-quiz__hint"
 const QUIZ_SELECTOR = ".lia-quiz"
@@ -8,7 +11,8 @@ export interface QuizEventHandlers {
   failed(): void
   hint(count: number): void
   solved(quiz: Element): void
-  courseCompleted(): void
+  allSolved?(): void
+  courseCompleted(): boolean
   useCheck(): boolean
   useHint(): boolean
   useResolve(): boolean
@@ -63,6 +67,88 @@ export function allRenderedCourseQuizzesSolved(root: ParentNode): boolean {
     quizzes.every((quiz) => quiz.classList.contains("solved")) &&
     quizzes.some(isLastCourseQuiz)
   )
+}
+
+function quizCompleted(quiz: Element): boolean {
+  return (
+    quiz.classList.contains("solved") ||
+    quiz.classList.contains("resolved")
+  )
+}
+
+export type CourseQuizState = "open" | "resolved" | "solved"
+
+export interface CourseQuizRecord {
+  id: string
+  state: CourseQuizState
+}
+
+export class CourseQuizProgress {
+  private expectedSections = new Set<number>()
+  private visitedSections = new Set<number>()
+  private quizIds = new Map<number, Set<string>>()
+  private completedQuizzes = new Set<string>()
+  private solvedQuizzes = new Set<string>()
+
+  reset(): void {
+    this.expectedSections.clear()
+    this.visitedSections.clear()
+    this.quizIds.clear()
+    this.completedQuizzes.clear()
+    this.solvedQuizzes.clear()
+  }
+
+  expectSections(sections: Iterable<number>): void {
+    this.expectedSections = new Set(
+      [...sections].filter(
+        (section) => Number.isInteger(section) && section >= 0,
+      ),
+    )
+  }
+
+  catalogSection(
+    section: number,
+    quizzes: readonly CourseQuizRecord[],
+  ): void {
+    if (!Number.isInteger(section) || section < 0) return
+    this.visitedSections.add(section)
+    const knownIds = this.quizIds.get(section) ?? new Set<string>()
+    this.quizIds.set(section, knownIds)
+
+    quizzes.forEach(({ id: localId, state }) => {
+      const id = `${section}:${localId}`
+      knownIds.add(id)
+      if (state === "solved") {
+        this.solvedQuizzes.add(id)
+        this.completedQuizzes.add(id)
+      } else if (state === "resolved") {
+        this.completedQuizzes.add(id)
+      }
+    })
+  }
+
+  allCompleted(): boolean {
+    return this.allKnownQuizzesAre(this.completedQuizzes)
+  }
+
+  allSolved(): boolean {
+    return this.allKnownQuizzesAre(this.solvedQuizzes)
+  }
+
+  private allKnownQuizzesAre(completed: ReadonlySet<string>): boolean {
+    if (this.expectedSections.size === 0) return false
+
+    let quizCount = 0
+    for (const section of this.expectedSections) {
+      if (!this.visitedSections.has(section)) return false
+      const ids = this.quizIds.get(section) ?? new Set<string>()
+      quizCount += ids.size
+      for (const id of ids) {
+        if (!completed.has(id)) return false
+      }
+    }
+    return quizCount > 0
+  }
 }
 
 export function isLastCourseQuiz(quiz: Element): boolean {
@@ -133,9 +219,211 @@ function watchUntil<T>(
   window.setTimeout(inspect, 0)
 }
 
+function sectionFromHref(href: string): number | null {
+  let hash = href
+  try {
+    hash = new URL(href, window.location.href).hash
+  } catch {
+    // The exact hash parser below remains the fail-closed fallback.
+  }
+  const match = /^#(\d+)$/.exec(hash)
+  if (!match) return null
+  const section = Number.parseInt(match[1], 10) - 1
+  return Number.isInteger(section) && section >= 0 ? section : null
+}
+
+function expectedCourseSections(): Set<number> {
+  const sections = new Set<number>()
+  document.querySelectorAll<HTMLAnchorElement>("#lia-toc a[href]").forEach(
+    (link) => {
+      const section = sectionFromHref(link.getAttribute("href") ?? "")
+      if (section !== null) sections.add(section)
+    },
+  )
+  return sections
+}
+
+function activeCourseSection(
+  activeSlide: HTMLElement,
+  expectedSections: ReadonlySet<number>,
+): number | null {
+  const hashSection = sectionFromHref(window.location.hash)
+  if (hashSection !== null && expectedSections.has(hashSection)) {
+    return hashSection
+  }
+
+  const focused = document.querySelector<HTMLAnchorElement>(
+    "#lia-toc #focusedToc[href], #lia-toc a[aria-current='page'][href]",
+  )
+  const focusedSection = focused
+    ? sectionFromHref(focused.getAttribute("href") ?? "")
+    : null
+  if (focusedSection !== null && expectedSections.has(focusedSection)) {
+    return focusedSection
+  }
+
+  const container = activeSlide.parentElement
+  if (container) {
+    const slides = [...container.children].filter(
+      (element) => element instanceof HTMLElement && element.tagName === "MAIN",
+    )
+    const index = slides.indexOf(activeSlide)
+    if (slides.length > 1 && expectedSections.has(index)) return index
+  }
+
+  return expectedSections.size === 1 ? [...expectedSections][0] : null
+}
+
+function renderedQuizState(quiz: Element): CourseQuizState {
+  if (quiz.classList.contains("solved")) return "solved"
+  if (quiz.classList.contains("resolved")) return "resolved"
+  return "open"
+}
+
+function normalizedQuizAnchor(quiz: Element): string | null {
+  const anchors = new Set(
+    [...quiz.querySelectorAll(".lia-quiz__answers[aria-labelledby]")]
+      .map((answers) =>
+        (answers.getAttribute("aria-labelledby") ?? "")
+          .trim()
+          .replace(/\s+/gu, " "),
+      )
+      .filter((anchor) => anchor.length > 0 && !anchor.startsWith("@")),
+  )
+  return anchors.size === 1 ? [...anchors][0] : null
+}
+
+function renderedQuizRecords(activeSlide: HTMLElement): CourseQuizRecord[] {
+  const quizzes = [...activeSlide.querySelectorAll(QUIZ_SELECTOR)].filter(
+    isScoreableQuiz,
+  )
+  const anchors = quizzes.map(normalizedQuizAnchor)
+  const anchorCounts = new Map<string, number>()
+  anchors.forEach((anchor) => {
+    if (anchor) anchorCounts.set(anchor, (anchorCounts.get(anchor) ?? 0) + 1)
+  })
+
+  return quizzes.map((quiz, index) => {
+    const anchor = anchors[index]
+    const id =
+      anchor && anchorCounts.get(anchor) === 1
+        ? `anchor:${encodeURIComponent(anchor)}`
+        : `ordinal:${index}`
+    return { id, state: renderedQuizState(quiz) }
+  })
+}
+
+function nodeAffectsQuizCatalog(node: Node): boolean {
+  return (
+    node instanceof Element &&
+    (node.matches(`${QUIZ_SELECTOR}, #lia-toc, #lia-toc a[href]`) ||
+      node.querySelector(`${QUIZ_SELECTOR}, #lia-toc, #lia-toc a[href]`) !==
+        null)
+  )
+}
+
 export function installQuizEventTracking(handlers: QuizEventHandlers): void {
   const pendingChecks = new WeakSet<Element>()
   const pendingHints = new WeakSet<Element>()
+  const pendingResolves = new WeakSet<Element>()
+  const courseProgress = new CourseQuizProgress()
+  let courseCompletionReported = false
+  let allSolvedReported = false
+  let captureScheduled = false
+  let reportAfterCapture = false
+
+  const captureCourseProgress = (): void => {
+    const sections = expectedCourseSections()
+    if (sections.size === 0) return
+    courseProgress.expectSections(sections)
+
+    const activeSlide = document.querySelector<HTMLElement>(
+      ".lia-slide__container > main.lia-slide__content:not([hidden])",
+    )
+    if (!activeSlide) return
+    const section = activeCourseSection(activeSlide, sections)
+    if (section === null) return
+    courseProgress.catalogSection(section, renderedQuizRecords(activeSlide))
+  }
+
+  const reportCourseCompletion = (): void => {
+    captureCourseProgress()
+    if (!allSolvedReported && courseProgress.allSolved()) {
+      allSolvedReported = true
+      handlers.allSolved?.()
+    }
+    if (!courseCompletionReported && courseProgress.allCompleted()) {
+      courseCompletionReported = handlers.courseCompleted()
+    }
+  }
+
+  const scheduleCapture = (report: boolean): void => {
+    reportAfterCapture ||= report
+    if (captureScheduled) return
+    captureScheduled = true
+
+    window.setTimeout(() => {
+      const nextFrame = (callback: () => void): void => {
+        if (typeof window.requestAnimationFrame === "function") {
+          window.requestAnimationFrame(() => callback())
+        } else {
+          window.setTimeout(callback, 0)
+        }
+      }
+      nextFrame(() => {
+        nextFrame(() => {
+          const shouldReport = reportAfterCapture
+          captureScheduled = false
+          reportAfterCapture = false
+          if (shouldReport) reportCourseCompletion()
+          else captureCourseProgress()
+        })
+      })
+    }, 0)
+  }
+
+  if (
+    typeof document !== "undefined" &&
+    document.documentElement &&
+    typeof MutationObserver !== "undefined"
+  ) {
+    observeLiaSlideActivity(() => scheduleCapture(true))
+    const catalogObserver = new MutationObserver((mutations) => {
+      if (
+        mutations.some(
+          (mutation) =>
+            mutation.type === "attributes" &&
+            mutation.target instanceof Element &&
+            mutation.target.matches(QUIZ_SELECTOR),
+        )
+      ) {
+        scheduleCapture(true)
+        return
+      }
+      if (
+        mutations.some((mutation) =>
+          [...mutation.addedNodes, ...mutation.removedNodes].some(
+            nodeAffectsQuizCatalog,
+          ),
+        )
+      ) {
+        scheduleCapture(false)
+      }
+    })
+    catalogObserver.observe(document.documentElement, {
+      attributeFilter: ["class"],
+      attributes: true,
+      childList: true,
+      subtree: true,
+    })
+    onCourseMarkdownChange(() => {
+      courseProgress.reset()
+      courseCompletionReported = false
+      allSolvedReported = false
+      scheduleCapture(false)
+    })
+    captureCourseProgress()
+  }
 
   window.addEventListener(
     "click",
@@ -174,6 +462,9 @@ export function installQuizEventTracking(handlers: QuizEventHandlers): void {
           () => {
             const afterTrial = trialCount(quiz)
             if (quiz.classList.contains("solved")) return "solved" as const
+            if (quiz.classList.contains("resolved")) {
+              return "resolved" as const
+            }
             if (afterTrial > beforeTrial) return "failed" as const
             return null
           },
@@ -181,9 +472,12 @@ export function installQuizEventTracking(handlers: QuizEventHandlers): void {
             clearPending()
             if (result === "failed") {
               handlers.failed()
+            } else if (result === "resolved") {
+              handlers.failed()
+              reportCourseCompletion()
             } else {
               handlers.solved(quiz)
-              if (isLastCourseQuiz(quiz)) handlers.courseCompleted()
+              reportCourseCompletion()
             }
           },
           clearPending,
@@ -230,7 +524,30 @@ export function installQuizEventTracking(handlers: QuizEventHandlers): void {
       if (resolve && isAvailableAction(resolve)) {
         const quiz = resolve.closest(QUIZ_SELECTOR)
         if (!quiz || !quiz.classList.contains("open")) return
-        if (!handlers.useResolve()) blockClick(event)
+        if (pendingResolves.has(quiz)) {
+          blockClick(event)
+          return
+        }
+        if (!handlers.useResolve()) {
+          blockClick(event)
+          return
+        }
+        if (!handlers.active()) return
+
+        pendingResolves.add(quiz)
+        const clearPending = (): void => {
+          pendingResolves.delete(quiz)
+        }
+
+        watchUntil(
+          quiz,
+          () => (quizCompleted(quiz) ? true : null),
+          () => {
+            clearPending()
+            reportCourseCompletion()
+          },
+          clearPending,
+        )
       }
     },
     true,

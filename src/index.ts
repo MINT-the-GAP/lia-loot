@@ -26,13 +26,11 @@ import {
   discoverCourseAchievementsDeclaration,
   discoverCourseIdentity,
   discoverCourseResourceDeclaration,
+  installCourseMarkdownCapture,
 } from "./course-chests"
 import { prepareLiaCourseIdentity } from "./course-identity"
 import { hideHighscore, showHighscore } from "./popup"
-import {
-  allRenderedCourseQuizzesSolved,
-  installQuizEventTracking,
-} from "./quiz-events"
+import { installQuizEventTracking } from "./quiz-events"
 import {
   announceResource,
   renderResources,
@@ -75,9 +73,6 @@ function boot(): void {
       highscore?.finalScore ?? null,
       highscore?.config.maxPoints ?? Number.NaN,
     )
-    if (allRenderedCourseQuizzesSolved(document)) {
-      achievements.quizzesCompleted()
-    }
     achievements.enable()
   }
 
@@ -388,11 +383,9 @@ function boot(): void {
     hint: (count) => store.hint(count),
     solved: (quiz) => {
       recordLootIfQuizSolved(quiz)
-      if (allRenderedCourseQuizzesSolved(document)) {
-        achievements.quizzesCompleted()
-      }
     },
-    courseCompleted: () => api.finish(),
+    allSolved: () => achievements.quizzesCompleted(),
+    courseCompleted: () => api.finish() !== null,
     useCheck: () => spendResource("energy"),
     useHint: () => spendResource("gold"),
     useResolve: () => spendResource("diamonds"),
@@ -418,6 +411,7 @@ function claimRuntime(): LootRuntimeState | null {
 
 async function start(runtime: LootRuntimeState): Promise<void> {
   try {
+    installCourseMarkdownCapture()
     await prepareLiaCourseIdentity(discoverCourseIdentity)
     boot()
     if (window.__LIA_LOOT_RUNTIME__ === runtime) runtime.status = "ready"

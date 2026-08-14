@@ -3,17 +3,26 @@ import test from "node:test"
 
 import {
   allRenderedCourseQuizzesSolved,
+  CourseQuizProgress,
   installQuizEventTracking,
   isLastCourseQuiz,
   lastScoreableQuiz,
 } from "../src/quiz-events.ts"
 
-function quiz({ check = true, resolve = true, solved = false } = {}) {
+function quiz({
+  check = true,
+  resolve = true,
+  resolved = false,
+  solved = false,
+} = {}) {
   const node = {
     section: null,
     classList: {
       contains(name) {
-        return name === "solved" && solved
+        return (
+          (name === "solved" && solved) ||
+          (name === "resolved" && resolved)
+        )
       },
     },
     querySelector(selector) {
@@ -105,6 +114,37 @@ test("meldet alle gerenderten Kursquizze nur beim gelösten Abschluss", () => {
   assert.equal(allRenderedCourseQuizzesSolved(root), true)
   final.classList.contains = () => false
   assert.equal(allRenderedCourseQuizzesSolved(root), false)
+})
+
+test("schließt den Kurs erst nach allen katalogisierten Folien und Quizzen ab", () => {
+  const progress = new CourseQuizProgress()
+  progress.expectSections([0, 1, 2])
+
+  progress.catalogSection(2, [{ id: "final", state: "solved" }])
+  assert.equal(progress.allCompleted(), false)
+
+  progress.catalogSection(0, [{ id: "early", state: "solved" }])
+  assert.equal(progress.allCompleted(), false)
+
+  progress.catalogSection(1, [{ id: "middle", state: "open" }])
+  assert.equal(progress.allCompleted(), false)
+
+  progress.catalogSection(1, [{ id: "middle", state: "resolved" }])
+  assert.equal(progress.allCompleted(), true)
+  assert.equal(progress.allSolved(), false)
+})
+
+test("unterscheidet vollständig gelöst von gelöst oder aufgelöst", () => {
+  const progress = new CourseQuizProgress()
+  progress.expectSections([0, 1])
+  progress.catalogSection(0, [
+    { id: "first", state: "solved" },
+    { id: "second", state: "solved" },
+  ])
+  progress.catalogSection(1, [{ id: "final", state: "solved" }])
+
+  assert.equal(progress.allCompleted(), true)
+  assert.equal(progress.allSolved(), true)
 })
 
 function checkClick({

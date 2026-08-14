@@ -1,4 +1,6 @@
 import {
+  onCourseMarkdownChange,
+  parseCourseSecretSlideDeclarations,
   requireCourseSecretSlideDeclarations,
   type CourseSecretSlideDeclaration,
 } from "./course-chests.ts"
@@ -71,6 +73,8 @@ export interface PuzzleSlideAccessGuard {
 }
 
 const secretSections = new Set<number>()
+const renderedSecretSections = new Set<number>()
+const sourceSecretSections = new Set<number>()
 const gatedElements = new Map<HTMLElement, GatedElementState>()
 let tocObserver: MutationObserver | null = null
 let documentObserver: MutationObserver | null = null
@@ -923,9 +927,45 @@ function handleRouteChange(): void {
 function registerDeclarations(
   declarations: readonly CourseSecretSlideDeclaration[],
 ): void {
+  sourceSecretSections.clear()
   for (const declaration of declarations) {
-    if (declaration.section >= 0) secretSections.add(declaration.section)
+    if (declaration.section >= 0) sourceSecretSections.add(declaration.section)
   }
+  secretSections.clear()
+  for (const section of sourceSecretSections) secretSections.add(section)
+  for (const section of renderedSecretSections) secretSections.add(section)
+}
+
+function refreshLiveEditorDeclarations(markdown: string): void {
+  discoveryState = "pending"
+  sourceDeclarationsReady = false
+  renderedSecretSections.clear()
+  allowedCurrentSection = null
+  lastAcceptedSection = null
+  lastSearchInput = null
+  pendingPermitSection = null
+  redirectingFromSection = null
+  routeBlocked = false
+  removeStoredPermit()
+  registerDeclarations(parseCourseSecretSlideDeclarations(markdown))
+  sourceDeclarationsReady = true
+  enforceRootClasses()
+  syncInteractionGate()
+  scheduleSync()
+}
+
+function registerRenderedSection(section: number): void {
+  if (section < 0) return
+  renderedSecretSections.add(section)
+  secretSections.add(section)
+}
+
+function handleLiveEditorMarkdown(markdown: string): void {
+  refreshLiveEditorDeclarations(markdown)
+}
+
+function attachCourseMarkdownListener(): void {
+  onCourseMarkdownChange(handleLiveEditorMarkdown)
 }
 
 function renderedMarkerSection(marker: HTMLElement): number | null {
@@ -946,7 +986,7 @@ function renderedMarkerSection(marker: HTMLElement): number | null {
 
 function registerRenderedMarker(marker: HTMLElement): void {
   const section = renderedMarkerSection(marker)
-  if (section !== null) secretSections.add(section)
+  if (section !== null) registerRenderedSection(section)
   syncBeforePaint()
 }
 
@@ -1057,6 +1097,7 @@ export function installSecretSlides(
   window.addEventListener("popstate", handleRouteChange)
 
   attachTocObserver()
+  attachCourseMarkdownListener()
   documentObserver = new MutationObserver(handleDocumentMutations)
   documentObserver.observe(document.documentElement, {
     childList: true,

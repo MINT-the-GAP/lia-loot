@@ -38,6 +38,30 @@ test("katalogisiert das gewünschte Semikolon-Puzzle mit stabiler Reihenfolge", 
   assert.match(catalog.signature, /^puzzle-[a-z0-9]+$/u)
 })
 
+test("katalogisiert mehrere Puzzleteile innerhalb derselben Textzeile", () => {
+  const discovery = parseCoursePuzzleDeclarations(
+    markdown(
+      "# Start",
+      "Auch gibt es Puzzleteile @Puzzleteil(blau; 1) @Puzzleteil(blau; 2) @Puzzleteil(blau; 3), die Sie einsammeln.",
+      "@Puzzletor(blau; [[1;2;3]])",
+    ),
+  )
+  const catalog = buildPuzzleCatalog(discovery)
+
+  assert.deepEqual(
+    discovery.pieces.map((piece) => piece.options),
+    ["blau; 1", "blau; 2", "blau; 3"],
+  )
+  assert.deepEqual(
+    catalog.pieces.map((piece) => piece.number),
+    [1, 2, 3],
+  )
+  assert.equal(new Set(catalog.pieces.map((piece) => piece.sourceOrder)).size, 3)
+  assert.equal(catalog.errors.length, 0)
+  assert.equal(catalog.gates[0].valid, true)
+  assert.deepEqual(catalog.gates[0].pattern, [1, 2, 3])
+})
+
 test("katalogisiert Puzzleteile und Tore in allen neuen Farben", () => {
   for (const [authored, internal] of [
     ["magenta", "magenta"],
@@ -75,6 +99,7 @@ test("ignoriert Puzzlebeispiele in Kommentaren, Code und Inline-Code", () => {
       "@Puzzletor(rot; [[1]])",
       "```",
       "Text mit `@Puzzletor(rot; [[1]])`.",
+      "Text mit `@Puzzleteil(blau; 2)`.",
       "@Puzzleteil(blau; 1)",
       "@Puzzletor(blau; [[1]])",
     ),
@@ -82,6 +107,30 @@ test("ignoriert Puzzlebeispiele in Kommentaren, Code und Inline-Code", () => {
   assert.equal(discovery.pieces.length, 1)
   assert.equal(discovery.gates.length, 1)
   assert.equal(buildPuzzleCatalog(discovery).gates[0].valid, true)
+})
+
+test("scannt Inline-Aufrufe eindeutig und fail-closed", () => {
+  const slash = String.fromCharCode(92)
+  const discovery = parseCoursePuzzleDeclarations(
+    markdown(
+      "# Start",
+      "@@Puzzleteil(rot; 1)",
+      slash + "@Puzzleteil(rot; 2)",
+      "@Puzzleteilchen(rot; 3)",
+      "@Puzzleteilähnlich(rot; 4)",
+      "Verschachtelt @Puzzleteil(rot; 1; @Puzzleteil(blau; 1)).",
+      "Offen @Puzzleteil(gelb; 1; @Puzzleteil(gelb; 2)",
+    ),
+  )
+
+  assert.equal(discovery.pieces.length, 1)
+  assert.equal(
+    discovery.pieces[0].options,
+    "rot; 1; @Puzzleteil(blau; 1)",
+  )
+  const catalog = buildPuzzleCatalog(discovery)
+  assert.equal(catalog.pieces.length, 1)
+  assert.equal(catalog.pieces[0].valid, false)
 })
 
 test("schließt fehlende, doppelte, verwaiste und zu späte Teile aus", () => {

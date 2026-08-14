@@ -171,11 +171,52 @@ test("sammelt, ordnet und persistiert Puzzleteile und sperrt Folien bis zum pass
   test.setTimeout(180_000)
 
   const markdown = await readFile(fixtureFile, "utf8")
+  expect(markdown).toContain(
+    "Drei rote Teile liegen im Satz: @Puzzleteil(rot; 1), dann @Puzzleteil(rot; 2) und schließlich @Puzzleteil(rot; 3).",
+  )
   expect(markdown).toContain("@Puzzleteil(rot; 4)")
   expect(markdown).toContain("@Puzzletor(rot; [[2;3];[1;6];[5;4]])")
   expect(markdown).not.toContain("@EndePuzzletor")
 
   await openFixture(page)
+
+  const inlineSentence = page
+    .locator(".lia-paragraph")
+    .filter({ hasText: "Drei rote Teile liegen im Satz" })
+  await expect(inlineSentence).toHaveCount(1)
+  const inlineHosts = inlineSentence.locator(
+    [
+      'lia-loot-puzzle-piece[data-options="rot; 1"]',
+      'lia-loot-puzzle-piece[data-options="rot; 2"]',
+      'lia-loot-puzzle-piece[data-options="rot; 3"]',
+    ].join(", "),
+  )
+  await expect(inlineHosts).toHaveCount(3)
+  const inlineHostState = await inlineHosts.evaluateAll((hosts) =>
+    hosts.map((host) => ({
+      id: host.getAttribute("data-piece-id"),
+      options: host.getAttribute("data-options"),
+    })),
+  )
+  expect(inlineHostState.map(({ options }) => options)).toEqual([
+    "rot; 1",
+    "rot; 2",
+    "rot; 3",
+  ])
+  expect(inlineHostState.every(({ id }) => Boolean(id))).toBe(true)
+  expect(new Set(inlineHostState.map(({ id }) => id)).size).toBe(3)
+  const inlinePickups = inlineHosts.locator("[data-loot-puzzle-pickup]")
+  await expect(inlinePickups).toHaveCount(3)
+  expect(
+    await inlinePickups.evaluateAll((pickups) =>
+      pickups.map((pickup) =>
+        Number(pickup.getAttribute("data-loot-puzzle-number")),
+      ),
+    ),
+  ).toEqual([1, 2, 3])
+  await expect(gate(page, "red")).not.toHaveClass(
+    /loot-puzzle-gate--invalid/u,
+  )
 
   await page.evaluate(() => {
     window.__lootPuzzleBlockedSlideActivated = false

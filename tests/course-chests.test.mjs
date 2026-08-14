@@ -700,8 +700,8 @@ test("ignoriert maskierte und ungueltige Inline-Reveals fail-closed", () => {
 test("zählt nur Puzzleteile eines vollständig gültigen Tors für Aggregaterfolge", () => {
   const markdown = [
     "# Puzzle",
-    "@Puzzleteil(rot; 1; zauberstaub; erde-unsichtbar)",
-    "@Puzzletor(rot; [[1]])",
+    "Im Satz @Puzzleteil(rot; 1; zauberstaub; erde-unsichtbar) und @Puzzleteil(rot; 2; pflanze-zauberstaub).",
+    "@Puzzletor(rot; [[1;2]])",
     "@Puzzleteil(blau; 1; zauberstaub; erde-unsichtbar)",
     "@Puzzleteil(gelb; 1; zauberstaub)",
     "@Puzzleteil(gelb; 1; zauberstaub)",
@@ -709,8 +709,8 @@ test("zählt nur Puzzleteile eines vollständig gültigen Tors für Aggregaterfo
   ].join("\n")
 
   assert.deepEqual(parseCourseAchievementCatalog(markdown), {
-    dust: 1,
-    plant: 0,
+    dust: 2,
+    plant: 1,
     soil: 1,
     solid: 1,
   })

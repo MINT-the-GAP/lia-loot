@@ -90,7 +90,7 @@ const INTERNAL_CHEST_MACRO =
 const INTERNAL_LOCK_MACRO =
   /^\s*@LootSchloss_\s*\(\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]+)\s*\)\s*$/
 const ACHIEVEMENT_ITEM_MACRO =
-  /^\s*@(Schatztruhe|Diamanttruhe|Energiekiste|Schluessel|Lupe|Schaufel|Giesskanne|Puzzleteil)(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/iu
+  /^\s*@(Schatztruhe|Diamanttruhe|Energiekiste|Schluessel|Lupe|Schaufel|Giesskanne)(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/iu
 const INTERNAL_KEY_MACRO =
   /^\s*@LootSchluessel_\s*\(\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]*)\s*\)\s*$/iu
 const INTERNAL_MAGNIFIER_MACRO =
@@ -106,8 +106,7 @@ const INTERNAL_HIDDEN_MACRO =
 const RESOURCE_MACRO =
   /^\s*@Ressourcen\s*\(\s*([^,()\r\n]+?)\s*,\s*([^,()\r\n]+?)(?:\s*,\s*([^,()\r\n]+?))?\s*\)\s*$/
 const SECRET_SLIDE_MACRO = /^\s*@Geheimfolie\s*$/
-const PUZZLE_PIECE_MACRO =
-  /^\s*@Puzzleteil(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/iu
+const PUZZLE_PIECE_PREFIX = /@Puzzleteil(?![\p{L}\p{N}_])/giu
 const PUZZLE_GATE_MACRO =
   /^\s*@Puzzletor(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/iu
 const ACHIEVEMENTS_MACRO =
@@ -139,9 +138,13 @@ type RawCodeBlock =
   | "template"
 
 interface LiaRuntime {
+  compile?: (markdown: string) => unknown
   defaultCourseURL?: string
   fetch?: typeof window.fetch
+  jit?: (markdown: string) => unknown
 }
+
+type CourseMarkdownListener = (markdown: string) => void
 
 interface VisibleCourseLine {
   content: string
@@ -195,6 +198,112 @@ function isLootIfEnd(line: string): boolean {
 
 let cachedCourseMarkdown: string | null = null
 let courseMarkdownPromise: Promise<string | null> | null = null
+const capturedCourseMethods = new WeakSet<Function>()
+const courseMarkdownListeners = new Set<CourseMarkdownListener>()
+
+function rememberCourseMarkdown(value: unknown): boolean {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > MAX_SOURCE_LENGTH ||
+    value === cachedCourseMarkdown
+  ) {
+    return false
+  }
+  cachedCourseMarkdown = value
+  return true
+}
+
+function publishCourseMarkdown(markdown: string): void {
+  for (const listener of courseMarkdownListeners) {
+    try {
+      listener(markdown)
+    } catch (error) {
+      console.error(
+        "Loot: LiveEditor-Kursquelle konnte nicht aktualisiert werden.",
+        error,
+      )
+    }
+  }
+}
+
+function wrapCourseCompiler(
+  lia: LiaRuntime,
+  method: "compile" | "jit",
+): void {
+  const original = lia[method]
+  if (typeof original !== "function" || capturedCourseMethods.has(original)) {
+    return
+  }
+
+  const wrapped = function (this: unknown, markdown: string): unknown {
+    const result = Reflect.apply(original, this, arguments)
+    const changed = rememberCourseMarkdown(markdown)
+    if (changed) publishCourseMarkdown(markdown)
+    return result
+  }
+  capturedCourseMethods.add(wrapped)
+  lia[method] = wrapped
+}
+
+function liveEditorCompileButton(): HTMLButtonElement | null {
+  if (window.parent === window) return null
+  try {
+    const parentDocument = window.parent.document
+    const preview = parentDocument.getElementById("liascript-preview")
+    if (
+      preview?.tagName !== "IFRAME" ||
+      (preview as HTMLIFrameElement).contentWindow !== window
+    ) {
+      return null
+    }
+
+    const iconButton = parentDocument
+      .querySelector(".bi-arrow-counterclockwise")
+      ?.closest<HTMLButtonElement>("button")
+    if (iconButton) return iconButton
+
+    return (
+      [...parentDocument.querySelectorAll<HTMLButtonElement>("button")].find(
+        (button) =>
+          /(?:compile|kompil|recompile|aktualisier|neu laden)/iu.test(
+            `${button.title} ${button.getAttribute("aria-label") ?? ""}`,
+          ),
+      ) ?? null
+    )
+  } catch {
+    return null
+  }
+}
+
+function requestLiveEditorCourseSource(): void {
+  if (cachedCourseMarkdown !== null || courseSourceUrl() !== null) return
+
+  // The LiveEditor exposes no source getter and Loot first runs inside the
+  // initial JIT call. Reusing its public compile control produces one second
+  // JIT call, which the wrappers above can capture without opening fail-closed
+  // secret slides or reaching into Monaco/Vue internals.
+  const button = liveEditorCompileButton()
+  if (!button || button.disabled) return
+  window.setTimeout(() => {
+    if (button.isConnected && !button.disabled) button.click()
+  }, 0)
+}
+
+export function onCourseMarkdownChange(
+  listener: CourseMarkdownListener,
+): () => void {
+  courseMarkdownListeners.add(listener)
+  return () => courseMarkdownListeners.delete(listener)
+}
+
+export function installCourseMarkdownCapture(): void {
+  const lia = (window as Window & { LIA?: LiaRuntime }).LIA
+  if (!lia) return
+  wrapCourseCompiler(lia, "compile")
+  wrapCourseCompiler(lia, "jit")
+  requestLiveEditorCourseSource()
+}
 
 function maskHtmlComments(
   line: string,
@@ -594,13 +703,16 @@ function publicItemAchievementCatalog(
     return chestAchievementCatalog(options)
   }
   if (name === "schluessel") return keyAchievementCatalog(options)
-  if (name === "puzzleteil") {
-    const parsed = parsePuzzlePieceOptions(options)
-    return parsed.valid
-      ? achievementCatalogForOptions(parsed.concealment, parsed.layers)
-      : null
-  }
   return simpleItemAchievementCatalog(options)
+}
+
+function puzzlePieceAchievementCatalog(
+  rawSpecification: string,
+): CourseAchievementCatalog | null {
+  const parsed = parsePuzzlePieceOptions(rawSpecification)
+  return parsed.valid
+    ? achievementCatalogForOptions(parsed.concealment, parsed.layers)
+    : null
 }
 
 function internalItemAchievementCatalog(
@@ -670,6 +782,52 @@ function matchingParenthesis(
     }
   }
   return null
+}
+
+interface PuzzlePieceMacroOccurrence {
+  options: string
+  start: number
+}
+
+function puzzlePieceMacroOccurrences(
+  line: string,
+): PuzzlePieceMacroOccurrence[] {
+  const occurrences: PuzzlePieceMacroOccurrence[] = []
+  const matcher = new RegExp(PUZZLE_PIECE_PREFIX)
+
+  while (true) {
+    const match = matcher.exec(line)
+    if (!match) break
+    const start = match.index
+    const previous = line[start - 1]
+    if (previous === "@" || previous?.charCodeAt(0) === 92) continue
+
+    let cursor = start + match[0].length
+    while (/\s/u.test(line[cursor] ?? "")) cursor += 1
+
+    if (line[cursor] !== "(") {
+      occurrences.push({ options: "", start })
+      continue
+    }
+
+    const closingIndex = matchingParenthesis(line, cursor)
+    if (closingIndex === null) break
+    occurrences.push({
+      options: line.slice(cursor + 1, closingIndex).trim(),
+      start,
+    })
+    matcher.lastIndex = closingIndex + 1
+  }
+
+  return occurrences
+}
+
+function puzzleOccurrenceSourceOrder(
+  lineIndex: number,
+  characterIndex: number,
+  lineLength: number,
+): number {
+  return lineIndex + characterIndex / Math.max(1, lineLength + 1)
 }
 
 const DIRECT_HIDDEN_MACROS: Readonly<
@@ -806,7 +964,7 @@ export function parseCourseAchievementCatalog(
   const currentCatalog = (): CourseAchievementCatalog =>
     frames[frames.length - 1]?.catalog ?? catalog
 
-  for (const [sourceOrder, line] of visibleCourseLines(markdown).entries()) {
+  for (const [lineIndex, line] of visibleCourseLines(markdown).entries()) {
     if (line.section !== currentSection) {
       frames.length = 0
       currentSection = line.section
@@ -833,17 +991,22 @@ export function parseCourseAchievementCatalog(
       continue
     }
 
-    const invalidPuzzlePiece =
-      PUZZLE_PIECE_MACRO.test(line.content) &&
-      !validPuzzleSources.has(sourceOrder)
-    const publicItem = invalidPuzzlePiece
-      ? null
-      : publicItemAchievementCatalog(line.content)
+    const publicItem = publicItemAchievementCatalog(line.content)
     const item =
       publicItem === undefined
         ? internalItemAchievementCatalog(line.content)
         : publicItem
     if (item) addAchievementCatalog(currentCatalog(), item)
+    for (const piece of puzzlePieceMacroOccurrences(line.content)) {
+      const sourceOrder = puzzleOccurrenceSourceOrder(
+        lineIndex,
+        piece.start,
+        line.content.length,
+      )
+      if (!validPuzzleSources.has(sourceOrder)) continue
+      const puzzleItem = puzzlePieceAchievementCatalog(piece.options)
+      if (puzzleItem) addAchievementCatalog(currentCatalog(), puzzleItem)
+    }
     addAchievementCatalog(
       currentCatalog(),
       directInlineRevealAchievementCatalog(line.content),
@@ -1115,18 +1278,20 @@ export function parseCoursePuzzleDeclarations(
   const gates: CoursePuzzleGateDeclaration[] = []
   const pieces: CoursePuzzlePieceDeclaration[] = []
 
-  for (const [sourceOrder, line] of visibleCourseLines(markdown).entries()) {
+  for (const [lineIndex, line] of visibleCourseLines(markdown).entries()) {
     if (!line.lootIfCatalogEligible || line.section < 0) continue
     const gated = line.revealDepth > 0 || line.lootIfDepth > 0
-    const piece = PUZZLE_PIECE_MACRO.exec(line.content)
-    if (piece) {
+    for (const piece of puzzlePieceMacroOccurrences(line.content)) {
       pieces.push({
         gated,
-        options: (piece[1] ?? "").trim(),
+        options: piece.options,
         section: line.section,
-        sourceOrder,
+        sourceOrder: puzzleOccurrenceSourceOrder(
+          lineIndex,
+          piece.start,
+          line.content.length,
+        ),
       })
-      continue
     }
     const gate = PUZZLE_GATE_MACRO.exec(line.content)
     if (gate) {
@@ -1134,7 +1299,7 @@ export function parseCoursePuzzleDeclarations(
         gated,
         options: (gate[1] ?? "").trim(),
         section: line.section,
-        sourceOrder,
+        sourceOrder: lineIndex,
       })
     }
   }
@@ -1216,6 +1381,7 @@ async function loadCourseMarkdown(): Promise<string | null> {
       if (delay > 0) {
         await new Promise<void>((resolve) => window.setTimeout(resolve, delay))
       }
+      if (cachedCourseMarkdown !== null) return cachedCourseMarkdown
       const markdown = await fetchCourseMarkdown()
       if (markdown !== null) {
         cachedCourseMarkdown = markdown

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>Loot LiveEditor Host</title>
+    <style>
+      html,
+      body,
+      #liascript-preview {
+        border: 0;
+        height: 100%;
+        margin: 0;
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <button id="compile" type="button" title="Kompilieren" hidden>
+      <i class="bi bi-arrow-counterclockwise"></i>
+    </button>
+    <iframe
+      id="liascript-preview"
+      title="LiaScript-Vorschau"
+    ></iframe>
+    <script>
+      const frame = document.getElementById("liascript-preview")
+      const compileButton = document.getElementById("compile")
+      window.__liveEditorCompileCount = 0
+      window.__liveEditorMarkdown = `<!--
+version: 1.0.0
+language: de
+import: http://127.0.0.1:4173/README.md
+-->
+
+# LiveEditor Start
+
+Diese öffentliche Startfolie muss sofort erreichbar bleiben.
+
+## Verborgene LiveEditor-Werkstatt
+
+@Geheimfolie
+
+Diese Folie darf nur nach einer ausdrücklichen Freigabe erscheinen.
+
+## Öffentliche LiveEditor-Rückkehr
+
+Diese Folie bleibt das öffentliche Ausweichziel.
+`
+
+      function compile() {
+        const lia = frame.contentWindow && frame.contentWindow.LIA
+        if (!lia || typeof lia.jit !== "function") return false
+        window.__liveEditorCompileCount += 1
+        lia.focusOnMain = false
+        lia.scrollUpOnMain = false
+        lia.jit(window.__liveEditorMarkdown)
+        return true
+      }
+
+      window.__compileLiveEditorMarkdown = (markdown) => {
+        window.__liveEditorMarkdown = markdown
+        return compile()
+      }
+
+      compileButton.addEventListener("click", compile)
+      window.addEventListener("message", (event) => {
+        if (
+          event.source === frame.contentWindow &&
+          event.data &&
+          event.data.cmd === "lia-ready" &&
+          window.__liveEditorCompileCount === 0
+        ) {
+          compile()
+        }
+      })
+      frame.src = "/node_modules/@liascript/editor/dist/index.html?"
+    </script>
+  </body>
+</html>

@@ -14,9 +14,7 @@ Das rote Tor schützt alle späteren Folien. Das Portal versucht, das Tor zu üb
 
 @Portal(3)
 
-@Puzzleteil(rot; 1)
-@Puzzleteil(rot; 2)
-@Puzzleteil(rot; 3)
+Drei rote Teile liegen im Satz: @Puzzleteil(rot; 1), dann @Puzzleteil(rot; 2) und schließlich @Puzzleteil(rot; 3).
 @Puzzleteil(rot; 4)
 @Puzzleteil(rot; 5)
 @Puzzleteil(rot; 6)

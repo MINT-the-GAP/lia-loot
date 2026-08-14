@@ -183,21 +183,18 @@ function pieceForHost(host: HTMLElement): PuzzlePieceDefinition | null {
   if (!catalog) return null
   const options = host.getAttribute("data-options") ?? ""
   const parsed = parsePuzzlePieceOptions(options)
-  if (!parsed.color || parsed.number === null) return null
+  if (!parsed.valid || !parsed.color || parsed.number === null) return null
   const section = hostSection(host, "data-piece-id")
-  return (
-    catalog.pieces.find(
-      (piece) =>
-        piece.color === parsed.color &&
-        piece.number === parsed.number &&
-        (section === null || piece.section === section),
-    ) ??
-    catalog.pieces.find(
-      (piece) =>
-        piece.color === parsed.color && piece.number === parsed.number,
-    ) ??
-    null
+  if (section === null) return null
+  const candidates = catalog.pieces.filter(
+    (piece) =>
+      piece.valid &&
+      piece.color === parsed.color &&
+      piece.number === parsed.number &&
+      piece.options === options.trim() &&
+      piece.section === section,
   )
+  return candidates.length === 1 ? candidates[0] : null
 }
 
 function gateForHost(host: HTMLElement): PuzzleGateDefinition | null {

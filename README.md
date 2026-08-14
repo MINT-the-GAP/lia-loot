@@ -190,8 +190,8 @@ script:   ./dist/index.js
 
           --{{0}}--
 Loot ist ein Gamification-Template für LiaScript. Das erste Feature verwaltet einen
-konfigurierbaren Highscore über den gesamten Kurs und zeigt nach der korrekt gelösten
-Abschlussaufgabe ausschließlich die erreichten Punkte an.
+konfigurierbaren Highscore über den gesamten Kurs und zeigt die erreichten Punkte erst
+dann an, wenn alle bewertbaren Kursquizze gelöst oder aufgelöst wurden.
 
 Das Template erkennt nach dem Start automatisch:
 
@@ -201,7 +201,7 @@ Das Template erkennt nach dem Start automatisch:
 - nummerierte Puzzleteile und farbige Puzzletore als Fortschrittsgrenzen,
 - mit passenden Farbschlüsseln entsperrbare Bedienobjekte,
 - anklickbare Einweg- und Zweiwegportale zwischen Kursfolien,
-- das letzte native Quiz auf der letzten Kursseite als Abschlussaufgabe,
+- den Abschluss aller bewertbaren nativen Quizze über sämtliche Kursfolien hinweg,
 - freigeschaltete Erfolge für Aufgaben, Highscore, Truhen, Schlösser und Geheimfolien.
 
            {{1}}
@@ -680,7 +680,15 @@ Fundstelle und erscheint als auswählbarer Button in der Ressourcenleiste:
 @Puzzleteil(rot; 4)
 ```
 
-Beide Puzzle-Makros stehen jeweils allein in einer eigenen Markdown-Zeile.
+Ein Puzzleteil kann allein stehen oder direkt in Fließtext eingebettet werden.
+Auch mehrere Puzzleteile in derselben Textzeile werden unabhängig erzeugt:
+
+```markdown
+Auch gibt es Puzzleteile @Puzzleteil(blau; 1) @Puzzleteil(blau; 2) @Puzzleteil(blau; 3), die Sie einsammeln.
+```
+
+Das Puzzletor bleibt ein Blockelement und steht allein in einer eigenen
+Markdown-Zeile.
 
 Ein Tor legt mit einer Matrix fest, welche Teile benötigt werden und in welcher
 Anordnung sie am Ende liegen müssen:
@@ -1346,7 +1354,7 @@ Stapel und schieben ältere Meldungen nach oben; jede Meldung hat ihren eigenen 
 
 | Erfolg | Interne ID | Bedingung |
 |:--|:--|:--|
-| Aufgaben-Meister | `all-quizzes-solved` | Die automatische Abschlussaufgabe ist korrekt gelöst und alle dabei geladenen bewertbaren LiaScript-Quizze sind gelöst. |
+| Aufgaben-Meister | `all-quizzes-solved` | Alle katalogisierten bewertbaren LiaScript-Quizze sind korrekt gelöst; bloßes Auflösen reicht für diesen zusätzlichen Erfolg nicht. |
 | Perfekter Highscore | `perfect-highscore` | Der endgültige Highscore entspricht exakt der konfigurierten Maximalpunktzahl. |
 | Schatzjäger | `all-treasure-chests-opened` | Alle im Kurs deklarierten Schatztruhen wurden geöffnet. |
 | Diamantensammler | `all-diamond-chests-opened` | Alle im Kurs deklarierten Diamanttruhen wurden geöffnet. |
@@ -1419,6 +1427,8 @@ Ein neuer Tab beginnt einen neuen Versuch.
 
 Nach `@Highscore(...)` funktionieren normale LiaScript-Quizze und Hinweise unverändert.
 Jede falsche Prüfung und jeder tatsächlich aufgedeckte Hinweis werden automatisch erfasst.
+Der Highscore endet nicht mehr allein durch das letzte Quiz: Alle bewertbaren Quizze
+müssen zuvor entweder korrekt gelöst oder über **Auflösen** abgeschlossen worden sein.
 Ist Energie über den dritten Wert von `@Ressourcen(...)` aktiviert, kostet jeder
 gültige Klick auf **Prüfen** und jeder erfolgreiche manuelle lia-timer-Start genau
 eine Energie. Bei `0` bleibt die jeweilige Aktion ohne Wirkung.
@@ -1471,15 +1481,23 @@ script: https://cdn.jsdelivr.net/gh/MINT-the-GAP/lia-loot@main/dist/index.js
 @end
 ```
 
-## Automatische Abschlussaufgabe
+## Automatischer Kursabschluss
 
           --{{0}}--
-Das letzte native LiaScript-Quiz auf der letzten Kursseite ist automatisch die
-Abschlussaufgabe. Dafür ist kein weiteres Makro nötig. Sobald diese Aufgabe korrekt
-gelöst wurde, stoppt die Zeit und der Highscore-Dialog öffnet sich.
+Für den Abschluss ist kein weiteres Makro nötig. Loot katalogisiert die bewertbaren
+nativen LiaScript-Quizze jeder Kursfolie und merkt sich ihren Zustand auch über
+LiaScripts Folien-Remounts hinweg. Der Highscore-Dialog öffnet sich erst, wenn jede
+Kursfolie einmal geladen wurde und jedes dabei katalogisierte Quiz entweder den Zustand
+`solved` oder `resolved` erreicht hat. Dadurch kann das Quiz der letzten Folie
+gefahrlos zuerst bearbeitet werden; offene Aufgaben auf früheren Folien blockieren den
+Highscore weiterhin.
 
-Der folgende Block ist ein kopierbares Minimalbeispiel. Im verwendenden Kurs muss
-dieses Quiz auf der letzten Kursseite stehen, wenn es die Abschlussaufgabe sein soll:
+Als bewertbare Quizze gelten weiterhin nur native Aufgaben mit **Prüfen** und
+**Auflösen**. Umfragen werden ignoriert. Für den Erfolg **Aufgaben-Meister** gilt die
+strengere Bedingung: Dort müssen alle Aufgaben korrekt gelöst sein.
+
+Der folgende Block ist ein kopierbares Minimalbeispiel für eine der automatisch
+erfassten Aufgaben:
 
 ```markdown
 Wie heißt dieses Template?
@@ -1776,8 +1794,8 @@ Freeze ist im Dokumentkopf vor MathPath importiert. Gib zuerst absichtlich `0`
 ein und prüfe die falsche Antwort; danach lässt sich der Hinweis öffnen. Die
 Truhe gehört weiterhin zum Quiz, das Schloss erscheint dagegen ausschließlich
 über dem von `@Explain` erzeugten Erklärlink. Prüfen, Antwort und Hint-Button
-bleiben frei bedienbar. Diese letzte Aufgabe bleibt zugleich die automatische
-Abschlussaufgabe der README.
+bleiben frei bedienbar. Diese Aufgabe zählt wie jedes andere bewertbare Quiz zum
+kursweiten Abschluss; allein ihr Abschluss öffnet den Highscore nicht.
 
 ```markdown
 @Schluessel(gruen)
