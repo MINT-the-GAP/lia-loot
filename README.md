@@ -88,6 +88,7 @@ script:   ./dist/index.js
 @Schatztruhe: @LootTruhe_(@uid,@0,gold)
 @Diamanttruhe: @LootTruhe_(@uid,@0,diamonds)
 @Energiekiste: @LootTruhe_(@uid,@0,energy)
+@Energietruhe: @LootTruhe_(@uid,@0,energy)
 @Schluessel: @LootSchluessel_(@uid,@0)
 @Puzzleteil: @LootPuzzleteil_(@uid,@0)
 @Puzzletor: @LootPuzzletor_(@uid,@0)
@@ -154,7 +155,24 @@ script:   ./dist/index.js
 @end
 
 @LootRevealInline_
-<lia-loot-reveal data-reveal-id='@0' data-options='@1; @2' data-reveal-layout='inline' hidden>@3</lia-loot-reveal>
+<lia-loot-reveal data-reveal-id='@0' data-options='@1; @2' data-reveal-layout='inline' data-loot-inline-kind='@1' hidden>@3</lia-loot-reveal>
+<span data-loot-inline-renderer='@0'>
+<script modify="false">
+(function waitForLootInline(remaining) {
+  var api = window.__LIA_LOOT_INLINE_REVEALS__;
+  if (api) {
+    api.render("@0", "@1", send);
+    return;
+  }
+  if (remaining > 0) {
+    window.setTimeout(function () { waitForLootInline(remaining - 1); }, 50);
+  } else {
+    send.lia("LIA: stop");
+  }
+})(400);
+"LIA: wait"
+</script>
+</span><span data-loot-inline-tail='@0' hidden></span>
 @end
 
 @LootRevealEnd_
@@ -539,10 +557,12 @@ Beispieltruhen beim Übersetzer und bei der Auswahl der Darstellung:
           --{{0}}--
 @Ressourcen(1, 1, 2)
 
-Ohne Parameter setzt das Makro eine Energiekiste direkt an die Aufrufstelle:
+Ohne Parameter setzt das Makro eine Energiekiste direkt an die Aufrufstelle.
+`@Energietruhe` ist ein gleichwertiger Alias und akzeptiert dieselben Optionen:
 
 ```markdown
 @Energiekiste
+@Energietruhe
 ```
 
 Ohne Mengenangabe steigt der Energiebestand beim Anklicken um eins. Eine führende
@@ -913,6 +933,14 @@ Vor dem Fund liegt @Erdhaufen.inline(ein vergrabener Hinweis) mitten im Satz.
 Nebenan wächst @Pflanze.inline(eine sprechende Blüte, zauberstaub; anker; 12s).
 
 @Blume.inline(gleiche Kurzform wie Pflanze)
+```
+
+Auch andere Makros dürfen direkt den Inline-Inhalt bilden. Das gilt ebenso für
+innere Makros mit eigenen Klammerargumenten:
+
+```markdown
+@Erdhaufen.inline( @Energietruhe )
+@Pflanze.inline( @Puzzleteil(tuerkis; 1) )
 ```
 
 Auch inline wird ein Erdhaufen einmal mit der Schaufel freigelegt. Die Pflanze

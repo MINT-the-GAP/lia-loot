@@ -14,6 +14,7 @@ import {
   parseCourseAchievementCatalog,
   parseCourseChestCatalogDeclarations,
   parseCourseChestDeclarations,
+  parseCourseInlineRevealDeclarations,
   parseCourseKeyDeclarations,
   parseCourseLockCatalogDeclarations,
   parseCourseLockDeclarations,
@@ -694,6 +695,122 @@ test("ignoriert maskierte und ungueltige Inline-Reveals fail-closed", () => {
     plant: 1,
     soil: 1,
     solid: 0,
+  })
+})
+
+test("liest verschachtelte Makros in Inline-Reveals aus der Rohquelle", () => {
+  const markdown = [
+    "# Verschachtelt",
+    "@Erdhaufen.inline( @Energietruhe )",
+    "@Pflanze.inline( @Puzzleteil(tuerkis; 1) )",
+  ].join("\n")
+
+  assert.deepEqual(parseCourseInlineRevealDeclarations(markdown), [
+    {
+      catalogEligible: true,
+      content: "@Energietruhe",
+      deferred: true,
+      kind: "soil",
+      options: "",
+      section: 0,
+      trailingSource: "",
+    },
+    {
+      catalogEligible: true,
+      content: "@Puzzleteil(tuerkis; 1)",
+      deferred: true,
+      kind: "plant",
+      options: "",
+      section: 0,
+      trailingSource: " )",
+    },
+  ])
+})
+
+test("bewahrt Backticks und ignoriert Phantom-Inline-Aufrufe", () => {
+  const tick = String.fromCharCode(96)
+  const markdown = [
+    "# Scanner",
+    "@erdhaufen.inline(phantom)",
+    "@Erdhaufen.inline(" + tick + "Text, mit (Klammer)" + tick + ")",
+    "@Erdhaufen.inline(Vor " + tick + "@Puzzleteil(rot; 9)" + tick +
+      " und @Energietruhe)",
+    "@Erdhaufen.inline(offen @Pflanze.inline(phantom)",
+    "@Pflanze.inline(echt)",
+  ].join("\n")
+
+  assert.deepEqual(
+    parseCourseInlineRevealDeclarations(markdown).map(
+      ({ content, deferred, kind }) => ({ content, deferred, kind }),
+    ),
+    [
+      {
+        content: tick + "Text, mit (Klammer)" + tick,
+        deferred: false,
+        kind: "soil",
+      },
+      {
+        content:
+          "Vor " + tick + "@Puzzleteil(rot; 9)" + tick +
+          " und @Energietruhe",
+        deferred: true,
+        kind: "soil",
+      },
+      { content: "echt", deferred: false, kind: "plant" },
+    ],
+  )
+})
+
+test("nimmt verschachtelte Energietruhen nur in den Vollkatalog auf", () => {
+  const markdown = [
+    "# Katalog",
+    "@Erdhaufen.inline(@Energiekiste)",
+    "@Pflanze.inline(@Energietruhe)",
+    "@Energiekiste",
+  ].join("\n")
+
+  assert.equal(parseCourseChestDeclarations(markdown, false).length, 1)
+  const catalog = parseCourseChestCatalogDeclarations(markdown)
+  assert.deepEqual(
+    catalog.map(({ reward }) => reward),
+    ["energy", "energy", "energy"],
+  )
+  assert.equal(new Set(catalog.map(({ baseId }) => baseId)).size, 3)
+})
+
+test("schliesst ungueltige lootif-Inline-Truhen aus dem Vollkatalog aus", () => {
+  const markdown = [
+    "# Katalog",
+    "@lootif(unbekannt; spawn)",
+    "@Erdhaufen.inline(@Energietruhe)",
+    "@Endelootif",
+    "@Pflanze.inline(@Energietruhe)",
+  ].join("\n")
+
+  assert.deepEqual(
+    parseCourseInlineRevealDeclarations(markdown).map(
+      ({ catalogEligible }) => catalogEligible,
+    ),
+    [false, true],
+  )
+  assert.equal(parseCourseChestCatalogDeclarations(markdown).length, 1)
+})
+
+test("behandelt Energietruhe und Energiekiste in Achievements identisch", () => {
+  const options = "(3; menu; erde-unsichtbar; zauberstaub)"
+  const canonical = parseCourseAchievementCatalog(
+    "# Alias\n@Energiekiste" + options,
+  )
+  const alias = parseCourseAchievementCatalog(
+    "# Alias\n@Energietruhe" + options,
+  )
+
+  assert.deepEqual(alias, canonical)
+  assert.deepEqual(alias, {
+    dust: 1,
+    plant: 0,
+    soil: 1,
+    solid: 1,
   })
 })
 

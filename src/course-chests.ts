@@ -81,7 +81,7 @@ export interface CourseAchievementCatalog {
 }
 
 const CHEST_MACRO =
-  /^\s*@(Schatztruhe|Diamanttruhe|Energiekiste)(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/
+  /^\s*@(Schatztruhe|Diamanttruhe|Energiekiste|Energietruhe)(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/
 const KEY_MACRO =
   /^\s*@Schluessel(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/
 const LOCK_MACRO = /^\s*@Schloss\s*\(\s*([^()\r\n]+)\s*\)\s*$/
@@ -90,7 +90,7 @@ const INTERNAL_CHEST_MACRO =
 const INTERNAL_LOCK_MACRO =
   /^\s*@LootSchloss_\s*\(\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]+)\s*\)\s*$/
 const ACHIEVEMENT_ITEM_MACRO =
-  /^\s*@(Schatztruhe|Diamanttruhe|Energiekiste|Schluessel|Lupe|Schaufel|Giesskanne)(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/iu
+  /^\s*@(Schatztruhe|Diamanttruhe|Energiekiste|Energietruhe|Schluessel|Lupe|Schaufel|Giesskanne)(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/iu
 const INTERNAL_KEY_MACRO =
   /^\s*@LootSchluessel_\s*\(\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]*)\s*\)\s*$/iu
 const INTERNAL_MAGNIFIER_MACRO =
@@ -122,6 +122,7 @@ const MACRO_REWARD: Readonly<Record<string, ResourceKind>> = {
   Schatztruhe: "gold",
   Diamanttruhe: "diamonds",
   Energiekiste: "energy",
+  Energietruhe: "energy",
 }
 
 interface Fence {
@@ -148,6 +149,7 @@ type CourseMarkdownListener = (markdown: string) => void
 
 interface VisibleCourseLine {
   content: string
+  rawContent: string
   lootIfCatalogEligible: boolean
   lootIfDepth: number
   revealDepth: number
@@ -163,7 +165,17 @@ interface PendingVisibleCourseLine extends VisibleCourseLine {
   lootIfFrames: LootIfFrame[]
 }
 
-type RevealContainerKind = "soil" | "plant"
+export type RevealContainerKind = "soil" | "plant"
+
+export interface CourseInlineRevealDeclaration {
+  catalogEligible: boolean
+  content: string
+  deferred: boolean
+  kind: RevealContainerKind
+  options: string
+  section: number
+  trailingSource: string
+}
 
 const REVEAL_START_MACRO =
   /^\s*@(Erdhaufen|Pflanze|Blume)(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/iu
@@ -316,7 +328,11 @@ function maskHtmlComments(
   while (cursor < line.length) {
     if (inComment) {
       const end = line.indexOf("-->", cursor)
-      if (end < 0) return { visible, inComment: true }
+      if (end < 0) {
+        visible += " ".repeat(line.length - cursor)
+        return { visible, inComment: true }
+      }
+      visible += " ".repeat(end + 3 - cursor)
       cursor = end + 3
       inComment = false
       continue
@@ -328,6 +344,7 @@ function maskHtmlComments(
       break
     }
     visible += line.slice(cursor, start)
+    visible += " ".repeat(4)
     cursor = start + 4
     inComment = true
   }
@@ -476,6 +493,7 @@ function visibleCourseLines(markdown: string): VisibleCourseLine[] {
     }
     lines.push({
       content: visibleLine,
+      rawContent: rawLine,
       lootIfCatalogEligible: true,
       lootIfDepth: lootIfFrames.length,
       lootIfFrames: [...lootIfFrames],
@@ -698,7 +716,8 @@ function publicItemAchievementCatalog(
   if (
     name === "schatztruhe" ||
     name === "diamanttruhe" ||
-    name === "energiekiste"
+    name === "energiekiste" ||
+    name === "energietruhe"
   ) {
     return chestAchievementCatalog(options)
   }
@@ -840,10 +859,12 @@ const DIRECT_HIDDEN_MACROS: Readonly<
 const DIRECT_INLINE_REVEAL_MACROS: Readonly<
   Record<string, RevealContainerKind>
 > = {
-  "erdhaufen.inline": "soil",
-  "pflanze.inline": "plant",
-  "blume.inline": "plant",
+  "Erdhaufen.inline": "soil",
+  "Pflanze.inline": "plant",
+  "Blume.inline": "plant",
 }
+const INLINE_REVEAL_PREFIX =
+  /@(Erdhaufen\.inline|Pflanze\.inline|Blume\.inline)(?![\p{L}\p{N}_.])/gu
 
 function macroArguments(
   line: string,
@@ -853,6 +874,7 @@ function macroArguments(
   const arguments_: string[] = []
   let argumentStart = openingIndex + 1
   let depth = 0
+  let codeDelimiterLength = 0
 
   for (let index = argumentStart; index < closingIndex; index += 1) {
     const character = line[index]
@@ -860,6 +882,16 @@ function macroArguments(
       index += 1
       continue
     }
+    if (character === "`") {
+      let end = index + 1
+      while (line[end] === "`") end += 1
+      const runLength = end - index
+      if (codeDelimiterLength === 0) codeDelimiterLength = runLength
+      else if (codeDelimiterLength === runLength) codeDelimiterLength = 0
+      index = end - 1
+      continue
+    }
+    if (codeDelimiterLength !== 0) continue
     if (character === "(") {
       depth += 1
       continue
@@ -876,6 +908,132 @@ function macroArguments(
 
   arguments_.push(line.slice(argumentStart, closingIndex).trim())
   return arguments_
+}
+
+function containsUnescapedMacro(value: string): boolean {
+  let codeDelimiterLength = 0
+  for (let index = 0; index < value.length; index += 1) {
+    if (
+      value[index] === "`" &&
+      value[index - 1]?.charCodeAt(0) !== 92
+    ) {
+      let end = index + 1
+      while (value[end] === "`") end += 1
+      const runLength = end - index
+      if (codeDelimiterLength === 0) codeDelimiterLength = runLength
+      else if (codeDelimiterLength === runLength) codeDelimiterLength = 0
+      index = end - 1
+      continue
+    }
+    if (
+      codeDelimiterLength !== 0 ||
+      value[index] !== "@" ||
+      value[index - 1] === "@" ||
+      value[index - 1]?.charCodeAt(0) === 92 ||
+      /^[\p{L}\p{N}_]$/u.test(value[index - 1] ?? "")
+    ) {
+      continue
+    }
+    if (/^[\p{L}_]$/u.test(value[index + 1] ?? "")) return true
+  }
+  return false
+}
+
+function firstUnprotectedClosingParenthesis(
+  line: string,
+  openingIndex: number,
+  closingIndex: number,
+): number {
+  let codeDelimiterLength = 0
+  for (let index = openingIndex + 1; index <= closingIndex; index += 1) {
+    const character = line[index]
+    if (character.charCodeAt(0) === 92 && index < closingIndex) {
+      index += 1
+      continue
+    }
+    if (character === "`") {
+      let end = index + 1
+      while (line[end] === "`") end += 1
+      const runLength = end - index
+      if (codeDelimiterLength === 0) codeDelimiterLength = runLength
+      else if (codeDelimiterLength === runLength) codeDelimiterLength = 0
+      index = end - 1
+      continue
+    }
+    if (codeDelimiterLength === 0 && character === ")") return index
+  }
+  return closingIndex
+}
+
+interface InlineRevealMacroOccurrence {
+  content: string
+  deferred: boolean
+  kind: RevealContainerKind
+  options: string
+  trailingSource: string
+}
+
+function inlineRevealMacroOccurrences(
+  line: string,
+  rawLine = line,
+): InlineRevealMacroOccurrence[] {
+  const occurrences: InlineRevealMacroOccurrence[] = []
+  const matcher = new RegExp(INLINE_REVEAL_PREFIX)
+
+  while (true) {
+    const match = matcher.exec(line)
+    if (!match) break
+    const previous = line[match.index - 1]
+    if (previous === "@" || previous?.charCodeAt(0) === 92) continue
+
+    let openingIndex = match.index + match[0].length
+    while (/\s/u.test(line[openingIndex] ?? "")) openingIndex += 1
+    if (line[openingIndex] !== "(") continue
+
+    const closingIndex = matchingParenthesis(line, openingIndex)
+    if (closingIndex === null) break
+    const arguments_ = macroArguments(rawLine, openingIndex, closingIndex)
+    const content = arguments_[0] ?? ""
+    const compilerClosingIndex = firstUnprotectedClosingParenthesis(
+      rawLine,
+      openingIndex,
+      closingIndex,
+    )
+    occurrences.push({
+      content,
+      deferred:
+        containsUnescapedMacro(content) ||
+        compilerClosingIndex < closingIndex,
+      kind: DIRECT_INLINE_REVEAL_MACROS[match[1]],
+      options: arguments_[1] ?? "",
+      trailingSource:
+        compilerClosingIndex < closingIndex
+          ? rawLine.slice(compilerClosingIndex + 1, closingIndex + 1)
+          : "",
+    })
+    matcher.lastIndex = closingIndex + 1
+  }
+
+  return occurrences
+}
+
+export function parseCourseInlineRevealDeclarations(
+  markdown: string,
+): CourseInlineRevealDeclaration[] {
+  const declarations: CourseInlineRevealDeclaration[] = []
+  for (const line of visibleCourseLines(markdown)) {
+    for (const occurrence of inlineRevealMacroOccurrences(
+      line.content,
+      line.rawContent,
+    )) {
+      declarations.push({
+        ...occurrence,
+        catalogEligible: line.lootIfCatalogEligible,
+        section: line.section,
+      })
+    }
+  }
+  return declarations
 }
 
 function directHiddenAchievementCatalog(
@@ -915,7 +1073,6 @@ function directInlineRevealAchievementCatalog(
   line: string,
 ): CourseAchievementCatalog {
   const catalog = emptyCourseAchievementCatalog()
-  const normalized = line.toLocaleLowerCase("de-DE")
 
   for (let index = 0; index < line.length; index += 1) {
     if (
@@ -929,7 +1086,7 @@ function directInlineRevealAchievementCatalog(
     for (const [name, kind] of Object.entries(
       DIRECT_INLINE_REVEAL_MACROS,
     )) {
-      if (normalized.slice(index + 1, index + 1 + name.length) !== name) {
+      if (line.slice(index + 1, index + 1 + name.length) !== name) {
         continue
       }
       let openingIndex = index + 1 + name.length
@@ -997,6 +1154,13 @@ export function parseCourseAchievementCatalog(
         ? internalItemAchievementCatalog(line.content)
         : publicItem
     if (item) addAchievementCatalog(currentCatalog(), item)
+    for (const reveal of inlineRevealMacroOccurrences(
+      line.content,
+      line.rawContent,
+    )) {
+      const nestedItem = publicItemAchievementCatalog(reveal.content)
+      if (nestedItem) addAchievementCatalog(currentCatalog(), nestedItem)
+    }
     for (const piece of puzzlePieceMacroOccurrences(line.content)) {
       const sourceOrder = puzzleOccurrenceSourceOrder(
         lineIndex,
@@ -1200,9 +1364,32 @@ function parseInternalCourseLockDeclarations(
 export function parseCourseChestCatalogDeclarations(
   markdown: string,
 ): CourseChestDeclaration[] {
+  const inlineDeclarations: CourseChestDeclaration[] = []
+  const inlineOccurrences = new Map<string, number>()
+  for (const declaration of parseCourseInlineRevealDeclarations(markdown)) {
+    if (!declaration.catalogEligible) continue
+    const match = CHEST_MACRO.exec(declaration.content)
+    if (!match) continue
+
+    const placement = (match[2] ?? "").trim()
+    const reward = MACRO_REWARD[match[1]]
+    const invocation =
+      `${declaration.kind}:${normalizedInvocation(match[1], placement)}`
+    const occurrence = (inlineOccurrences.get(invocation) ?? 0) + 1
+    inlineOccurrences.set(invocation, occurrence)
+    inlineDeclarations.push({
+      baseId:
+        `source-inline-${reward}-${hash(invocation)}-${occurrence}`,
+      placement,
+      reward,
+      section: declaration.section,
+    })
+  }
+
   return [
     ...parseCourseChestDeclarations(markdown),
     ...parseInternalCourseChestDeclarations(markdown),
+    ...inlineDeclarations,
   ]
 }
 
@@ -1492,6 +1679,13 @@ export async function discoverCourseAchievementCatalog(): Promise<
   return markdown
     ? parseCourseAchievementCatalog(markdown)
     : emptyCourseAchievementCatalog()
+}
+
+export async function discoverCourseInlineRevealDeclarations(): Promise<
+  CourseInlineRevealDeclaration[]
+> {
+  const markdown = await loadCourseMarkdown()
+  return markdown ? parseCourseInlineRevealDeclarations(markdown) : []
 }
 
 export async function requireCourseSecretSlideDeclarations(): Promise<

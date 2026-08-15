@@ -2,6 +2,7 @@ import { AchievementManager } from "./achievements"
 import { showAchievement } from "./achievement-overlay"
 import { AchievementStore } from "./achievement-store"
 import { KeyInventoryStore } from "./inventory-store"
+import { installInlineRevealRendering } from "./inline-reveal"
 import { KEY_COLOR_DETAILS } from "./key-colors"
 import {
   announceKeyFound,
@@ -412,6 +413,7 @@ function claimRuntime(): LootRuntimeState | null {
 async function start(runtime: LootRuntimeState): Promise<void> {
   try {
     installCourseMarkdownCapture()
+    installInlineRevealRendering()
     await prepareLiaCourseIdentity(discoverCourseIdentity)
     boot()
     if (window.__LIA_LOOT_RUNTIME__ === runtime) runtime.status = "ready"

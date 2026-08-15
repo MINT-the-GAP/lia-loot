@@ -1,4 +1,5 @@
 import type { KeyColor, KeyCounts } from "./key-colors"
+import type { InlineRevealRenderingApi } from "./inline-reveal"
 
 export type TrophyTier = "gold" | "silver" | "copper" | null
 export const RESOURCE_KINDS = ["gold", "diamonds", "energy"] as const
@@ -116,6 +117,7 @@ export interface LootRuntimeState {
 declare global {
   interface Window {
     __LIA_LOOT_HIGHSCORE__?: HighscoreApi
+    __LIA_LOOT_INLINE_REVEALS__?: InlineRevealRenderingApi
     __LIA_LOOT_RUNTIME__?: LootRuntimeState
   }
 }
