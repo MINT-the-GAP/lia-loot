@@ -412,6 +412,9 @@ function claimRuntime(): LootRuntimeState | null {
 
 async function start(runtime: LootRuntimeState): Promise<void> {
   try {
+    // Visual compiler markers must disappear before source identity discovery,
+    // which can legitimately take several seconds in the LiveEditor.
+    injectStyles()
     installCourseMarkdownCapture()
     installInlineRevealRendering()
     await prepareLiaCourseIdentity(discoverCourseIdentity)

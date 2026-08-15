@@ -95,6 +95,14 @@ test('prüft den lokalen Containerkurs und den öffentlichen Makrovertrag', asyn
   )
   expect(markdown).not.toMatch(/<script\b/iu)
 
+  const preflightCss =
+    /^link:[ \t]+data:text\/css;base64,([A-Za-z0-9+/=]+)[ \t]*$/mu.exec(
+      templateHeader,
+    )?.[1] ?? ""
+  expect(Buffer.from(preflightCss, "base64").toString("utf8")).toBe(
+    ":is(p,.lia-paragraph):has([data-loot-inline-tail])" +
+      "{visibility:hidden!important}",
+  )
   expect(templateHeader).toMatch(
     /^@Schaufel: @LootWerkzeug_\(@uid,shovel,@0\)$/mu,
   )
@@ -103,6 +111,9 @@ test('prüft den lokalen Containerkurs und den öffentlichen Makrovertrag', asyn
   )
   expect(templateHeader).toMatch(
     /^@Erdhaufen: @LootRevealStart_\(@uid,erde,@0\)$/mu,
+  )
+  expect(templateHeader).toMatch(
+    /^@Diamantentruhe: @LootTruhe_\(@uid,@0,diamonds\)$/mu,
   )
   expect(templateHeader).toMatch(
     /^@Erdhaufen\.inline: @LootRevealInline_\(@uid,erde,@1,@0\)$/mu,
@@ -145,7 +156,7 @@ test('prüft den lokalen Containerkurs und den öffentlichen Makrovertrag', asyn
     /<lia-loot-reveal[^>]*data-reveal-layout='inline'[^>]*hidden[^>]*>@3<\/lia-loot-reveal>/u,
   )
   expect(templateHeader).toMatch(
-    /@LootRevealEnd_\s*\[LOOT-REVEAL-END\]\(#lia-loot-reveal-end-@0\)\s*@end/u,
+    /@LootRevealEnd_\s*<lia-keep>\s*<lia-loot-reveal-end[^>]*data-reveal-kind='@0'[^>]*hidden[^>]*><\/lia-loot-reveal-end>\s*<\/lia-keep>\s*@end/u,
   )
   expect(templateHeader).toMatch(
     /^@lootif: @LootIfStart_\(@uid,@0\)$/mu,
@@ -154,7 +165,7 @@ test('prüft den lokalen Containerkurs und den öffentlichen Makrovertrag', asyn
     /^@Endelootif: @LootIfEnd_$/mu,
   )
   expect(templateHeader).toMatch(
-    /@LootIfEnd_\s*\[LOOT-IF-END\]\(#lia-loot-if-end\)\s*@end/u,
+    /@LootIfEnd_\s*<lia-keep>\s*<a[^>]*href='#lia-loot-if-end'[^>]*hidden[^>]*><\/a>\s*<\/lia-keep>\s*@end/u,
   )
 })
 

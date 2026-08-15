@@ -22,6 +22,36 @@ import {
   parseCourseSecretSlideDeclarations,
 } from "../src/course-chests.ts"
 
+test("katalogisiert gleichzeilige Truhen samt Diamantentruhe-Alias", () => {
+  const markdown = [
+    "# Mehrfachfund",
+    "@Erdhaufen",
+    "@Energiekiste  @Energiekiste @Schatztruhe @Diamantentruhe " +
+      "@Schatztruhe @Energiekiste  @Energiekiste ",
+    "@EndeErdhaufen",
+  ].join("\n")
+
+  const declarations = parseCourseChestDeclarations(markdown)
+  assert.deepEqual(
+    declarations.map(({ reward, section }) => ({ reward, section })),
+    [
+      { reward: "energy", section: 0 },
+      { reward: "energy", section: 0 },
+      { reward: "gold", section: 0 },
+      { reward: "diamonds", section: 0 },
+      { reward: "gold", section: 0 },
+      { reward: "energy", section: 0 },
+      { reward: "energy", section: 0 },
+    ],
+  )
+  assert.equal(new Set(declarations.map(({ baseId }) => baseId)).size, 7)
+  assert.deepEqual(
+    parseCourseChestCatalogDeclarations(markdown).map(({ reward }) => reward),
+    declarations.map(({ reward }) => reward),
+  )
+  assert.deepEqual(parseCourseChestDeclarations(markdown, false), [])
+})
+
 test("bindet den Kurszustand stabil an den tatsächlichen Quelltext", () => {
   const unix = "<!--\nversion: 1.2.3\n-->\n# Kurs\n@Unsichtbar(A)\n"
   const windows = unix.replaceAll("\n", "\r\n")
@@ -809,6 +839,39 @@ test("behandelt Energietruhe und Energiekiste in Achievements identisch", () => 
   assert.deepEqual(alias, {
     dust: 1,
     plant: 0,
+    soil: 1,
+    solid: 1,
+  })
+})
+
+test("behandelt Diamantentruhe und Diamanttruhe in Achievements identisch", () => {
+  const options = "(3; menu; pflanze-zauberstaub; unsichtbar)"
+  const canonical = parseCourseAchievementCatalog(
+    "# Alias\n@Diamanttruhe" + options,
+  )
+  const alias = parseCourseAchievementCatalog(
+    "# Alias\n@Diamantentruhe" + options,
+  )
+
+  assert.deepEqual(alias, canonical)
+  assert.deepEqual(alias, {
+    dust: 1,
+    plant: 1,
+    soil: 0,
+    solid: 1,
+  })
+})
+
+test("aggregiert Achievements gleichzeiliger Truhenfolgen", () => {
+  const markdown = [
+    "# Folge",
+    "@Diamantentruhe(3; menu; pflanze-zauberstaub; unsichtbar) " +
+      "@Schatztruhe(2; menu; erde; zauberstaub)",
+  ].join("\n")
+
+  assert.deepEqual(parseCourseAchievementCatalog(markdown), {
+    dust: 2,
+    plant: 1,
     soil: 1,
     solid: 1,
   })

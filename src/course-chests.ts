@@ -80,8 +80,8 @@ export interface CourseAchievementCatalog {
   solid: number
 }
 
-const CHEST_MACRO =
-  /^\s*@(Schatztruhe|Diamanttruhe|Energiekiste|Energietruhe)(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/
+const CHEST_MACRO_OCCURRENCE =
+  /@(Schatztruhe|Diamanttruhe|Diamantentruhe|Energiekiste|Energietruhe)(?![\p{L}\p{N}_])(?:\s*\(\s*([^()\r\n]*)\s*\))?/gu
 const KEY_MACRO =
   /^\s*@Schluessel(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/
 const LOCK_MACRO = /^\s*@Schloss\s*\(\s*([^()\r\n]+)\s*\)\s*$/
@@ -90,7 +90,7 @@ const INTERNAL_CHEST_MACRO =
 const INTERNAL_LOCK_MACRO =
   /^\s*@LootSchloss_\s*\(\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]+)\s*\)\s*$/
 const ACHIEVEMENT_ITEM_MACRO =
-  /^\s*@(Schatztruhe|Diamanttruhe|Energiekiste|Energietruhe|Schluessel|Lupe|Schaufel|Giesskanne)(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/iu
+  /^\s*@(Schluessel|Lupe|Schaufel|Giesskanne)(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/iu
 const INTERNAL_KEY_MACRO =
   /^\s*@LootSchluessel_\s*\(\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]*)\s*\)\s*$/iu
 const INTERNAL_MAGNIFIER_MACRO =
@@ -121,8 +121,33 @@ export const DEFAULT_COURSE_VERSION = "0.0.1"
 const MACRO_REWARD: Readonly<Record<string, ResourceKind>> = {
   Schatztruhe: "gold",
   Diamanttruhe: "diamonds",
+  Diamantentruhe: "diamonds",
   Energiekiste: "energy",
   Energietruhe: "energy",
+}
+
+interface ChestMacroOccurrence {
+  macro: string
+  placement: string
+}
+
+function chestMacroOccurrences(line: string): ChestMacroOccurrence[] {
+  const occurrences: ChestMacroOccurrence[] = []
+  const matcher = new RegExp(CHEST_MACRO_OCCURRENCE)
+  let cursor = 0
+
+  while (true) {
+    const match = matcher.exec(line)
+    if (!match) break
+    if (line.slice(cursor, match.index).trim() !== "") return []
+    occurrences.push({
+      macro: match[1],
+      placement: (match[2] ?? "").trim(),
+    })
+    cursor = matcher.lastIndex
+  }
+
+  return line.slice(cursor).trim() === "" ? occurrences : []
 }
 
 interface Fence {
@@ -709,18 +734,20 @@ function revealAchievementCatalog(
 function publicItemAchievementCatalog(
   line: string,
 ): CourseAchievementCatalog | null | undefined {
+  const chests = chestMacroOccurrences(line)
+  if (chests.length > 0) {
+    const catalog = emptyCourseAchievementCatalog()
+    for (const chest of chests) {
+      const item = chestAchievementCatalog(chest.placement)
+      if (item) addAchievementCatalog(catalog, item)
+    }
+    return catalog
+  }
+
   const match = ACHIEVEMENT_ITEM_MACRO.exec(line)
   if (!match) return undefined
   const name = match[1].toLocaleLowerCase("de-DE")
   const options = (match[2] ?? "").trim()
-  if (
-    name === "schatztruhe" ||
-    name === "diamanttruhe" ||
-    name === "energiekiste" ||
-    name === "energietruhe"
-  ) {
-    return chestAchievementCatalog(options)
-  }
   if (name === "schluessel") return keyAchievementCatalog(options)
   return simpleItemAchievementCatalog(options)
 }
@@ -1198,21 +1225,18 @@ export function parseCourseChestDeclarations(
     if (!includeGated && (line.revealDepth > 0 || line.lootIfDepth > 0)) {
       continue
     }
-    const match = CHEST_MACRO.exec(line.content)
-    if (!match) continue
-
-    const placement = (match[2] ?? "").trim()
-
-    const reward = MACRO_REWARD[match[1]]
-    const invocation = normalizedInvocation(match[1], placement)
-    const occurrence = (occurrences.get(invocation) ?? 0) + 1
-    occurrences.set(invocation, occurrence)
-    declarations.push({
-      baseId: `source-${reward}-${hash(invocation)}-${occurrence}`,
-      placement,
-      reward,
-      section: line.section,
-    })
+    for (const chest of chestMacroOccurrences(line.content)) {
+      const reward = MACRO_REWARD[chest.macro]
+      const invocation = normalizedInvocation(chest.macro, chest.placement)
+      const occurrence = (occurrences.get(invocation) ?? 0) + 1
+      occurrences.set(invocation, occurrence)
+      declarations.push({
+        baseId: `source-${reward}-${hash(invocation)}-${occurrence}`,
+        placement: chest.placement,
+        reward,
+        section: line.section,
+      })
+    }
   }
 
   return declarations
@@ -1368,22 +1392,21 @@ export function parseCourseChestCatalogDeclarations(
   const inlineOccurrences = new Map<string, number>()
   for (const declaration of parseCourseInlineRevealDeclarations(markdown)) {
     if (!declaration.catalogEligible) continue
-    const match = CHEST_MACRO.exec(declaration.content)
-    if (!match) continue
-
-    const placement = (match[2] ?? "").trim()
-    const reward = MACRO_REWARD[match[1]]
-    const invocation =
-      `${declaration.kind}:${normalizedInvocation(match[1], placement)}`
-    const occurrence = (inlineOccurrences.get(invocation) ?? 0) + 1
-    inlineOccurrences.set(invocation, occurrence)
-    inlineDeclarations.push({
-      baseId:
-        `source-inline-${reward}-${hash(invocation)}-${occurrence}`,
-      placement,
-      reward,
-      section: declaration.section,
-    })
+    for (const chest of chestMacroOccurrences(declaration.content)) {
+      const reward = MACRO_REWARD[chest.macro]
+      const invocation =
+        `${declaration.kind}:` +
+        normalizedInvocation(chest.macro, chest.placement)
+      const occurrence = (inlineOccurrences.get(invocation) ?? 0) + 1
+      inlineOccurrences.set(invocation, occurrence)
+      inlineDeclarations.push({
+        baseId:
+          `source-inline-${reward}-${hash(invocation)}-${occurrence}`,
+        placement: chest.placement,
+        reward,
+        section: declaration.section,
+      })
+    }
   }
 
   return [

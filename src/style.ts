@@ -1031,6 +1031,13 @@ a[href="#lia-loot-if-end"],
   display: none !important;
 }
 
+p:has([data-loot-inline-renderer]),
+p:has([data-loot-inline-tail]),
+.lia-paragraph:has([data-loot-inline-renderer]),
+.lia-paragraph:has([data-loot-inline-tail]) {
+  visibility: hidden !important;
+}
+
 lia-loot-puzzle-piece {
   min-width: 4.5rem;
   min-height: 4.5rem;

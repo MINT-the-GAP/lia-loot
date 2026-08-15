@@ -5,6 +5,7 @@ language: de
 edit:     true
 comment:  Loot ergänzt LiaScript-Kurse um konfigurierbare Gamification. Das erste Feature ermittelt einen Highscore aus Fehlversuchen, verwendeten Hinweisen und sekundengenauem Zeitabzug und zeigt ihn mit einer Trophäe an.
 
+link:     data:text/css;base64,OmlzKHAsLmxpYS1wYXJhZ3JhcGgpOmhhcyhbZGF0YS1sb290LWlubGluZS10YWlsXSl7dmlzaWJpbGl0eTpoaWRkZW4haW1wb3J0YW50fQ==
 script:   ./dist/index.js
 
 @Highscore
@@ -82,11 +83,14 @@ script:   ./dist/index.js
 @end
 
 @LootIfEnd_
-[LOOT-IF-END](#lia-loot-if-end)
+<lia-keep>
+<a href='#lia-loot-if-end' hidden aria-hidden='true'></a>
+</lia-keep>
 @end
 
 @Schatztruhe: @LootTruhe_(@uid,@0,gold)
 @Diamanttruhe: @LootTruhe_(@uid,@0,diamonds)
+@Diamantentruhe: @LootTruhe_(@uid,@0,diamonds)
 @Energiekiste: @LootTruhe_(@uid,@0,energy)
 @Energietruhe: @LootTruhe_(@uid,@0,energy)
 @Schluessel: @LootSchluessel_(@uid,@0)
@@ -176,7 +180,9 @@ script:   ./dist/index.js
 @end
 
 @LootRevealEnd_
-[LOOT-REVEAL-END](#lia-loot-reveal-end-@0)
+<lia-keep>
+<lia-loot-reveal-end data-reveal-kind='@0' hidden aria-hidden='true'></lia-loot-reveal-end>
+</lia-keep>
 @end
 
 @LootPortal_
@@ -516,15 +522,17 @@ Sechs Beispieltruhen in der Oberfläche:
 
 @Schatztruhe(toc; menu; classroom; info; translator; mode)
 
-## `@Diamanttruhe`
+## `@Diamanttruhe` und `@Diamantentruhe`
 
           --{{0}}--
 @Ressourcen(1, 1, 2)
 
-Ohne Parameter setzt das Makro eine Diamanttruhe direkt an die Aufrufstelle:
+Ohne Parameter setzt das Makro eine Diamanttruhe direkt an die Aufrufstelle.
+`@Diamantentruhe` ist ein gleichwertiger Alias und akzeptiert dieselben Optionen:
 
 ```markdown
 @Diamanttruhe
+@Diamantentruhe
 ```
 
 Ohne Mengenangabe steigt der Diamantenbestand beim Anklicken um eins. Eine führende
