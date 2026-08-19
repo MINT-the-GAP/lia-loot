@@ -107,6 +107,7 @@ const sourceSignatureCounts = new Map<string, number>()
 const matchedSourceHosts = new Map<string, string>()
 const openingIds = new Set<string>()
 const eligibleChestIds = new Set<string>()
+const clickListenerDocuments = new WeakSet<Document>()
 const warnedInvalidSpecs = new Set<string>()
 const visibilityGate = new CollectibleVisibilityGate()
 let controller: TreasureChestController | null = null
@@ -241,6 +242,40 @@ function chestLabel(reward: ResourceKind, amount: number): string {
       : "Schatztruhe öffnen und " + amount + " Goldmünzen erhalten"
 }
 
+function chestButtonFromEvent(event: MouseEvent): HTMLButtonElement | null {
+  const selector = "button[data-loot-chest-button]"
+  for (const candidate of event.composedPath()) {
+    if (
+      typeof (candidate as Element | null)?.matches === "function" &&
+      (candidate as Element).matches(selector)
+    ) {
+      return candidate as HTMLButtonElement
+    }
+  }
+
+  const target = event.target as Element | null
+  return typeof target?.closest === "function"
+    ? target.closest<HTMLButtonElement>(selector)
+    : null
+}
+
+function chestRewardFromButton(
+  button: HTMLButtonElement,
+): ResourceKind | null {
+  const reward = button.dataset.lootChestReward
+  return reward === "gold" || reward === "diamonds" || reward === "energy"
+    ? reward
+    : null
+}
+
+function chestAmountFromButton(button: HTMLButtonElement): number | null {
+  const rawAmount = button.dataset.lootChestAmount ?? ""
+  if (!/^\d+$/u.test(rawAmount)) return null
+
+  const amount = Number(rawAmount)
+  return Number.isSafeInteger(amount) && amount > 0 ? amount : null
+}
+
 function showResourceRequirement(
   button: HTMLButtonElement,
   reward: ResourceKind,
@@ -264,6 +299,59 @@ function showResourceRequirement(
     requirement.remove()
     button.classList.remove("loot-treasure-chest--waiting")
   }, 2200)
+}
+
+function handleChestButtonClick(event: MouseEvent): void {
+  const button = chestButtonFromEvent(event)
+  const chestId = button?.dataset.lootChestButton
+  const reward = button ? chestRewardFromButton(button) : null
+  const amount = button ? chestAmountFromButton(button) : null
+  if (
+    !button ||
+    !chestId ||
+    !reward ||
+    amount === null ||
+    !controller ||
+    openingIds.has(chestId)
+  ) {
+    return
+  }
+
+  // LiaScript can finish a slide transition after the button was rendered.
+  // Re-check synchronously so a still visible chest cannot be left behind by
+  // a cleared eligibility cache while a scheduled DOM sync is pending.
+  if (!eligibleChestIds.has(chestId)) {
+    syncAll()
+    if (!button.isConnected || !eligibleChestIds.has(chestId)) return
+  }
+  if (!controller.active(reward)) {
+    showResourceRequirement(button, reward)
+    return
+  }
+
+  openingIds.add(chestId)
+  if (!controller.collect(chestId, reward, amount)) {
+    openingIds.delete(chestId)
+    refreshTreasureChests()
+    return
+  }
+
+  button.disabled = true
+  button.classList.add("loot-treasure-chest--opened")
+
+  window.setTimeout(() => {
+    openingIds.delete(chestId)
+    const portal = button.closest<HTMLElement>(`[${PORTAL_ATTRIBUTE}]`)
+    if (portal) removePortal(portal)
+    else button.remove()
+    scheduleSync()
+  }, OPENING_DURATION)
+}
+
+function installChestClickListener(ownerDocument: Document): void {
+  if (clickListenerDocuments.has(ownerDocument)) return
+  clickListenerDocuments.add(ownerDocument)
+  ownerDocument.addEventListener("click", handleChestButtonClick, true)
 }
 
 function createChestButton(
@@ -291,39 +379,7 @@ function createChestButton(
     rewardBadge(reward, amount, ownerDocument),
   )
 
-  button.addEventListener("click", () => {
-    if (!controller || openingIds.has(chestId)) return
-
-    // LiaScript can finish a slide transition after the button was rendered.
-    // Re-check synchronously so a still visible chest cannot be left behind by
-    // a cleared eligibility cache while a scheduled DOM sync is pending.
-    if (!eligibleChestIds.has(chestId)) {
-      syncAll()
-      if (!button.isConnected || !eligibleChestIds.has(chestId)) return
-    }
-    if (!controller.active(reward)) {
-      showResourceRequirement(button, reward)
-      return
-    }
-
-    openingIds.add(chestId)
-    if (!controller.collect(chestId, reward, amount)) {
-      openingIds.delete(chestId)
-      refreshTreasureChests()
-      return
-    }
-
-    button.disabled = true
-    button.classList.add("loot-treasure-chest--opened")
-
-    window.setTimeout(() => {
-      openingIds.delete(chestId)
-      const portal = button.closest<HTMLElement>(`[${PORTAL_ATTRIBUTE}]`)
-      if (portal) removePortal(portal)
-      else button.remove()
-      scheduleSync()
-    }, OPENING_DURATION)
-  })
+  installChestClickListener(ownerDocument)
 
   return button
 }
@@ -1153,6 +1209,10 @@ export function installTreasureChests(
   controller = nextController
   document.getElementById(LEGACY_CHEST_ID)?.remove()
   discoverSourcePortals()
+
+  for (const candidate of templateDocumentCandidates(document)) {
+    installChestClickListener(candidate)
+  }
 
   if (!slideActivityInstalled) {
     slideActivityInstalled = true
