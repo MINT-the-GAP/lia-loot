@@ -46,6 +46,8 @@ const HIDDEN_TAG = "lia-loot-hidden"
 const MAGNIFIER_TOOL_ID = "lia-loot-magnifier-tool"
 const MAGNIFIER_LENS_ID = "lia-loot-magnifier-lens"
 const COLLECT_DURATION = 650
+const TOUCH_LENS_MARGIN = 8
+const TOUCH_PAN_STEP = 12
 
 interface MagnifierController {
   collected(): boolean
@@ -67,10 +69,19 @@ interface PointerPosition {
   y: number
 }
 
+interface TouchPanGesture {
+  origin: PointerPosition
+  pointerId: number
+  start: PointerPosition
+}
+
 let controller: MagnifierController | null = null
 let runtimeId = 0
 let magnifierActive = false
 let pointing = false
+let touchMode = false
+let touchPanGesture: TouchPanGesture | null = null
+let lastPrimaryPointerType = ""
 let lastPointer: PointerPosition | null = null
 let pendingPointer: PointerPosition | null = null
 let pointerFrame: number | null = null
@@ -82,6 +93,7 @@ let revealSyncQueued = false
 const collectingIds = new Set<string>()
 const eligibleMagnifierIds = new Set<string>()
 const boundMagnifierButtons = new WeakSet<HTMLButtonElement>()
+const boundMagnifierPanHandles = new WeakSet<HTMLButtonElement>()
 const warnedInvalidSpecs = new Set<string>()
 const visibilityGate = new CollectibleVisibilityGate()
 
@@ -280,16 +292,151 @@ function syncAllMagnifiers(): void {
   document.querySelectorAll<HTMLElement>(MAGNIFIER_TAG).forEach(syncMagnifier)
 }
 
+function clampTouchLensPosition(position: PointerPosition): PointerPosition {
+  const horizontalMargin = Math.min(
+    MAGNIFIER_RADIUS + TOUCH_LENS_MARGIN,
+    window.innerWidth / 2,
+  )
+  const verticalMargin = Math.min(
+    MAGNIFIER_RADIUS + TOUCH_LENS_MARGIN,
+    window.innerHeight / 2,
+  )
+  return {
+    x: Math.max(
+      horizontalMargin,
+      Math.min(position.x, window.innerWidth - horizontalMargin),
+    ),
+    y: Math.max(
+      verticalMargin,
+      Math.min(position.y, window.innerHeight - verticalMargin),
+    ),
+  }
+}
+
+function defaultTouchLensPosition(): PointerPosition {
+  return clampTouchLensPosition({
+    x: window.innerWidth / 2,
+    y: window.innerHeight / 2,
+  })
+}
+
+function finishTouchPan(handle: HTMLButtonElement, pointerId?: number): void {
+  if (
+    pointerId !== undefined &&
+    touchPanGesture?.pointerId !== pointerId
+  ) {
+    return
+  }
+  touchPanGesture = null
+  handle.classList.remove("loot-magnifier-pan--dragging")
+  if (
+    pointerId !== undefined &&
+    handle.hasPointerCapture(pointerId)
+  ) {
+    handle.releasePointerCapture(pointerId)
+  }
+}
+
+function bindMagnifierPanHandle(handle: HTMLButtonElement): void {
+  if (boundMagnifierPanHandles.has(handle)) return
+  boundMagnifierPanHandles.add(handle)
+
+  handle.addEventListener("pointerdown", (event) => {
+    if (
+      !magnifierActive ||
+      !touchMode ||
+      !event.isPrimary ||
+      event.pointerType !== "touch"
+    ) {
+      return
+    }
+    event.stopPropagation()
+    const origin = pendingPointer ?? lastPointer ?? defaultTouchLensPosition()
+    touchPanGesture = {
+      origin,
+      pointerId: event.pointerId,
+      start: { x: event.clientX, y: event.clientY },
+    }
+    handle.classList.add("loot-magnifier-pan--dragging")
+    handle.setPointerCapture(event.pointerId)
+  })
+
+  handle.addEventListener("pointermove", (event) => {
+    const gesture = touchPanGesture
+    if (!gesture || gesture.pointerId !== event.pointerId) return
+    event.stopPropagation()
+    queuePointer(
+      clampTouchLensPosition({
+        x: gesture.origin.x + event.clientX - gesture.start.x,
+        y: gesture.origin.y + event.clientY - gesture.start.y,
+      }),
+    )
+  })
+
+  handle.addEventListener("pointerup", (event) => {
+    if (touchPanGesture?.pointerId !== event.pointerId) return
+    event.stopPropagation()
+    finishTouchPan(handle, event.pointerId)
+  })
+  handle.addEventListener("pointercancel", (event) => {
+    finishTouchPan(handle, event.pointerId)
+  })
+  handle.addEventListener("lostpointercapture", () => {
+    finishTouchPan(handle)
+  })
+  handle.addEventListener("keydown", (event) => {
+    if (!magnifierActive || !touchMode) return
+    const delta = event.shiftKey ? TOUCH_PAN_STEP * 2 : TOUCH_PAN_STEP
+    const movement: PointerPosition | null =
+      event.key === "ArrowLeft"
+        ? { x: -delta, y: 0 }
+        : event.key === "ArrowRight"
+          ? { x: delta, y: 0 }
+          : event.key === "ArrowUp"
+            ? { x: 0, y: -delta }
+            : event.key === "ArrowDown"
+              ? { x: 0, y: delta }
+              : null
+    if (!movement) return
+    event.preventDefault()
+    event.stopPropagation()
+    const origin = pendingPointer ?? lastPointer ?? defaultTouchLensPosition()
+    queuePointer(
+      clampTouchLensPosition({
+        x: origin.x + movement.x,
+        y: origin.y + movement.y,
+      }),
+    )
+  })
+}
+
+function ensureMagnifierPanHandle(lens: HTMLDivElement): HTMLButtonElement {
+  let handle = lens.querySelector<HTMLButtonElement>(".loot-magnifier-pan")
+  if (!handle) {
+    handle = document.createElement("button")
+    handle.type = "button"
+    handle.className = "loot-magnifier-pan"
+    handle.setAttribute("aria-label", "Lupe verschieben")
+    handle.title = "Lupe verschieben"
+    handle.hidden = true
+    lens.appendChild(handle)
+  }
+  bindMagnifierPanHandle(handle)
+  return handle
+}
+
 function ensureLens(): HTMLDivElement {
   const existing = document.getElementById(MAGNIFIER_LENS_ID)
-  if (existing instanceof HTMLDivElement) return existing
-
-  const lens = document.createElement("div")
-  lens.id = MAGNIFIER_LENS_ID
-  lens.className = "loot-magnifier-lens"
-  lens.hidden = true
-  lens.setAttribute("aria-hidden", "true")
-  document.body.appendChild(lens)
+  const lens =
+    existing instanceof HTMLDivElement ? existing : document.createElement("div")
+  if (!(existing instanceof HTMLDivElement)) {
+    lens.id = MAGNIFIER_LENS_ID
+    lens.className = "loot-magnifier-lens"
+    lens.hidden = true
+    lens.setAttribute("aria-hidden", "true")
+    document.body.appendChild(lens)
+  }
+  ensureMagnifierPanHandle(lens)
   return lens
 }
 
@@ -411,6 +558,24 @@ function queuePointer(position: PointerPosition): void {
   pointerFrame = window.requestAnimationFrame(paintPointer)
 }
 
+function applyTouchMode(active: boolean): void {
+  touchMode = Boolean(active && magnifierActive)
+  const lens = ensureLens()
+  const handle = ensureMagnifierPanHandle(lens)
+  lens.classList.toggle("loot-magnifier-lens--touch", touchMode)
+  document.body.classList.toggle("loot-magnifier-touch", touchMode)
+  handle.hidden = !touchMode
+  handle.tabIndex = touchMode ? 0 : -1
+  lens.setAttribute("aria-hidden", String(!touchMode))
+  if (!touchMode) finishTouchPan(handle)
+}
+
+function showPersistentTouchLens(): void {
+  if (!magnifierActive) return
+  applyTouchMode(true)
+  queuePointer(clampTouchLensPosition(lastPointer ?? defaultTouchLensPosition()))
+}
+
 function stopPointing(): void {
   pointing = false
   pendingPointer = null
@@ -425,7 +590,11 @@ function focusMagnifierTool(): void {
   document.getElementById(MAGNIFIER_TOOL_ID)?.focus({ preventScroll: true })
 }
 
-function applyMagnifierActive(active: boolean, announce = true): void {
+function applyMagnifierActive(
+  active: boolean,
+  announce = true,
+  activationPointerType = "",
+): void {
   magnifierActive = Boolean(active && controller?.collected())
   document.body.classList.toggle(
     "loot-magnifier-active",
@@ -438,11 +607,18 @@ function applyMagnifierActive(active: boolean, announce = true): void {
     "aria-label",
     magnifierActive ? "Lupe deaktivieren" : "Lupe aktivieren",
   )
-  if (!magnifierActive) stopPointing()
+  if (!magnifierActive) {
+    applyTouchMode(false)
+    stopPointing()
+  } else if (activationPointerType === "touch" || touchMode) {
+    showPersistentTouchLens()
+  }
   if (announce) {
     announceResource(
       magnifierActive
-        ? "Lupe aktiviert. Bewege den Zeiger über verborgene Bereiche."
+        ? touchMode
+          ? "Lupe aktiviert. Ziehe sie am Griff und tippe Inhalte im Lupenkreis an."
+          : "Lupe aktiviert. Bewege den Zeiger über verborgene Bereiche."
         : "Lupe deaktiviert.",
     )
   }
@@ -466,8 +642,14 @@ function renderMagnifierTool(): void {
     button.className = "loot-magnifier-tool"
     button.dataset.lootMagnifierTool = "true"
     button.append(createMagnifierGraphic())
-    button.addEventListener("click", () => {
-      applyMagnifierActive(!magnifierActive)
+    button.addEventListener("click", (event) => {
+      const activationPointerType =
+        event.detail === 0 ? "" : lastPrimaryPointerType
+      applyMagnifierActive(
+        !magnifierActive,
+        true,
+        activationPointerType,
+      )
     })
     installResourceBar().appendChild(button)
   }
@@ -482,7 +664,14 @@ function installPointerTracking(): void {
   window.addEventListener(
     "pointermove",
     (event) => {
-      if (!magnifierActive || !event.isPrimary) return
+      if (
+        !magnifierActive ||
+        !event.isPrimary ||
+        event.pointerType === "touch"
+      ) {
+        return
+      }
+      if (touchMode) applyTouchMode(false)
       queuePointer({ x: event.clientX, y: event.clientY })
     },
     { passive: true },
@@ -490,20 +679,33 @@ function installPointerTracking(): void {
   window.addEventListener(
     "pointerdown",
     (event) => {
-      if (!magnifierActive || !event.isPrimary || event.pointerType === "mouse") {
+      if (!event.isPrimary) return
+      lastPrimaryPointerType = event.pointerType
+      if (!magnifierActive) return
+      if (event.pointerType === "touch") {
+        if (!touchMode || !pointing) showPersistentTouchLens()
         return
       }
+      if (event.pointerType === "mouse") return
       queuePointer({ x: event.clientX, y: event.clientY })
     },
     { passive: true },
   )
   window.addEventListener("pointerout", (event) => {
-    if (event.pointerType === "mouse" && event.relatedTarget === null) {
+    if (
+      !touchMode &&
+      event.pointerType === "mouse" &&
+      event.relatedTarget === null
+    ) {
       stopPointing()
     }
   })
-  window.addEventListener("pointercancel", stopPointing)
-  window.addEventListener("blur", stopPointing)
+  window.addEventListener("pointercancel", (event) => {
+    if (event.pointerType !== "touch") stopPointing()
+  })
+  window.addEventListener("blur", () => {
+    if (!touchMode) stopPointing()
+  })
   window.addEventListener(
     "scroll",
     () => {
@@ -514,7 +716,10 @@ function installPointerTracking(): void {
   window.addEventListener(
     "resize",
     () => {
-      if (magnifierActive && pointing && lastPointer) queuePointer(lastPointer)
+      if (!magnifierActive || !pointing || !lastPointer) return
+      queuePointer(
+        touchMode ? clampTouchLensPosition(lastPointer) : lastPointer,
+      )
     },
     { passive: true },
   )

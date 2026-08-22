@@ -470,11 +470,44 @@ html.loot-secret-slide-discovery-failed
   backdrop-filter: brightness(1.06);
 }
 
-.loot-magnifier-lens::after {
+.loot-magnifier-pan {
+  appearance: none;
+  position: absolute;
+  right: -0.25rem;
+  bottom: -0.25rem;
+  width: 3rem;
+  height: 3rem;
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  pointer-events: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.loot-magnifier-lens--touch > .loot-magnifier-pan {
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.loot-magnifier-lens--touch > .loot-magnifier-pan--dragging {
+  cursor: grabbing;
+}
+
+.loot-magnifier-pan:focus-visible {
+  outline: 3px solid #d7f7ff;
+  outline-offset: 2px;
+}
+
+.loot-magnifier-pan::after {
   content: "";
   position: absolute;
-  right: -2.2rem;
-  bottom: -1.15rem;
+  left: 0.3rem;
+  top: 0.85rem;
   width: 2.7rem;
   height: 0.9rem;
   background: #9a6500;
@@ -489,6 +522,10 @@ html.loot-secret-slide-discovery-failed
 
 body.loot-magnifier-active {
   cursor: crosshair;
+}
+
+body.loot-magnifier-active.loot-magnifier-touch {
+  cursor: auto;
 }
 
 lia-loot-hidden:not([data-loot-concealment-ready="true"]) {

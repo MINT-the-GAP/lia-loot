@@ -832,7 +832,10 @@ zeitverzögert eingeblendet werden:
 
 Ein Klick auf die Lupe in der Leiste aktiviert den kreisförmigen Suchausschnitt am
 Mauszeiger. Ein weiterer Klick oder die Escape-Taste deaktiviert ihn. Auf Touchgeräten
-kann der Ausschnitt durch Berühren positioniert werden.
+erscheint der Ausschnitt direkt nach der Aktivierung und bleibt dauerhaft sichtbar.
+Ziehe ihn am Lupengriff an die gewünschte Stelle. Berührungen im Lupenglas gehen
+weiterhin an den dort sichtbaren Inhalt, sodass sich etwa verborgene Truhen direkt
+antippen lassen.
 
 `@Unsichtbar(...)` lässt den Platz eines Inhalts bestehen, verdeckt ihn aber
 vollständig. Erst innerhalb des aktiven Lupenkreises wird der jeweilige Ausschnitt
