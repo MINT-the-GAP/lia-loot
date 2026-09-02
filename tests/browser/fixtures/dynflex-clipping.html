@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Loot DynFlex Scroll-Clipping</title>
+  <style>
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      font-family: system-ui, sans-serif;
+    }
+
+    body {
+      padding: 2rem;
+      box-sizing: border-box;
+    }
+
+    .lia-slide__container {
+      width: 42rem;
+      height: 22rem;
+      overflow: auto;
+      border: 8px solid #27364d;
+      padding: 12px;
+      box-sizing: border-box;
+    }
+
+    .lia-slide__content {
+      min-height: 100%;
+      margin: 0;
+    }
+
+    .fixture-spacer--before {
+      height: 5rem;
+    }
+
+    .fixture-spacer--after {
+      height: 32rem;
+    }
+
+    .dynFlex {
+      position: relative;
+      width: 34rem;
+      height: 56rem;
+      padding: 1.5rem;
+      border: 4px solid #3867d6;
+      background: #eaf0ff;
+      box-sizing: border-box;
+      overflow: visible;
+    }
+
+    #outside-control {
+      position: fixed;
+      right: 2rem;
+      bottom: 2rem;
+      min-width: 10rem;
+      min-height: 3rem;
+    }
+  </style>
+</head>
+<body>
+  <nav id="lia-toc" hidden aria-hidden="true">
+    <div class="lia-toc__content">
+      <a id="focusedToc" class="lia-toc__link" href="#1">
+        DynFlex Scroll-Clipping
+      </a>
+    </div>
+  </nav>
+
+  <div id="fixture-scrollport" class="lia-slide__container">
+    <main class="lia-slide__content">
+      <div class="fixture-spacer--before" aria-hidden="true"></div>
+      <section id="fixture-dynflex" class="dynFlex">
+        <h1>Großer DynFlex-Bereich</h1>
+        <p>Das Item muss an diesem Bereich hängen und dessen Scrollgrenzen beachten.</p>
+      </section>
+      <div class="fixture-spacer--after" aria-hidden="true"></div>
+
+      <lia-loot-chest
+        id="fixture-chest"
+        data-chest-id="0_201"
+        data-placement="dynflex"
+        data-reward="gold"
+      ></lia-loot-chest>
+      <lia-loot-lock
+        id="fixture-lock"
+        data-lock-id="0_301"
+        data-target="dynflex"
+        data-color="red"
+      ></lia-loot-lock>
+    </main>
+  </div>
+
+  <button id="outside-control" type="button">Außerhalb bedienbar</button>
+
+  <script>
+    ;(function prepareFixture() {
+      const item = new URLSearchParams(window.location.search).get("item")
+      const selectedItem = item === "lock" ? "lock" : "chest"
+      if (selectedItem === "chest") {
+        document.getElementById("fixture-lock").remove()
+      } else {
+        document.getElementById("fixture-chest").remove()
+      }
+
+      const course = selectedItem === "chest"
+        ? [
+            "# DynFlex Scroll-Clipping",
+            "@Ressourcen(0, 0, 0)",
+            "@Schatztruhe(dynflex)",
+          ].join("\n")
+        : [
+            "# DynFlex Scroll-Clipping",
+            "@Schloss(dynflex, rot)",
+          ].join("\n")
+
+      window.__LIA_DYNFLEX_V1_0__ = {}
+      window.__LOOT_DYNFLEX_FIXTURE__ = { selectedItem }
+      window.LIA = {
+        defaultCourseURL: new URL(
+          "/tests/browser/fixtures/dynflex-clipping.md",
+          window.location.origin,
+        ).href,
+        fetch: async function fetchCourse() {
+          return new Response(course, {
+            headers: { "content-type": "text/markdown; charset=utf-8" },
+            status: 200,
+          })
+        },
+      }
+    })()
+  </script>
+  <script src="/dist/index.js"></script>
+</body>
+</html>

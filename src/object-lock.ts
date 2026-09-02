@@ -35,6 +35,10 @@ import {
   installSlideNavigationLock,
   setSlideNavigationLocked,
 } from "./slide-navigation-lock.ts"
+import {
+  clientRectClipPath,
+  visibleClientRect,
+} from "./visible-client-rect.ts"
 
 const LOCK_TAG = "lia-loot-lock"
 const PORTAL_TAG = "lia-loot-slide-portal"
@@ -996,27 +1000,39 @@ function setStyleIfNeeded(
   if (element.style[property] !== value) element.style[property] = value
 }
 
+function setClipPathIfNeeded(element: HTMLElement, value: string): void {
+  for (const property of ["clip-path", "-webkit-clip-path"]) {
+    if (value) {
+      if (element.style.getPropertyValue(property) !== value) {
+        element.style.setProperty(property, value)
+      }
+    } else if (element.style.getPropertyValue(property)) {
+      element.style.removeProperty(property)
+    }
+  }
+}
+
 function positionFloating(decoration: Decoration): void {
   if (decoration.binding.mode !== "floating") return
   const rect = decoration.binding.anchor.getBoundingClientRect()
-  const view = decoration.binding.anchor.ownerDocument.defaultView ?? window
+  const clippingRect = visibleClientRect(decoration.binding.anchor)
+  const clipPath = clippingRect
+    ? clientRectClipPath(rect, clippingRect)
+    : null
   const visible =
     decoration.binding.anchor.isConnected &&
     rect.width > 0 &&
     rect.height > 0 &&
-    rect.right > 0 &&
-    rect.bottom > 0 &&
-    rect.left < view.innerWidth &&
-    rect.top < view.innerHeight
+    clipPath !== null
   if (decoration.button.hidden === visible) {
     decoration.button.hidden = !visible
   }
-  if (!visible) return
 
   setStyleIfNeeded(decoration.button, "left", `${rect.left}px`)
   setStyleIfNeeded(decoration.button, "top", `${rect.top}px`)
   setStyleIfNeeded(decoration.button, "width", `${rect.width}px`)
   setStyleIfNeeded(decoration.button, "height", `${rect.height}px`)
+  setClipPathIfNeeded(decoration.button, clipPath ?? "")
   decoration.button.classList.toggle(
     "loot-object-lock-button--near-top",
     rect.top < 96,

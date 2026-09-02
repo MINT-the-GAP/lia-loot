@@ -46,6 +46,11 @@ import {
   type TemplateChestPosition,
   type TemplateTarget,
 } from "./template-targets.ts"
+import {
+  clientRectClipPath,
+  intersectClientRects,
+  visibleClientRect,
+} from "./visible-client-rect.ts"
 
 const CHEST_TAG = "lia-loot-chest"
 const LEGACY_CHEST_ID = "lia-loot-treasure-chest"
@@ -893,27 +898,35 @@ function setPortalStyle(
   if (wrapper.style[property] !== value) wrapper.style[property] = value
 }
 
+function setPortalClipPath(wrapper: HTMLElement, value: string): void {
+  for (const property of ["clip-path", "-webkit-clip-path"]) {
+    if (value) {
+      if (wrapper.style.getPropertyValue(property) !== value) {
+        wrapper.style.setProperty(property, value)
+      }
+    } else if (wrapper.style.getPropertyValue(property)) {
+      wrapper.style.removeProperty(property)
+    }
+  }
+}
+
 export function templatePortalGeometry(
   rect: Pick<DOMRectReadOnly, "bottom" | "left" | "right" | "top" | "width">,
-  viewportWidth: number,
-  viewportHeight: number,
   position: TemplateChestPosition = "overlay",
 ): { height: number; left: number; top: number; width: number } {
   const width = Math.min(58, Math.max(44, rect.width))
   const height = Math.min(51, Math.max(40, width * 0.875))
-  const maxLeft = Math.max(4, viewportWidth - width - 4)
-  const maxTop = Math.max(4, viewportHeight - height - 4)
-  const preferredLeft =
+  const left =
     position === "below"
       ? rect.left + (rect.width - width) / 2
       : rect.right - width - 4
-  const preferredTop =
+  const top =
     position === "below" ? rect.bottom + 8 : rect.bottom - height - 4
 
   return {
     height,
-    left: Math.max(4, Math.min(preferredLeft, maxLeft)),
-    top: Math.max(4, Math.min(preferredTop, maxTop)),
+    left,
+    top,
     width,
   }
 }
@@ -924,29 +937,31 @@ function positionTemplatePortal(
   position: TemplateChestPosition,
 ): void {
   const rect = anchor.getBoundingClientRect()
-  const view = anchor.ownerDocument.defaultView ?? window
-  const visible =
+  const geometry = templatePortalGeometry(rect, position)
+  const portalRect = {
+    bottom: geometry.top + geometry.height,
+    left: geometry.left,
+    right: geometry.left + geometry.width,
+    top: geometry.top,
+  }
+  const clippingRect = visibleClientRect(anchor)
+  const anchorVisible =
     anchor.isConnected &&
     rect.width > 0 &&
     rect.height > 0 &&
-    rect.right > 0 &&
-    rect.bottom > 0 &&
-    rect.left < view.innerWidth &&
-    rect.top < view.innerHeight
+    clippingRect !== null &&
+    intersectClientRects(rect, clippingRect) !== null
+  const clipPath = anchorVisible && clippingRect
+    ? clientRectClipPath(portalRect, clippingRect)
+    : null
+  const visible = clipPath !== null
   if (wrapper.hidden === visible) wrapper.hidden = !visible
-  if (!visible) return
-
-  const geometry = templatePortalGeometry(
-    rect,
-    view.innerWidth,
-    view.innerHeight,
-    position,
-  )
 
   setPortalStyle(wrapper, "left", `${geometry.left}px`)
   setPortalStyle(wrapper, "top", `${geometry.top}px`)
   setPortalStyle(wrapper, "width", `${geometry.width}px`)
   setPortalStyle(wrapper, "height", `${geometry.height}px`)
+  setPortalClipPath(wrapper, clipPath ?? "")
 }
 
 function ensurePortalTray(
@@ -1068,6 +1083,7 @@ function ensurePortal(
     )
   } else if (destination.templateLayout === "inside") {
     wrapper.hidden = false
+    setPortalClipPath(wrapper, "")
     for (const property of ["height", "left", "top", "width"] as const) {
       setPortalStyle(wrapper, property, "")
     }
@@ -1124,6 +1140,7 @@ function syncPortals(): void {
         !unavailable &&
         !opening &&
         wrapper &&
+        !wrapper.hidden &&
         !hostIsRevealBlocked(wrapper)
       ) {
         eligibleChestIds.add(chestId)

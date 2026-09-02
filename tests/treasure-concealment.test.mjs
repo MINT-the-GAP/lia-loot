@@ -247,7 +247,7 @@ test("positioniert die Annotation-Truhe mit Abstand unterhalb der Toolbar", () =
     top: 100,
     width: 44,
   }
-  const below = templatePortalGeometry(toolbar, 800, 600, "below")
+  const below = templatePortalGeometry(toolbar, "below")
 
   assert.deepEqual(below, {
     height: 40,
@@ -257,8 +257,33 @@ test("positioniert die Annotation-Truhe mit Abstand unterhalb der Toolbar", () =
   })
   assert.ok(below.top >= toolbar.bottom + 8)
 
-  const overlay = templatePortalGeometry(toolbar, 800, 600, "overlay")
+  const overlay = templatePortalGeometry(toolbar, "overlay")
   assert.ok(overlay.top < toolbar.bottom)
+})
+
+test("lässt Template-Truhen natürlich aus dem Viewport scrollen", () => {
+  const scrolledAbove = templatePortalGeometry({
+    bottom: 30,
+    left: 20,
+    right: 320,
+    top: -270,
+    width: 300,
+  })
+  assert.deepEqual(scrolledAbove, {
+    height: 50.75,
+    left: 258,
+    top: -24.75,
+    width: 58,
+  })
+
+  const scrolledBelow = templatePortalGeometry({
+    bottom: 920,
+    left: 20,
+    right: 320,
+    top: 620,
+    width: 300,
+  })
+  assert.equal(scrolledBelow.top, 865.25)
 })
 
 test("propagiert Portalmodi und räumt unsichtbare Inline-Hosts vollständig auf", () => {
