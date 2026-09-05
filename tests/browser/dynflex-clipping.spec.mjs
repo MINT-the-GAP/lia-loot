@@ -103,6 +103,146 @@ async function itemReceivesPoint(page, selector, x, y) {
 }
 
 for (const testCase of cases) {
+  test(`bewegt DynFlex-${testCase.item} beim ersten Scroll-Paint ohne Nachlauf`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ height: 720, width: 1280 })
+    await page.goto(`${fixtureUrl}?item=${testCase.item}`)
+    await waitForRuntime(page)
+    await expect(page.locator(testCase.selector)).toHaveCount(1)
+    await placeTargetBottom(page, 260)
+    await expect(page.locator(testCase.selector)).toBeVisible()
+
+    const samples = await page.evaluate(async (itemSelector) => {
+      const scrollport = document.getElementById("fixture-scrollport")
+      const target = document.getElementById("fixture-dynflex")
+      const item = document.querySelector(itemSelector)
+      const samples = []
+      for (const delta of [16, 24, -12, 20, -16, -32]) {
+        const targetTop = target.getBoundingClientRect().top
+        const itemTop = item.getBoundingClientRect().top
+        samples.push(await new Promise((resolve) => {
+          scrollport.addEventListener("scroll", () => {
+            // Measure before the very next paint, without waiting for a timer
+            // or an additional frame to let a delayed portal catch up.
+            requestAnimationFrame(() => {
+              const targetDelta = target.getBoundingClientRect().top - targetTop
+              const itemDelta = item.getBoundingClientRect().top - itemTop
+              resolve({ delta, targetDelta, error: itemDelta - targetDelta })
+            })
+          }, { once: true })
+          scrollport.scrollTop += delta
+        }))
+      }
+      return samples
+    }, testCase.selector)
+
+    for (const sample of samples) {
+      expect(sample.targetDelta).toBeCloseTo(-sample.delta, 0)
+      expect(Math.abs(sample.error), JSON.stringify(sample)).toBeLessThan(1)
+    }
+  })
+
+  for (const motion of [
+    {
+      name: "CSS-Transition",
+      startEvent: "transitionrun",
+      styles: `
+        #fixture-dynflex { transition: transform 240ms linear; }
+        #fixture-dynflex.fixture-moving { transform: translate(40px, 80px); }
+      `,
+    },
+    {
+      name: "CSS-Keyframeanimation",
+      startEvent: "animationstart",
+      styles: `
+        @keyframes fixture-move {
+          from { transform: translate(0, 0); }
+          to { transform: translate(40px, 80px); }
+        }
+        #fixture-dynflex.fixture-moving {
+          animation: fixture-move 240ms linear forwards;
+        }
+      `,
+    },
+    {
+      name: "CSS-Größenänderung",
+      startEvent: "transitionrun",
+      styles: `
+        #fixture-dynflex { transition: width 240ms linear, height 240ms linear; }
+        #fixture-dynflex.fixture-moving {
+          width: calc(34rem + 40px);
+          height: calc(56rem + 80px);
+        }
+      `,
+    },
+  ]) {
+    test(`bewegt DynFlex-${testCase.item} während einer ${motion.name} ohne Nachlauf`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ height: 720, width: 1280 })
+      await page.goto(`${fixtureUrl}?item=${testCase.item}`)
+      await waitForRuntime(page)
+      await expect(page.locator(testCase.selector)).toHaveCount(1)
+      await placeTargetBottom(page, 220)
+      await expect(page.locator(testCase.selector)).toBeVisible()
+      await page.addStyleTag({ content: motion.styles })
+
+      const samples = await page.evaluate(async ({ itemKind, itemSelector, startEvent }) => {
+        const target = document.getElementById("fixture-dynflex")
+        const item = document.querySelector(itemSelector)
+        const targetBefore = target.getBoundingClientRect()
+        const itemBefore = item.getBoundingClientRect()
+        const samples = []
+        await new Promise((resolve) => {
+          const onStart = (event) => {
+            if (event.target !== target) return
+            window.removeEventListener(startEvent, onStart)
+            const sample = () => {
+              const targetRect = target.getBoundingClientRect()
+              const itemRect = item.getBoundingClientRect()
+              const targetX = targetRect.right - targetBefore.right
+              const targetY = targetRect.bottom - targetBefore.bottom
+              samples.push({
+                targetX,
+                targetY,
+                errorX: itemRect.left - itemBefore.left -
+                  (itemKind === "chest" ? targetX : targetRect.left - targetBefore.left),
+                errorY: itemRect.top - itemBefore.top -
+                  (itemKind === "chest" ? targetY : targetRect.top - targetBefore.top),
+                errorWidth: itemRect.width - itemBefore.width -
+                  (itemKind === "lock" ? targetRect.width - targetBefore.width : 0),
+                errorHeight: itemRect.height - itemBefore.height -
+                  (itemKind === "lock" ? targetRect.height - targetBefore.height : 0),
+              })
+              if (targetY < 79) requestAnimationFrame(sample)
+              else resolve()
+            }
+            requestAnimationFrame(sample)
+          }
+          // Observe the event after the runtime's document/window handlers,
+          // then inspect that same frame immediately before the browser paints.
+          window.addEventListener(startEvent, onStart)
+          target.classList.add("fixture-moving")
+        })
+        return samples
+      }, {
+        itemKind: testCase.item,
+        itemSelector: testCase.selector,
+        startEvent: motion.startEvent,
+      })
+
+      expect(samples.some((sample) => sample.targetY > 0 && sample.targetY < 79)).toBe(true)
+      expect(samples.at(-1).targetY).toBeCloseTo(80, 0)
+      for (const sample of samples) {
+        expect(Math.abs(sample.errorX), JSON.stringify(sample)).toBeLessThan(1)
+        expect(Math.abs(sample.errorY), JSON.stringify(sample)).toBeLessThan(1)
+        expect(Math.abs(sample.errorWidth), JSON.stringify(sample)).toBeLessThan(1)
+        expect(Math.abs(sample.errorHeight), JSON.stringify(sample)).toBeLessThan(1)
+      }
+    })
+  }
+
   test(`scrollt DynFlex-${testCase.item} mit und clippt seine Hit-Area`, async ({
     page,
   }) => {

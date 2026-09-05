@@ -39,6 +39,12 @@ import {
   clientRectClipPath,
   visibleClientRect,
 } from "./visible-client-rect.ts"
+import {
+  isFloatingPositionMutation,
+  scheduleFloatingPositions,
+  trackFloatingPosition,
+  untrackFloatingPosition,
+} from "./floating-position.ts"
 
 const LOCK_TAG = "lia-loot-lock"
 const PORTAL_TAG = "lia-loot-slide-portal"
@@ -221,7 +227,6 @@ const pendingControlTabIndices = new WeakMap<
 
 let controller: ObjectLockController | null = null
 const observers: MutationObserver[] = []
-let anchorResizeObserver: ResizeObserver | null = null
 let syncTimer: number | null = null
 let runtimeId = 0
 let quizRuntimeId = 0
@@ -1078,18 +1083,20 @@ function createDecoration(
   } else {
     binding.anchor.ownerDocument.body.appendChild(button)
   }
-  anchorResizeObserver?.observe(binding.anchor)
+  if (binding.mode === "floating") {
+    trackFloatingPosition(button, binding.anchor, () => positionFloating(decoration))
+  }
   enforceDecoration(decoration)
   return decoration
 }
 
 function removeDecoration(decoration: Decoration): void {
+  untrackFloatingPosition(decoration.button)
   if (decoration.feedbackTimer !== null) {
     window.clearTimeout(decoration.feedbackTimer)
   }
   for (const [element, state] of decoration.states) restoreState(element, state)
   decoration.states.clear()
-  anchorResizeObserver?.unobserve(decoration.binding.anchor)
   decoration.button.remove()
   if (!decoration.rootWasTarget) {
     decoration.binding.root.classList.remove("loot-object-lock-target")
@@ -1281,6 +1288,7 @@ function syncAll(): void {
 }
 
 function scheduleSync(): void {
+  scheduleFloatingPositions()
   if (syncTimer !== null) return
   syncTimer = window.setTimeout(() => {
     syncTimer = null
@@ -1350,6 +1358,7 @@ function isEnforcedAttributeMutation(mutation: MutationRecord): boolean {
 }
 
 function mutationNeedsSync(mutation: MutationRecord): boolean {
+  if (isFloatingPositionMutation(mutation)) return false
   if (isOwnedObserverNode(mutation.target)) return false
   if (isEnforcedAttributeMutation(mutation)) return false
   if (mutation.type !== "childList") return true
@@ -1481,26 +1490,13 @@ export function installObjectLocks(nextController: ObjectLockController): void {
 
   if (!viewportListenersInstalled) {
     viewportListenersInstalled = true
-    if ("ResizeObserver" in window) {
-      anchorResizeObserver = new ResizeObserver(scheduleSync)
-      for (const decoration of decorations.values()) {
-        anchorResizeObserver.observe(decoration.binding.anchor)
-      }
-    }
     const views = new Set<Window>()
     for (const candidate of templateDocumentCandidates(document)) {
       const view = candidate.defaultView
       if (view && !views.has(view)) {
         views.add(view)
         view.addEventListener("resize", scheduleSync, { passive: true })
-        view.addEventListener("scroll", scheduleSync, {
-          capture: true,
-          passive: true,
-        })
         view.visualViewport?.addEventListener("resize", scheduleSync, {
-          passive: true,
-        })
-        view.visualViewport?.addEventListener("scroll", scheduleSync, {
           passive: true,
         })
       }

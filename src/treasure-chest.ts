@@ -51,6 +51,12 @@ import {
   intersectClientRects,
   visibleClientRect,
 } from "./visible-client-rect.ts"
+import {
+  isFloatingPositionMutation,
+  scheduleFloatingPositions,
+  trackFloatingPosition,
+  untrackFloatingPosition,
+} from "./floating-position.ts"
 
 const CHEST_TAG = "lia-loot-chest"
 const LEGACY_CHEST_ID = "lia-loot-treasure-chest"
@@ -135,6 +141,7 @@ function removeEmptyPortalTray(candidate: HTMLElement | null): void {
 
 function removePortal(portal: HTMLElement | null | undefined): void {
   if (!portal) return
+  untrackFloatingPosition(portal)
   const tray = portal.parentElement
   portal.remove()
   removeEmptyPortalTray(tray)
@@ -1076,16 +1083,22 @@ function ensurePortal(
   }
   setHostConcealment(contentHost, request.concealment)
   if (destination.templateLayout === "floating") {
-    positionTemplatePortal(
-      wrapper,
-      destination.anchor,
-      destination.templatePosition ?? "overlay",
-    )
-  } else if (destination.templateLayout === "inside") {
-    wrapper.hidden = false
-    setPortalClipPath(wrapper, "")
-    for (const property of ["height", "left", "top", "width"] as const) {
-      setPortalStyle(wrapper, property, "")
+    const portal = wrapper
+    trackFloatingPosition(portal, destination.anchor, () => {
+      positionTemplatePortal(
+        portal,
+        destination.anchor,
+        destination.templatePosition ?? "overlay",
+      )
+    })
+  } else {
+    untrackFloatingPosition(wrapper)
+    if (destination.templateLayout === "inside") {
+      wrapper.hidden = false
+      setPortalClipPath(wrapper, "")
+      for (const property of ["height", "left", "top", "width"] as const) {
+        setPortalStyle(wrapper, property, "")
+      }
     }
   }
   return wrapper
@@ -1182,6 +1195,7 @@ function syncAll(): void {
 }
 
 function scheduleSync(): void {
+  scheduleFloatingPositions()
   if (syncTimer !== null) return
 
   syncTimer = window.setTimeout(() => {
@@ -1195,7 +1209,9 @@ function discardObservedWrites(): void {
 }
 
 function observedDocumentMutations(mutations: MutationRecord[]): void {
-  if (mutations.length > 0) scheduleSync()
+  if (mutations.some((mutation) => !isFloatingPositionMutation(mutation))) {
+    scheduleSync()
+  }
 }
 
 class LootTreasureChestElement extends HTMLElement {
@@ -1281,14 +1297,7 @@ export function installTreasureChests(
       if (!view || views.has(view)) continue
       views.add(view)
       view.addEventListener("resize", scheduleSync, { passive: true })
-      view.addEventListener("scroll", scheduleSync, {
-        capture: true,
-        passive: true,
-      })
       view.visualViewport?.addEventListener("resize", scheduleSync, {
-        passive: true,
-      })
-      view.visualViewport?.addEventListener("scroll", scheduleSync, {
         passive: true,
       })
     }
