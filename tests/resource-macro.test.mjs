@@ -1,6 +1,9 @@
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import test from "node:test"
+import { runInNewContext } from "node:vm"
+
+import { parseResourceOptions } from "../src/resource-options.ts"
 
 const readme = await readFile(new URL("../README.md", import.meta.url), "utf8")
 
@@ -14,32 +17,111 @@ function resourceMacroBody(markdown) {
 }
 
 function expandMacroParameters(source, parameters) {
-  return source.replace(/@(\d+)/gu, (placeholder, index) =>
-    parameters[Number(index)] === undefined
-      ? placeholder
-      : String(parameters[Number(index)]),
-  )
+  return source.replace(/@('?)(\d+)/gu, (placeholder, escaped, index) => {
+    const value = parameters[Number(index)]
+    if (value === undefined) return placeholder
+    return escaped ? JSON.stringify(String(value)).slice(1, -1) : String(value)
+  })
 }
 
-test("Ressourcen-Makro verwirft den dritten Wert bei der LiaScript-Expansion nicht", () => {
-  const macro = resourceMacroBody(readme)
-
-  assert.equal(
-    macro.match(/@2/gu)?.length,
-    1,
-    "@2 darf nur an der eigentlichen Eingabestelle stehen",
+function executeResourceMacro(parameters) {
+  let configured
+  let calls = 0
+  const window = {
+    __LIA_LOOT_HIGHSCORE__: {
+      resources(gold, diamonds, ...options) {
+        calls += 1
+        configured = { gold, diamonds, ...parseResourceOptions(options) }
+      },
+    },
+  }
+  runInNewContext(
+    expandMacroParameters(resourceMacroBody(readme), parameters),
+    { window },
   )
+  assert.equal(calls, 1)
+  return configured
+}
 
-  const expanded = expandMacroParameters(macro, [10, 10, 10])
-  assert.match(expanded, /var rawEnergy = String\("10"\)\.trim\(\);/u)
-  assert.doesNotMatch(expanded, /rawEnergy === "10"/u)
-  assert.match(expanded, /rawEnergy\.startsWith\("@"\)/u)
-  assert.match(expanded, /api\.resources\(Number\("10"\), Number\("10"\), energy\);/u)
+test("Ressourcen-Makro uebergibt den optionalen Energiewert bei der Ausfuehrung", () => {
+  assert.deepEqual(executeResourceMacro([10, 3, 5]), {
+    gold: 10,
+    diamonds: 3,
+    energy: 5,
+  })
+  assert.deepEqual(executeResourceMacro([10, 3, 0]), {
+    gold: 10,
+    diamonds: 3,
+    energy: 0,
+  })
 })
 
-test("Ressourcen-Makro erkennt weiterhin den fehlenden optionalen Energiewert", () => {
-  const expanded = expandMacroParameters(resourceMacroBody(readme), [10, 10])
+test("Ressourcen-Makro erlaubt fehlende und leere Energie ohne Limit", () => {
+  for (const parameters of [[10, 3], [10, 3, ""]]) {
+    assert.deepEqual(executeResourceMacro(parameters), { gold: 10, diamonds: 3 })
+  }
+  assert.deepEqual(parseResourceOptions([undefined, "@2", "@'3", "@4"]), {})
+})
 
-  assert.match(expanded, /var rawEnergy = String\("@2"\)\.trim\(\);/u)
-  assert.match(expanded, /rawEnergy\.startsWith\("@"\)/u)
+test("Ressourcen-Makro uebergibt benannte Punktwerte mit und ohne Energie", () => {
+  assert.deepEqual(
+    executeResourceMacro([10, 3, 5, "diamantwert=500", "goldwert=50"]),
+    { gold: 10, diamonds: 3, energy: 5, diamondValue: 500, goldValue: 50 },
+  )
+  for (const options of [
+    ["goldwert=0", "diamantwert=12.5"],
+    ["diamantwert=12.5", "goldwert=0"],
+    ["", "goldwert=0", "diamantwert=12.5"],
+    ["diamantwert=12.5; goldwert=0"],
+  ]) {
+    assert.deepEqual(executeResourceMacro([10, 3, ...options]), {
+      gold: 10,
+      diamonds: 3,
+      goldValue: 0,
+      diamondValue: 12.5,
+    })
+  }
+})
+
+test("Ressourcenoptionen bewahren numerische API-Werte und einzelne Overrides", () => {
+  assert.deepEqual(parseResourceOptions([7]), { energy: 7 })
+  assert.deepEqual(parseResourceOptions([" Goldwert = +2.5e2 "]), {
+    goldValue: 250,
+  })
+  assert.deepEqual(parseResourceOptions(["diamantwert=0"]), { diamondValue: 0 })
+  assert.deepEqual(parseResourceOptions(["5; goldwert=100; diamantwert=250"]), {
+    energy: 5,
+    goldValue: 100,
+    diamondValue: 250,
+  })
+})
+
+test("Ressourcenoptionen lehnen ungueltige Werte, Optionen und Duplikate ab", () => {
+  for (const options of [
+    [-1],
+    [Infinity],
+    [NaN],
+    ["-1"],
+    ["1e309"],
+    ["goldwert=-1"],
+    ["diamantwert=Infinity"],
+    ["goldwert=1e309"],
+    ["diamantwert=NaN"],
+    ["goldwert="],
+    ["goldwert=1 + 1"],
+    ["energie=5"],
+    ["goldwert=0", "goldwert=100"],
+    ["diamantwert=0", "diamantwert=250"],
+    [5, 6],
+    ["goldwert=100", 5],
+  ]) {
+    assert.throws(() => parseResourceOptions(options), Error, String(options))
+  }
+})
+
+test("Ressourcen-Makro behandelt Anfuehrungszeichen in Optionen als Daten", () => {
+  assert.throws(
+    () => executeResourceMacro([10, 3, 'goldwert=100"); throw new Error("injected")']),
+    /Ressourcenwerte/,
+  )
 })

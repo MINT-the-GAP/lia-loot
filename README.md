@@ -31,12 +31,7 @@ script:   ./dist/index.js
 (function waitForLoot(remaining) {
   var api = window.__LIA_LOOT_HIGHSCORE__;
   if (api) {
-    var rawEnergy = String("@2").trim();
-    var energy =
-      rawEnergy === "" || rawEnergy.startsWith("@")
-        ? undefined
-        : Number(rawEnergy);
-    api.resources(Number("@0"), Number("@1"), energy);
+    api.resources(Number("@0"), Number("@1"), "@'2", "@'3", "@'4");
     return;
   }
   if (remaining > 0) {
@@ -291,7 +286,7 @@ auf welcher Folie das Makro steht und ohne dass diese Folie zuerst besucht werde
 Kommentare, Makrodefinitionen und Markdown-Codebeispiele werden bei der Suche ignoriert.
 
 Der erste Wert ist die Zahl der Goldmünzen, der zweite die Zahl der Diamanten und
-der optionale dritte Wert der Energiebestand. Jeder gültige Klick auf **Prüfen**
+der optionale dritte Zahlenwert der Energiebestand. Jeder gültige Klick auf **Prüfen**
 und jeder erfolgreiche Start über den manuellen `onclick`-Button von lia-timer
 kostet jeweils genau eine Energie. Bei `0` wird die betreffende Aktion vollständig
 blockiert.
@@ -305,6 +300,23 @@ und Timerstart unbegrenzt möglich und das Energiesymbol wird nicht eingeblendet
 ```markdown
 @Ressourcen(10, 3)
 ```
+
+Beim Kursabschluss bringt jede verbleibende Goldmünze standardmäßig **100 Punkte**
+und jeder verbleibende Diamant **250 Punkte** zusätzlich im Highscore. Dazu zählen
+auch unverbrauchte Ressourcen aus eingesammelten Truhen. Energie gibt keinen Bonus.
+Mit `diamantwert=x` und `goldwert=y` am Ende des Aufrufs kannst du die Punkte je
+Einheit ändern; beide Angaben sind optional und ihre Reihenfolge ist frei:
+
+```markdown
+@Ressourcen(10, 3, 5, diamantwert=250, goldwert=100)
+@Ressourcen(10, 3, diamantwert=500, goldwert=50)
+```
+
+Das zweite Beispiel kommt ohne Energielimit aus. Die Werte müssen endliche,
+nichtnegative Zahlen sein; mit `goldwert=0` beziehungsweise `diamantwert=0`
+deaktivierst du den jeweiligen Bonus. Die benannten Optionen dürfen auch mit
+Semikolon in einem Argument zusammengefasst werden, etwa
+`@Ressourcen(10, 3, diamantwert=250; goldwert=100)`.
 
 @Ressourcen(1, 1, 2)
 
@@ -1394,7 +1406,7 @@ Stapel und schieben ältere Meldungen nach oben; jede Meldung hat ihren eigenen 
 | Erfolg | Interne ID | Bedingung |
 |:--|:--|:--|
 | Aufgaben-Meister | `all-quizzes-solved` | Alle katalogisierten bewertbaren LiaScript-Quizze sind korrekt gelöst; bloßes Auflösen reicht für diesen zusätzlichen Erfolg nicht. |
-| Perfekter Highscore | `perfect-highscore` | Der endgültige Highscore entspricht exakt der konfigurierten Maximalpunktzahl. |
+| Perfekter Highscore | `perfect-highscore` | Die Basiswertung vor dem Ressourcenbonus entspricht exakt der konfigurierten Basispunktzahl. |
 | Schatzjäger | `all-treasure-chests-opened` | Alle im Kurs deklarierten Schatztruhen wurden geöffnet. |
 | Diamantensammler | `all-diamond-chests-opened` | Alle im Kurs deklarierten Diamanttruhen wurden geöffnet. |
 | Energiesammler | `all-energy-chests-opened` | Alle im Kurs deklarierten Energiekisten wurden geöffnet. |
@@ -1445,7 +1457,7 @@ Die fünf Parameter sind:
 
 | Position | Bedeutung | Beispiel |
 |:--|:--|--:|
-| 1 | maximale Punktzahl | `100` |
+| 1 | Basispunktzahl vor Abzügen und Ressourcenbonus | `100` |
 | 2 | Punktabzug je fehlgeschlagener Prüfung | `10` |
 | 3 | Punktabzug je geöffnetem Hinweis | `5` |
 | 4 | Minuten ohne Zeitabzug | `15` |
@@ -1453,6 +1465,13 @@ Die fünf Parameter sind:
 
 Der Zeitabzug wird pro vollständig vergangener Sekunde anteilig berechnet. Bei einem
 Abzug von `2` Punkten pro Minute kostet jede Sekunde somit `2 / 60` Punkte.
+
+Beim Kursabschluss werden zuerst alle bisherigen Abzüge von der Basispunktzahl
+abgezogen und das Ergebnis auf mindestens `0` begrenzt. Anschließend kommt der
+Bonus für das verbleibende Gold und die verbleibenden Diamanten hinzu. Dadurch
+kann der endgültige Highscore die konfigurierte Basispunktzahl überschreiten.
+Bei `100` Basispunkten, `10` Punkten Abzug, zwei Goldmünzen und einem Diamanten
+ergeben sich mit den Standardwerten beispielsweise `90 + 200 + 250 = 540` Punkte.
 
 Der Punktestand bleibt innerhalb des aktuellen Browser-Tabs auch beim Neuladen erhalten.
 Ein neuer Tab beginnt einen neuen Versuch.

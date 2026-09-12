@@ -20,6 +20,7 @@ import type {
   CoursePuzzlePieceDeclaration,
 } from "./puzzle-declarations.ts"
 import { parsePuzzlePieceOptions } from "./puzzle-options.ts"
+import { parseResourceOptions } from "./resource-options.ts"
 import { resolveSurfaceTarget } from "./surface-targets.ts"
 import { resolveTemplateTarget } from "./template-targets.ts"
 import type { ResourceKind } from "./types"
@@ -56,6 +57,8 @@ export interface CourseResourceDeclaration {
   gold: number
   diamonds: number
   energy?: number
+  goldValue?: number
+  diamondValue?: number
   section: number
 }
 
@@ -104,7 +107,7 @@ const INTERNAL_REVEAL_END_MACRO =
 const INTERNAL_HIDDEN_MACRO =
   /^\s*@LootVersteckt_\s*\(\s*([^,()\r\n]+)\s*,\s*(solid|dust)\s*,[\s\S]*\)\s*$/iu
 const RESOURCE_MACRO =
-  /^\s*@Ressourcen\s*\(\s*([^,()\r\n]+?)\s*,\s*([^,()\r\n]+?)(?:\s*,\s*([^,()\r\n]+?))?\s*\)\s*$/
+  /^\s*@Ressourcen\s*\(\s*([^()\r\n]*)\s*\)\s*$/
 const SECRET_SLIDE_MACRO = /^\s*@Geheimfolie\s*$/
 const PUZZLE_PIECE_PREFIX = /@Puzzleteil(?![\p{L}\p{N}_])/giu
 const PUZZLE_GATE_MACRO =
@@ -1441,17 +1444,22 @@ export function parseCourseResourceDeclaration(
     const match = RESOURCE_MACRO.exec(line.content)
     if (!match) continue
 
-    const gold = nonnegativeNumberLiteral(match[1])
-    const diamonds = nonnegativeNumberLiteral(match[2])
-    const energy =
-      match[3] === undefined ? undefined : nonnegativeNumberLiteral(match[3])
-    if (gold === null || diamonds === null || energy === null) continue
+    const args = match[1].split(",")
+    if (args.length < 2 || args.length > 5) continue
+    const gold = nonnegativeNumberLiteral(args[0])
+    const diamonds = nonnegativeNumberLiteral(args[1])
+    if (gold === null || diamonds === null) continue
 
-    return {
-      gold,
-      diamonds,
-      ...(energy === undefined ? {} : { energy }),
-      section: line.section,
+    try {
+      return {
+        gold,
+        diamonds,
+        ...parseResourceOptions(args.slice(2)),
+        section: line.section,
+      }
+    } catch {
+      // An invalid declaration must not prevent a later valid one from loading.
+      continue
     }
   }
 

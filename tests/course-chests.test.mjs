@@ -569,6 +569,52 @@ test("unterstützt Ressourcen ohne Energielimit", () => {
   )
 })
 
+test("liest Ressourcenpunktwerte zusammen mit optionaler Energie", () => {
+  assert.deepEqual(
+    parseCourseResourceDeclaration(
+      "# Kurs\n@Ressourcen(10, 3, 5, diamantwert=500, goldwert=50)\n",
+    ),
+    { gold: 10, diamonds: 3, energy: 5, diamondValue: 500, goldValue: 50, section: 0 },
+  )
+  for (const options of [
+    "goldwert=0, diamantwert=12.5",
+    "diamantwert=12.5, goldwert=0",
+    ", diamantwert=12.5, goldwert=0",
+    "diamantwert=12.5; goldwert=0",
+  ]) {
+    assert.deepEqual(
+      parseCourseResourceDeclaration(`@Ressourcen(10, 3, ${options})`),
+      { gold: 10, diamonds: 3, goldValue: 0, diamondValue: 12.5, section: -1 },
+    )
+  }
+  assert.deepEqual(
+    parseCourseResourceDeclaration("@Ressourcen(10, 3, goldwert=25)"),
+    { gold: 10, diamonds: 3, goldValue: 25, section: -1 },
+  )
+})
+
+test("ueberspringt ungueltige Ressourcenpunktwerte bis zum ersten gueltigen Aufruf", () => {
+  for (const invalid of [
+    "@Ressourcen(1)",
+    "@Ressourcen(1, 1, goldwert=-100)",
+    "@Ressourcen(1, 1, diamantwert=NaN)",
+    "@Ressourcen(1, 1, goldwert=1e309)",
+    "@Ressourcen(1, 1, diamantwert=)",
+    "@Ressourcen(1, 1, goldwert=0, goldwert=1)",
+    "@Ressourcen(1, 1, energie=10)",
+    "@Ressourcen(1, 1, goldwert=100, 5)",
+    "@Ressourcen(1, 1, 5, 6)",
+    "@Ressourcen(1, 1, 5, diamantwert=250, goldwert=100, unbekannt=0)",
+  ]) {
+    assert.equal(parseCourseResourceDeclaration(invalid), null, invalid)
+    assert.deepEqual(
+      parseCourseResourceDeclaration(`${invalid}\n@Ressourcen(10, 3, diamantwert=0)`),
+      { gold: 10, diamonds: 3, diamondValue: 0, section: -1 },
+      invalid,
+    )
+  }
+})
+
 test("ignoriert Ressourcen-Beispiele, Makrodefinitionen und ungültige Literale", () => {
   const declaration = parseCourseResourceDeclaration(`
 @Ressourcen

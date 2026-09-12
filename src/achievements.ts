@@ -59,7 +59,7 @@ export const ACHIEVEMENTS: Readonly<
   "perfect-highscore": {
     id: "perfect-highscore",
     title: "Perfekter Highscore",
-    message: "Du hast die maximale Punktzahl erreicht.",
+    message: "Du hast die volle Punktzahl vor dem Ressourcenbonus erreicht.",
   },
   "all-treasure-chests-opened": {
     id: "all-treasure-chests-opened",

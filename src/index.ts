@@ -38,7 +38,8 @@ import {
   showInsufficientResource,
 } from "./resource-bar"
 import { ResourceStore } from "./resource-store"
-import { createConfig } from "./score"
+import { parseResourceOptions } from "./resource-options"
+import { calculateScore, createConfig } from "./score"
 import { installSecretSlides } from "./secret-slides"
 import { installSlidePortals } from "./slide-portal"
 import { installPuzzles } from "./puzzle-runtime"
@@ -55,8 +56,8 @@ import type { HighscoreApi, LootRuntimeState, ResourceKind } from "./types"
 const VERSION = "0.0.1"
 
 function boot(): void {
-  const store = new HighscoreStore()
   const resourceStore = new ResourceStore()
+  const store = new HighscoreStore(() => resourceStore.scoreBonus())
   const keyInventoryStore = new KeyInventoryStore()
   const magnifierStore = new MagnifierStore()
   const explorationStore = new ExplorationStore()
@@ -71,7 +72,9 @@ function boot(): void {
   const enableAchievements = (): void => {
     const highscore = store.state()
     achievements.highscoreFinished(
-      highscore?.finalScore ?? null,
+      highscore?.finishedAt != null
+        ? calculateScore(highscore.config, highscore, highscore.finishedAt)
+        : null,
       highscore?.config.maxPoints ?? Number.NaN,
     )
     achievements.enable()
@@ -123,8 +126,16 @@ function boot(): void {
     gold: number,
     diamonds: number,
     energy?: number,
+    goldValue?: number,
+    diamondValue?: number,
   ): void => {
-    const resources = resourceStore.configure(gold, diamonds, energy)
+    const resources = resourceStore.configure(
+      gold,
+      diamonds,
+      energy,
+      goldValue,
+      diamondValue,
+    )
     achievements.chestCollected(resourceStore.collectedChestCounts())
     renderResources(resources.gold, resources.diamonds, resources.energy)
     refreshTreasureChests()
@@ -158,7 +169,10 @@ function boot(): void {
       const score = store.finish()
       const state = store.state()
       if (score !== null && state) {
-        achievements.highscoreFinished(score, state.config.maxPoints)
+        achievements.highscoreFinished(
+          calculateScore(state.config, state, state.finishedAt!),
+          state.config.maxPoints,
+        )
         showHighscore(score, state.config.maxPoints)
       }
       return score
@@ -193,8 +207,15 @@ function boot(): void {
       return store.state()
     },
 
-    resources(gold, diamonds, energy) {
-      configureResources(gold, diamonds, energy)
+    resources(gold, diamonds, energyOrOption, ...options) {
+      const parsed = parseResourceOptions([energyOrOption, ...options])
+      configureResources(
+        gold,
+        diamonds,
+        parsed.energy,
+        parsed.goldValue,
+        parsed.diamondValue,
+      )
     },
   }
 
@@ -257,6 +278,8 @@ function boot(): void {
         declaration.gold,
         declaration.diamonds,
         declaration.energy,
+        declaration.goldValue,
+        declaration.diamondValue,
       )
     })
     .catch(() => {

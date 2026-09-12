@@ -1,6 +1,6 @@
-import { calculateScore, sameConfig } from "./score"
-import { clearState, loadState, saveState } from "./storage"
-import type { HighscoreConfig, HighscoreState } from "./types"
+import { calculateScore, sameConfig } from "./score.ts"
+import { clearState, loadState, saveState } from "./storage.ts"
+import type { HighscoreConfig, HighscoreState } from "./types.ts"
 
 function cloneState(state: HighscoreState): HighscoreState {
   return {
@@ -16,6 +16,11 @@ function positiveInteger(value: number): number {
 
 export class HighscoreStore {
   private current: HighscoreState | null = loadState()
+  private readonly resourceBonus: () => number
+
+  constructor(resourceBonus: () => number = () => 0) {
+    this.resourceBonus = resourceBonus
+  }
 
   configure(config: HighscoreConfig, now = Date.now()): void {
     if (this.current && sameConfig(this.current.config, config)) return
@@ -51,14 +56,16 @@ export class HighscoreStore {
   score(at = Date.now()): number | null {
     if (!this.current) return null
     if (this.current.finalScore !== null) return this.current.finalScore
-    return calculateScore(this.current.config, this.current, at)
+    return (
+      calculateScore(this.current.config, this.current, at) + this.resourceBonus()
+    )
   }
 
   finish(now = Date.now()): number | null {
     if (!this.current) return null
     if (this.current.finalScore !== null) return this.current.finalScore
 
-    const score = calculateScore(this.current.config, this.current, now)
+    const score = this.score(now)!
     this.current.finishedAt = now
     this.current.finalScore = score
     saveState(this.current)

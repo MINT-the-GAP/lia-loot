@@ -105,7 +105,12 @@ export interface HighscoreApi {
   score(at?: number): number | null
   show(): void
   enableAchievements(): void
-  resources(gold: number, diamonds: number, energy?: number): void
+  resources(
+    gold: number,
+    diamonds: number,
+    energyOrOption?: number | string,
+    ...options: string[]
+  ): void
   state(): HighscoreState | null
 }
 

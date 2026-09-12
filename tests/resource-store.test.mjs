@@ -293,3 +293,57 @@ test("migriert den Zustand der früheren einzelnen Schatztruhe", () => {
   assert.equal(state.energy, null)
   assert.deepEqual(state.collectedChests, ["legacy:auto"])
 })
+
+
+test("berechnet den Ressourcenbonus aus dem verbleibenden Bestand", () => {
+  browserSession()
+  const store = new ResourceStore()
+  assert.equal(store.scoreBonus(), 0)
+  store.configure(3, 2, 9)
+  assert.equal(store.scoreBonus(), 800)
+  store.spend("gold")
+  store.spend("diamonds")
+  store.spend("energy")
+  assert.equal(store.scoreBonus(), 450)
+  store.collectChest("extra-gold", "gold", 2)
+  store.collectChest("extra-diamond", "diamonds")
+  assert.equal(store.scoreBonus(), 900)
+
+  const restored = new ResourceStore()
+  assert.equal(restored.scoreBonus(), 0)
+  restored.configure(3, 2, 9)
+  assert.equal(restored.scoreBonus(), 900)
+})
+
+test("ändert Punktwerte ohne Verbrauch und Truhenfortschritt zurückzusetzen", () => {
+  browserSession()
+  const store = new ResourceStore()
+  store.configure(3, 2, undefined, 80, 400)
+  store.spend("gold")
+  store.collectChest("bonus-diamond", "diamonds")
+  const previous = store.state()
+  assert.equal(store.scoreBonus(), 1360)
+
+  store.configure(3, 2, undefined, 0, 12.5)
+  assert.deepEqual(store.state(), previous)
+  assert.equal(store.scoreBonus(), 37.5)
+  store.configure(3, 2, undefined, 0, 0)
+  assert.equal(store.scoreBonus(), 0)
+
+  const restored = new ResourceStore()
+  restored.configure(3, 2, undefined, 80, 400)
+  assert.equal(restored.scoreBonus(), 1360)
+})
+
+test("weist ungültige Punktwerte ohne Seiteneffekte zurück", () => {
+  browserSession()
+  const store = new ResourceStore()
+  store.configure(2, 1)
+  const previous = store.state()
+  for (const invalid of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.throws(() => store.configure(9, 9, undefined, invalid, 250), TypeError)
+    assert.throws(() => store.configure(9, 9, undefined, 100, invalid), TypeError)
+    assert.deepEqual(store.state(), previous)
+    assert.equal(store.scoreBonus(), 450)
+  }
+})

@@ -42,6 +42,8 @@ export class ResourceStore {
   private current: ResourceState | null
   private chestRewards: ChestRewardState
   private enabled = false
+  private goldValue = 100
+  private diamondValue = 250
 
   constructor() {
     this.current = loadResources()
@@ -53,6 +55,8 @@ export class ResourceStore {
     initialGold: number,
     initialDiamonds: number,
     initialEnergy?: number,
+    goldValue = 100,
+    diamondValue = 250,
   ): ResourceState {
     const gold = resourceAmount(initialGold, "Gold")
     const diamonds = resourceAmount(initialDiamonds, "Diamanten")
@@ -60,6 +64,15 @@ export class ResourceStore {
       initialEnergy === undefined
         ? null
         : resourceAmount(initialEnergy, "Energie")
+
+    for (const [name, value] of [
+      ["goldwert", goldValue],
+      ["diamantwert", diamondValue],
+    ] as const) {
+      if (!Number.isFinite(value) || value < 0) {
+        throw new TypeError(`@Ressourcen: ${name} muss eine nichtnegative Zahl sein.`)
+      }
+    }
 
     if (
       !this.current ||
@@ -82,8 +95,18 @@ export class ResourceStore {
       saveChestRewards(this.chestRewards)
     }
 
+    this.goldValue = goldValue
+    this.diamondValue = diamondValue
     this.enabled = true
     return cloneState(this.current)
+  }
+
+  scoreBonus(): number {
+    if (!this.enabled || !this.current) return 0
+    return (
+      this.current.gold * this.goldValue +
+      this.current.diamonds * this.diamondValue
+    )
   }
 
   spend(kind: ResourceKind): boolean {
