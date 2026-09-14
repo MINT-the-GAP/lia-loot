@@ -1053,6 +1053,8 @@ lia-loot-tool {
 lia-loot-tool:empty,
 lia-loot-tool[hidden],
 lia-loot-reveal[hidden],
+lia-loot-reveal[data-reveal-layout=inline]:not([data-loot-reveal-kind]),
+lia-loot-reveal[data-loot-inline-error],
 lia-loot-reveal-end,
 a[href^="#lia-loot-reveal-end-"],
 lia-loot-if-start,
@@ -1066,13 +1068,6 @@ a[href="#lia-loot-if-end"],
 [data-loot-if-range-blocked],
 [data-loot-puzzle-range-blocked] {
   display: none !important;
-}
-
-p:has([data-loot-inline-renderer]),
-p:has([data-loot-inline-tail]),
-.lia-paragraph:has([data-loot-inline-renderer]),
-.lia-paragraph:has([data-loot-inline-tail]) {
-  visibility: hidden !important;
 }
 
 lia-loot-puzzle-piece {

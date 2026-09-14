@@ -45,9 +45,7 @@ async function sharesParagraph(host, beforeId, afterId) {
   )
 }
 
-test("rendert Erde und Pflanze inline im echten LiaScript-Editor", async ({
-  page,
-}) => {
+async function verifyInlineRevealMechanics(page) {
   test.setTimeout(150_000)
 
   await page.goto(editorUrl(fixture.path), {
@@ -208,4 +206,26 @@ test("rendert Erde und Pflanze inline im echten LiaScript-Editor", async ({
   await expect(plantPayload).toHaveText("Bluetennotiz")
   await expect(soil).toHaveCSS("display", "inline-grid")
   await expect(plant).toHaveCSS("display", "inline-grid")
-})
+}
+
+for (const plantMacro of ["@Pflanze.inline", "@Blume.inline"]) {
+  test("rendert Erde und " + plantMacro + " im echten LiaScript-Editor", async ({
+    page,
+  }) => {
+    if (plantMacro === "@Blume.inline") {
+      await page.route(
+        (url) =>
+          url.origin === testOrigin && url.pathname === fixture.path,
+        async (route) => {
+          const response = await route.fetch()
+          const markdown = await response.text()
+          await route.fulfill({
+            response,
+            body: markdown.replace("@Pflanze.inline(", "@Blume.inline("),
+          })
+        },
+      )
+    }
+    await verifyInlineRevealMechanics(page)
+  })
+}

@@ -100,8 +100,10 @@ test('prüft den lokalen Containerkurs und den öffentlichen Makrovertrag', asyn
       templateHeader,
     )?.[1] ?? ""
   expect(Buffer.from(preflightCss, "base64").toString("utf8")).toBe(
-    ":is(p,.lia-paragraph):has([data-loot-inline-tail])" +
-      "{visibility:hidden!important}",
+    "lia-loot-reveal[data-reveal-layout=inline]:not([data-loot-reveal-kind])," +
+      "lia-loot-reveal[data-loot-inline-error]," +
+      "[data-loot-inline-renderer],[data-loot-inline-tail]" +
+      "{display:none!important}",
   )
   expect(templateHeader).toMatch(
     /^@Schaufel: @LootWerkzeug_\(@uid,shovel,@0\)$/mu,
@@ -153,8 +155,9 @@ test('prüft den lokalen Containerkurs und den öffentlichen Makrovertrag', asyn
     /<lia-keep>\s*<lia-loot-reveal-start[^>]*><\/lia-loot-reveal-start>\s*<\/lia-keep>/u,
   )
   expect(revealInline).toMatch(
-    /<lia-loot-reveal[^>]*data-reveal-layout='inline'[^>]*hidden[^>]*>@3<\/lia-loot-reveal>/u,
+    /<lia-loot-reveal[^>]*data-reveal-layout='inline'[^>]*>@3<\/lia-loot-reveal>/u,
   )
+  expect(revealInline).not.toMatch(/<lia-loot-reveal\b[^>]*\bhidden\b/u)
   expect(templateHeader).toMatch(
     /@LootRevealEnd_\s*<lia-keep>\s*<lia-loot-reveal-end[^>]*data-reveal-kind='@0'[^>]*hidden[^>]*><\/lia-loot-reveal-end>\s*<\/lia-keep>\s*@end/u,
   )

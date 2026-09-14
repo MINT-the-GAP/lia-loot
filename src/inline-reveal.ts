@@ -11,7 +11,12 @@ const INLINE_REVEAL_SELECTOR =
   "lia-loot-reveal[data-reveal-layout=inline][data-loot-inline-kind]"
 const RENDERER_ATTRIBUTE = "data-loot-inline-renderer"
 const TAIL_ATTRIBUTE = "data-loot-inline-tail"
+const RENDERER_ORIGIN_ATTRIBUTE = `${RENDERER_ATTRIBUTE}-origin`
+const TAIL_ORIGIN_ATTRIBUTE = `${TAIL_ATTRIBUTE}-origin`
 const RENDERED_ATTRIBUTE = "data-loot-inline-rendered"
+const ERROR_ATTRIBUTE = "data-loot-inline-error"
+const HOST_RETRY_DELAY = 50
+const SOURCE_TIMEOUT = 15_000
 const OUTPUT_STABILITY_DELAY = 750
 const OUTPUT_TIMEOUT = 10_000
 const DYNAMIC_ID_ATTRIBUTES = new Set([
@@ -41,42 +46,52 @@ export interface InlineRevealRenderingApi {
   ): void
 }
 
+interface RenderRequest {
+  generation: number
+  kind: RevealContainerKind
+  send: LiaScriptDynamicSend
+}
+
+interface DynamicOutputObserver {
+  interval: number
+  observer: MutationObserver
+  requestedRenderers: WeakSet<HTMLElement>
+  settleTimeout: number | null
+  timeout: number
+}
+
+interface CompilerTailCandidate {
+  container: Element
+  following: Element | null
+  marker: HTMLElement
+  previous: Element | null
+  scope: Element
+  wrapper: HTMLElement | null
+}
+
 let declarations: CourseInlineRevealDeclaration[] | null = null
 let declarationsPromise: Promise<CourseInlineRevealDeclaration[]> | null = null
 let declarationGeneration = 0
 let sourceListenerInstalled = false
+const declarationBindings = new Map<string, CourseInlineRevealDeclaration>()
+const renderRequests = new Map<string, RenderRequest>()
+const knownKinds = new Map<string, RevealContainerKind>()
 const dynamicIdObservers = new WeakMap<HTMLElement, MutationObserver>()
-const dynamicOutputObservers = new Map<
-  string,
-  {
-    interval: number
-    observer: MutationObserver
-    settleTimeout: number | null
-    timeout: number
-  }
->()
-// LiaScript can patch the marker, its compiler wrapper, and the trailing text
-// in separate DOM turns. Keep one course-scoped registry so later incarnations
-// of the same reveal ID cannot leave an orphaned closing delimiter behind.
+const dynamicOutputObservers = new Map<string, DynamicOutputObserver>()
+// Keep the marker's exact DOM anchors across separate compiler patch turns.
+// Never recover an orphaned tail by scanning unrelated paragraphs or macros.
 const pendingCompilerTails = new Map<
   string,
   {
-    candidates: Map<
-      HTMLElement,
-      {
-        container: Element
-        index: number
-        node: Text | null
-        marker: HTMLElement
-        scope: Node
-        wrapper: HTMLElement | null
-      }
-    >
-    host: HTMLElement
+    candidates: Map<HTMLElement, CompilerTailCandidate>
     trailingSource: string
   }
 >()
 let compilerTailObserver: MutationObserver | null = null
+let completedCompilerTails = new WeakMap<
+  HTMLElement,
+  { node: Text; parent: Node | null; scope: Element | null; text: string }
+>()
 
 function disposeDynamicOutputObservers(): void {
   for (const entry of dynamicOutputObservers.values()) {
@@ -108,32 +123,56 @@ function kindToken(kind: RevealContainerKind): "erde" | "pflanze" {
 }
 
 function revealHost(revealId: string): HTMLElement | null {
-  return (
-    [...document.querySelectorAll<HTMLElement>(INLINE_REVEAL_SELECTOR)].find(
-      (host) => host.getAttribute("data-reveal-id") === revealId,
-    ) ?? null
-  )
-}
-
-function tailMarker(revealId: string): HTMLElement | null {
-  return (
-    [...document.querySelectorAll<HTMLElement>(`[${TAIL_ATTRIBUTE}]`)].find(
-      (marker) => marker.getAttribute(TAIL_ATTRIBUTE) === revealId,
-    ) ?? null
-  )
+  const hosts = [
+    ...document.querySelectorAll<HTMLElement>(INLINE_REVEAL_SELECTOR),
+  ].filter((host) => host.getAttribute("data-reveal-id") === revealId)
+  // Both incarnations can briefly be connected during a compiler patch.
+  return hosts.length === 1 ? hosts[0] : null
 }
 
 function rendererMarker(revealId: string): HTMLElement | null {
-  return (
-    [
-      ...document.querySelectorAll<HTMLElement>(
-        `[${RENDERER_ATTRIBUTE}]`,
-      ),
-    ].find(
-      (renderer) =>
-        renderer.getAttribute(RENDERER_ATTRIBUTE) === revealId,
-    ) ?? null
+  const markers = [
+    ...document.querySelectorAll<HTMLElement>(`[${RENDERER_ATTRIBUTE}]`),
+  ].filter((marker) => marker.getAttribute(RENDERER_ATTRIBUTE) === revealId)
+  return markers.length === 1 ? markers[0] : null
+}
+
+// LiaScript patches siblings by their virtual-DOM index. Removing its spans
+// shifts those indices and a later patch can replace authored text next to us.
+// Retire only our attributes and preserve the compiler's hidden DOM slots.
+function retireMarker(marker: HTMLElement | null, attribute: string): void {
+  if (!marker) return
+  const id = marker.getAttribute(attribute)
+  if (id !== null) {
+    marker.setAttribute(`${attribute}-origin`, id)
+    marker.removeAttribute(attribute)
+  }
+  if (!marker.hidden) marker.hidden = true
+  if (!marker.inert) marker.inert = true
+  if (marker.getAttribute("aria-hidden") !== "true") {
+    marker.setAttribute("aria-hidden", "true")
+  }
+  if (
+    marker.style.getPropertyValue("display") !== "none" ||
+    marker.style.getPropertyPriority("display") !== "important"
+  ) marker.style.setProperty("display", "none", "important")
+}
+
+function rendererForRequest(revealId: string): HTMLElement | null {
+  const active = rendererMarker(revealId)
+  if (active) return active
+  if ([...document.querySelectorAll<HTMLElement>(`[${RENDERER_ATTRIBUTE}]`)]
+    .some((marker) => marker.getAttribute(RENDERER_ATTRIBUTE) === revealId)) {
+    return null
+  }
+  const retired = [
+    ...document.querySelectorAll<HTMLElement>(`[${RENDERER_ORIGIN_ATTRIBUTE}]`),
+  ].filter(
+    (marker) => marker.getAttribute(RENDERER_ORIGIN_ATTRIBUTE) === revealId,
   )
+  if (retired.length !== 1) return null
+  retired[0].setAttribute(RENDERER_ATTRIBUTE, revealId)
+  return retired[0]
 }
 
 function declarationForHost(
@@ -144,25 +183,55 @@ function declarationForHost(
   const revealId = host.getAttribute("data-reveal-id") ?? ""
   const section = sectionFromLootId(revealId)
   if (section === null) return null
+  const bound = declarationBindings.get(revealId)
+  if (bound) return bound.kind === kind ? bound : null
 
-  const siblingHosts = [
+  const hosts = [
     ...document.querySelectorAll<HTMLElement>(INLINE_REVEAL_SELECTOR),
-  ].filter(
+  ]
+  for (const candidate of hosts) {
+    const id = candidate.getAttribute("data-reveal-id")
+    const hostKind = normalizedKind(
+      candidate.getAttribute("data-loot-inline-kind") ?? "",
+    )
+    if (id && hostKind) knownKinds.set(id, hostKind)
+  }
+  const siblingHosts = hosts.filter(
     (candidate) =>
-      sectionFromLootId(candidate.getAttribute("data-reveal-id") ?? "") ===
-        section &&
-      normalizedKind(candidate.getAttribute("data-loot-inline-kind") ?? "") ===
-        kind,
+      sectionFromLootId(candidate.getAttribute("data-reveal-id") ?? "") === section &&
+      knownKinds.get(candidate.getAttribute("data-reveal-id") ?? "") === kind,
   )
-  const occurrence = siblingHosts.indexOf(host)
-  if (occurrence < 0) return null
+  const hostIds = siblingHosts.map(
+    (candidate) => candidate.getAttribute("data-reveal-id") ?? "",
+  )
+  if (new Set(hostIds).size !== hostIds.length) return null
 
-  return (
-    source.filter(
-      (candidate) =>
-        candidate.section === section && candidate.kind === kind,
-    )[occurrence] ?? null
+  const ids = new Set<string>()
+  for (const candidate of document.querySelectorAll<HTMLElement>(
+    `${INLINE_REVEAL_SELECTOR}, [${RENDERER_ATTRIBUTE}], [${TAIL_ATTRIBUTE}], [${RENDERER_ORIGIN_ATTRIBUTE}], [${TAIL_ORIGIN_ATTRIBUTE}]`,
+  )) {
+    const id =
+      candidate.getAttribute("data-reveal-id") ??
+      candidate.getAttribute(RENDERER_ATTRIBUTE) ??
+      candidate.getAttribute(TAIL_ATTRIBUTE) ??
+      candidate.getAttribute(RENDERER_ORIGIN_ATTRIBUTE) ??
+      candidate.getAttribute(TAIL_ORIGIN_ATTRIBUTE) ??
+      ""
+    if (sectionFromLootId(id) === section && knownKinds.get(id) === kind) {
+      ids.add(id)
+    }
+  }
+  const siblings = source.filter(
+    (candidate) => candidate.section === section && candidate.kind === kind,
   )
+  // A temporarily missing predecessor must not shift later occurrences. Its
+  // own renderer/tail can preserve its position without blocking healthy hosts.
+  // Bind the complete, deduplicated ID group and retain it on replacement.
+  if (!host.isConnected || ids.size !== siblings.length || !ids.has(revealId)) {
+    return null
+  }
+  Array.from(ids).forEach((id, index) => declarationBindings.set(id, siblings[index]))
+  return declarationBindings.get(revealId) ?? null
 }
 
 function textPrefixLength(actual: string, expected: string): number | null {
@@ -181,132 +250,133 @@ function textPrefixLength(actual: string, expected: string): number | null {
   return actualIndex
 }
 
-function removeCompilerTail(
-  marker: HTMLElement | null,
-  trailingSource: string,
-): boolean {
-  if (!marker) return true
-  if (!trailingSource) {
-    marker.remove()
-    return true
-  }
-  const candidate = compilerTailText(marker, trailingSource)
-  if (!candidate || !removeCompilerTailSource(candidate, trailingSource)) {
-    return false
-  }
-  marker.remove()
-  return true
-}
-
-function compilerTailText(
-  marker: HTMLElement,
-  trailingSource: string,
-): Text | null {
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
-  let candidate = walker.nextNode()
-  let inspected = 0
-  while (candidate && inspected < 24) {
-    const followsMarker = Boolean(
-      marker.compareDocumentPosition(candidate) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    )
-    if (!followsMarker) {
-      candidate = walker.nextNode()
-      continue
-    }
-    inspected += 1
-    const text = candidate.textContent ?? ""
-    if (textPrefixLength(text, trailingSource) !== null || text.trim()) {
-      return candidate as Text
-    }
-    candidate = walker.nextNode()
-  }
-  return null
-}
-
 function removeCompilerTailSource(
   candidate: Text,
   trailingSource: string,
+  marker: HTMLElement,
 ): boolean {
   const text = candidate.textContent ?? ""
   const prefixLength = textPrefixLength(text, trailingSource)
   if (prefixLength === null) return false
   const remainder = text.slice(prefixLength)
-  if (remainder) candidate.textContent = remainder
-  else candidate.parentNode?.removeChild(candidate)
+  // Preserve text-node slots too, including an empty final delimiter.
+  candidate.textContent = remainder
+  completedCompilerTails.set(marker, {
+    node: candidate,
+    parent: candidate.parentNode,
+    scope: marker.parentElement,
+    text: remainder,
+  })
   return true
 }
 
-function flushCompilerTails(): void {
-  const markersByRevealId = new Map<string, HTMLElement[]>()
-  for (const marker of document.querySelectorAll<HTMLElement>(
-    `[${TAIL_ATTRIBUTE}]`,
-  )) {
-    const revealId = marker.getAttribute(TAIL_ATTRIBUTE)
-    if (!revealId) continue
-    const markers = markersByRevealId.get(revealId)
-    if (markers) markers.push(marker)
-    else markersByRevealId.set(revealId, [marker])
+function followingTailNode(marker: HTMLElement): ChildNode | null {
+  let node = marker.nextSibling
+  while (node?.nodeType === Node.TEXT_NODE && !node.textContent?.trim()) {
+    node = node.nextSibling
   }
-  for (const [revealId, pending] of [...pendingCompilerTails]) {
-    if (!pending.host.isConnected) {
-      const liveHost = revealHost(revealId)
-      if (liveHost) pending.host = liveHost
+  return node
+}
+
+function compilerWrapper(node: Node | null): HTMLElement | null {
+  return node instanceof HTMLElement && node.matches("span[ondblclick]")
+    ? node
+    : null
+}
+
+function anchoredCompilerWrapper(
+  candidate: CompilerTailCandidate,
+): HTMLElement | null {
+  if (candidate.marker.isConnected) {
+    return compilerWrapper(followingTailNode(candidate.marker))
+  }
+  const { container, previous, following } = candidate
+  if (
+    (previous && previous.parentElement !== container) ||
+    (following && following.parentElement !== container)
+  ) return null
+  const node = previous
+    ? previous.nextElementSibling
+    : container.firstElementChild
+  const wrapper = compilerWrapper(node)
+  // Only a wrapper inserted in the marker's exact former slot is attributable
+  // to this reveal. Nearby wrappers can belong to normal text or another macro.
+  return wrapper && wrapper.nextElementSibling === following ? wrapper : null
+}
+
+function clearRetiredRendererOutputs(): void {
+  for (const renderer of document.querySelectorAll<HTMLElement>(
+    `[${RENDERER_ORIGIN_ATTRIBUTE}]`,
+  )) {
+    if (renderer.hasAttribute(RENDERER_ATTRIBUTE)) continue
+    const revealId = renderer.getAttribute(RENDERER_ORIGIN_ATTRIBUTE) ?? ""
+    // A later LiaScript patch can recreate output inside its retained slot.
+    // The live instance already owns the real content; discard only this
+    // hidden duplicate, never the compiler's surrounding sibling slots.
+    if (!hasRenderedPayload(revealHost(revealId))) continue
+    const output = renderer.querySelector<HTMLElement>("output")
+    if (output?.hasChildNodes()) output.replaceChildren()
+  }
+}
+
+function flushCompilerTails(): void {
+  clearRetiredRendererOutputs()
+  for (const marker of document.querySelectorAll<HTMLElement>(
+    `[${TAIL_ATTRIBUTE}], [${TAIL_ORIGIN_ATTRIBUTE}]`,
+  )) {
+    const pending = pendingCompilerTails.get(
+      marker.getAttribute(TAIL_ATTRIBUTE) ??
+        marker.getAttribute(TAIL_ORIGIN_ATTRIBUTE) ?? "",
+    )
+    if (!pending) continue
+    if (!pending.trailingSource) {
+      retireMarker(marker, TAIL_ATTRIBUTE)
+      continue
     }
-    for (const marker of markersByRevealId.get(revealId) ?? []) {
-      if (!pending.trailingSource) {
-        marker.remove()
-      } else {
-        const container = marker.parentElement
-        const index = container
-          ? [...container.children].indexOf(marker)
-          : -1
-        const text = compilerTailText(marker, pending.trailingSource)
-        const adjacentWrapper = marker.nextElementSibling
-        const textWrapper = text?.parentElement
-        const textWrapperIndex =
-          container && textWrapper?.parentElement === container
-            ? [...container.children].indexOf(textWrapper)
-            : -1
-        const wrapper =
-          (adjacentWrapper instanceof HTMLElement &&
-          adjacentWrapper.matches("span[ondblclick]")
-            ? adjacentWrapper
-            : null) ??
-          (textWrapper?.matches("span[ondblclick]") &&
-          textWrapperIndex >= 0 &&
-          Math.abs(textWrapperIndex - index) <= 2
-            ? textWrapper
-            : null)
-        const scope =
-          marker.closest("p, .lia-paragraph") ?? container
-        if (container && scope) {
-          for (const [oldMarker, old] of pending.candidates) {
-            if (
-              !oldMarker.isConnected &&
-              !old.wrapper &&
-              old.container === container &&
-              old.index === index
-            ) {
-              pending.candidates.delete(oldMarker)
-            }
-          }
-          pending.candidates.set(marker, {
-            container,
-            index,
-            marker,
-            node: wrapper === textWrapper ? text : null,
-            scope,
-            wrapper,
-          })
-          // The origin record remains active, so a tail inserted into this
-          // currently empty wrapper is still removed before the next paint.
-          if (wrapper && !wrapper.textContent?.trim()) marker.remove()
-        }
+    const completed = completedCompilerTails.get(marker)
+    if (
+      completed?.node.isConnected &&
+      completed.node.parentNode === completed.parent &&
+      marker.parentElement === completed.scope &&
+      completed.scope?.contains(completed.node) &&
+      completed.node.textContent === completed.text
+    ) {
+      retireMarker(marker, TAIL_ATTRIBUTE)
+      continue
+    }
+    const following = followingTailNode(marker)
+    // LiaScript puts delimiters BETWEEN same-line macros in direct text nodes;
+    // only the final delimiter is normally inside a compiler span.
+    if (
+      following?.nodeType === Node.TEXT_NODE &&
+      removeCompilerTailSource(following as Text, pending.trailingSource, marker)
+    ) {
+      pending.candidates.delete(marker)
+      retireMarker(marker, TAIL_ATTRIBUTE)
+      continue
+    }
+    if (!pending.candidates.has(marker)) {
+      const container = marker.parentElement
+      const scope = marker.closest("p, .lia-paragraph") ?? container
+      if (!container || !scope) continue
+      const wrapper = compilerWrapper(following)
+      pending.candidates.set(marker, {
+        container,
+        following: wrapper ? wrapper.nextElementSibling : marker.nextElementSibling,
+        marker,
+        previous: marker.previousElementSibling,
+        scope,
+        wrapper,
+      })
+      // Preserve its exact wrapper reference even if text arrives much later.
+      if (wrapper && !wrapper.textContent?.trim()) {
+        retireMarker(marker, TAIL_ATTRIBUTE)
       }
     }
+  }
 
-    for (const [originMarker, candidate] of [...pending.candidates]) {
+  for (const pending of pendingCompilerTails.values()) {
+    for (const [originMarker, candidate] of pending.candidates) {
       if (
         !candidate.container.isConnected ||
         !candidate.scope.isConnected ||
@@ -316,98 +386,55 @@ function flushCompilerTails(): void {
         continue
       }
       if (
-        !candidate.wrapper?.isConnected ||
-        candidate.wrapper.parentElement !== candidate.container ||
-        !candidate.scope.contains(candidate.wrapper)
+        candidate.wrapper &&
+        (candidate.wrapper.parentElement !== candidate.container ||
+          !candidate.scope.contains(candidate.wrapper))
       ) {
-        candidate.wrapper = null
-        candidate.node = null
+        // A moved wrapper no longer belongs to the recorded instance area.
+        pending.candidates.delete(originMarker)
+        continue
       }
-      if (!candidate.wrapper) {
-        const siblings = [...candidate.container.children]
-        // Element positions deliberately ignore LiaScript's whitespace nodes.
-        const indexes = [
-          candidate.index,
-          candidate.index - 1,
-          candidate.index + 1,
-          candidate.index - 2,
-          candidate.index + 2,
-        ]
-        const wrapper = indexes
-          .map((index) => siblings[index])
-          .find(
-            (node): node is HTMLElement =>
-              node instanceof HTMLElement &&
-              node.matches("span[ondblclick]"),
-          )
-        if (wrapper) candidate.wrapper = wrapper
-      }
+      candidate.wrapper ??= anchoredCompilerWrapper(candidate)
       if (!candidate.wrapper) continue
-      const textNodes = [...candidate.wrapper.childNodes].filter(
-        (node): node is Text => node.nodeType === Node.TEXT_NODE,
+      const node = [...candidate.wrapper.childNodes].find(
+        (child): child is Text =>
+          child.nodeType === Node.TEXT_NODE && Boolean(child.textContent?.trim()),
       )
-      const matchingNode = textNodes.find(
-        (node) =>
-          textPrefixLength(
-            node.textContent ?? "",
-            pending.trailingSource,
-          ) !== null,
-      )
-      candidate.node =
-        matchingNode ??
-        textNodes.find((node) => (node.textContent ?? "").trim()) ??
-        textNodes[0] ??
-        null
-      if (!candidate.node) continue
       if (
-        removeCompilerTailSource(candidate.node, pending.trailingSource)
+        node &&
+        removeCompilerTailSource(node, pending.trailingSource, candidate.marker)
       ) {
         pending.candidates.delete(originMarker)
-        if (candidate.marker.isConnected) candidate.marker.remove()
+        retireMarker(candidate.marker, TAIL_ATTRIBUTE)
       }
     }
   }
 }
 
-function ensureCompilerTailObserver(): void {
-  if (compilerTailObserver || pendingCompilerTails.size === 0) return
-  compilerTailObserver = new MutationObserver(flushCompilerTails)
-  compilerTailObserver.observe(document.body, {
-    characterData: true,
-    childList: true,
-    subtree: true,
-  })
-}
-
-function watchCompilerTail(
-  revealId: string,
-  trailingSource: string,
-  host: HTMLElement,
-): void {
-  const current = pendingCompilerTails.get(revealId)
-  if (current && current.trailingSource === trailingSource) {
-    current.host = host
-  } else {
-    pendingCompilerTails.set(revealId, {
-      candidates: new Map(),
-      host,
-      trailingSource,
-    })
-  }
-  ensureCompilerTailObserver()
-  flushCompilerTails()
-}
-
 function cleanCompilerTail(
   revealId: string,
   trailingSource: string,
-  host: HTMLElement,
 ): void {
-  watchCompilerTail(revealId, trailingSource, host)
+  if (pendingCompilerTails.get(revealId)?.trailingSource !== trailingSource) {
+    pendingCompilerTails.set(revealId, {
+      candidates: new Map(),
+      trailingSource,
+    })
+  }
+  if (!compilerTailObserver) {
+    compilerTailObserver = new MutationObserver(flushCompilerTails)
+    compilerTailObserver.observe(document.body, {
+      characterData: true,
+      childList: true,
+      subtree: true,
+    })
+  }
+  flushCompilerTails()
 }
 
 function resetCompilerTailTracking(): void {
   pendingCompilerTails.clear()
+  completedCompilerTails = new WeakMap()
   compilerTailObserver?.disconnect()
   compilerTailObserver = null
 }
@@ -426,7 +453,6 @@ function normalizeDynamicIds(
   revealId: string,
   section: number,
 ): void {
-  let elementIndex = 0
   for (const element of host.querySelectorAll<HTMLElement>("*")) {
     for (const attribute of [...element.attributes]) {
       if (
@@ -435,14 +461,15 @@ function normalizeDynamicIds(
       ) {
         continue
       }
+      // LiaScript @uid identifies the authored item within this output. DOM
+      // positions also count covers and SVGs and vary with runtime timing.
       element.setAttribute(
         attribute.name,
         `${section}_${stableNumericId(
-          `${revealId}:${elementIndex}:${attribute.name}:${attribute.value}`,
+          `${revealId}:${attribute.name}:${attribute.value}`,
         )}`,
       )
     }
-    elementIndex += 1
   }
 }
 
@@ -470,24 +497,70 @@ function observeDynamicIds(
   }, 10_000)
 }
 
+function ownPayload(host: HTMLElement): HTMLElement | null {
+  return host.querySelector<HTMLElement>(":scope > [data-loot-reveal-payload]")
+}
+
+function ensurePayload(host: HTMLElement): HTMLElement {
+  const existing = ownPayload(host)
+  if (existing) return existing
+  // Inline rendering can finish before exploration registers its elements.
+  // Dynamic output must remain gated throughout that interval.
+  const payload = host.ownerDocument.createElement("div")
+  payload.dataset.lootRevealPayload = "true"
+  payload.hidden = true
+  payload.inert = true
+  payload.setAttribute("aria-hidden", "true")
+  payload.append(
+    ...[...host.childNodes].filter(
+      (node) =>
+        !(node instanceof Element && node.hasAttribute("data-loot-reveal-cover-slot")),
+    ),
+  )
+  host.append(payload)
+  return payload
+}
+
+function hasRenderedPayload(host: HTMLElement | null): boolean {
+  return Boolean(
+    host?.getAttribute(RENDERED_ATTRIBUTE) === "true" &&
+      ownPayload(host)?.hasChildNodes(),
+  )
+}
+
+function applyDeclaration(
+  host: HTMLElement,
+  kind: RevealContainerKind,
+  declaration: CourseInlineRevealDeclaration,
+): void {
+  const options =
+    `${kindToken(kind)}${declaration.options ? `; ${declaration.options}` : ""}`
+  if (host.getAttribute("data-options") !== options) {
+    host.setAttribute("data-options", options)
+  }
+}
+
+function failInlineReveal(revealId: string, reason: string): void {
+  const host = revealHost(revealId)
+  if (host && !hasRenderedPayload(host)) {
+    host.removeAttribute(RENDERED_ATTRIBUTE)
+    host.setAttribute(ERROR_ATTRIBUTE, reason)
+  }
+  retireMarker(rendererMarker(revealId), RENDERER_ATTRIBUTE)
+}
+
 function observeDynamicOutput(
   revealId: string,
   kind: RevealContainerKind,
   declaration: CourseInlineRevealDeclaration,
-): void {
+): DynamicOutputObserver {
   const previous = dynamicOutputObservers.get(revealId)
-  if (previous) return
+  if (previous) return previous
 
   let moving = false
   let lastAdoptedHost: HTMLElement | null = null
-  let entry:
-    | {
-        interval: number
-        observer: MutationObserver
-        settleTimeout: number | null
-        timeout: number
-      }
-    | undefined
+  let lastAdoptedPayload: HTMLElement | null = null
+  let entry: DynamicOutputObserver | undefined
   const dispose = (): void => {
     if (!entry || dynamicOutputObservers.get(revealId) !== entry) return
     entry.observer.disconnect()
@@ -508,19 +581,12 @@ function observeDynamicOutput(
         window.requestAnimationFrame(() => {
           if (!entry || dynamicOutputObservers.get(revealId) !== entry) return
           if (move()) return
-          const liveHost = revealHost(revealId)
-          const payload =
-            liveHost?.querySelector<HTMLElement>(
-              "[data-loot-reveal-payload]",
-            ) ?? null
+          const host = revealHost(revealId)
           if (
-            liveHost === lastAdoptedHost &&
-            liveHost?.getAttribute(RENDERED_ATTRIBUTE) === "true" &&
-            payload?.hasChildNodes() &&
+            host === lastAdoptedHost &&
+            hasRenderedPayload(host) &&
             !rendererMarker(revealId)
-          ) {
-            dispose()
-          }
+          ) dispose()
         })
       })
     }, OUTPUT_STABILITY_DELAY)
@@ -530,45 +596,38 @@ function observeDynamicOutput(
       moving ||
       !entry ||
       dynamicOutputObservers.get(revealId) !== entry
-    ) {
-      return false
-    }
+    ) return false
     const host = revealHost(revealId)
+    if (!host) return false
     const renderer = rendererMarker(revealId)
-    const marker = tailMarker(revealId)
-    if (marker) {
-      if (host) {
-        cleanCompilerTail(
-          revealId,
-          declaration.trailingSource,
-          host,
-        )
-      } else if (removeCompilerTail(marker, declaration.trailingSource)) {
-        pendingCompilerTails.get(revealId)?.candidates.delete(marker)
-      }
-    }
     const output = renderer?.querySelector<HTMLElement>("output") ?? null
-    const payload =
-      host?.querySelector<HTMLElement>("[data-loot-reveal-payload]") ??
-      null
-    if (!host || !renderer || !output?.hasChildNodes()) {
-      return false
-    }
+    const detachedPayload =
+      lastAdoptedHost &&
+      !lastAdoptedHost.isConnected &&
+      host !== lastAdoptedHost &&
+      !hasRenderedPayload(host)
+        ? lastAdoptedPayload
+        : null
+    const content = output?.hasChildNodes()
+      ? output
+      : detachedPayload?.hasChildNodes()
+        ? detachedPayload
+        : null
+    if (!content) return false
 
     moving = true
     try {
-      host.setAttribute(
-        "data-options",
-        `${kindToken(kind)}${declaration.options ? `; ${declaration.options}` : ""}`,
-      )
-      const livePayload = payload ?? host
-      livePayload.replaceChildren(...output.childNodes)
-      renderer.remove()
+      applyDeclaration(host, kind, declaration)
+      const payload = ensurePayload(host)
+      payload.replaceChildren(...content.childNodes)
+      retireMarker(renderer, RENDERER_ATTRIBUTE)
+      // "Rendered" means adopted output, never merely a request in flight.
       host.setAttribute(RENDERED_ATTRIBUTE, "true")
-
+      host.removeAttribute(ERROR_ATTRIBUTE)
       const section = sectionFromLootId(revealId)
       if (section !== null) observeDynamicIds(host, revealId, section)
       lastAdoptedHost = host
+      lastAdoptedPayload = payload
       scheduleDisposal()
       return true
     } finally {
@@ -576,9 +635,7 @@ function observeDynamicOutput(
     }
   }
 
-  const observer = new MutationObserver(() => {
-    move()
-  })
+  const observer = new MutationObserver(() => { move() })
   observer.observe(document.body, {
     characterData: true,
     childList: true,
@@ -587,26 +644,21 @@ function observeDynamicOutput(
   const interval = window.setInterval(move, 20)
   const timeout = window.setTimeout(() => {
     if (!entry || dynamicOutputObservers.get(revealId) !== entry) return
-    const adoptedNow = move()
-    const liveHost = revealHost(revealId)
-    const payload =
-      liveHost?.querySelector<HTMLElement>("[data-loot-reveal-payload]") ??
-      null
-    const outputStable =
-      adoptedNow ||
-      (liveHost === lastAdoptedHost &&
-        liveHost?.getAttribute(RENDERED_ATTRIBUTE) === "true" &&
-        Boolean(payload?.hasChildNodes()) &&
-        !rendererMarker(revealId))
+    move()
+    const outputStable = hasRenderedPayload(revealHost(revealId))
     dispose()
-    if (!outputStable) {
-      rendererMarker(revealId)?.remove()
-      revealHost(revealId)?.removeAttribute(RENDERED_ATTRIBUTE)
-    }
+    if (!outputStable) failInlineReveal(revealId, "output")
   }, OUTPUT_TIMEOUT)
-  entry = { interval, observer, settleTimeout: null, timeout }
+  entry = {
+    interval,
+    observer,
+    requestedRenderers: new WeakSet(),
+    settleTimeout: null,
+    timeout,
+  }
   dynamicOutputObservers.set(revealId, entry)
   move()
+  return entry
 }
 
 async function courseInlineDeclarations(): Promise<
@@ -616,74 +668,99 @@ async function courseInlineDeclarations(): Promise<
   if (declarationsPromise) return declarationsPromise
 
   const generation = declarationGeneration
-  declarationsPromise = discoverCourseInlineRevealDeclarations()
+  const pending = discoverCourseInlineRevealDeclarations()
     .then((discovered) => {
-      if (generation === declarationGeneration && declarations === null) {
-        declarations = discovered
-      }
-      return declarations ?? discovered
+      if (
+        generation === declarationGeneration &&
+        declarations === null &&
+        discovered.length > 0
+      ) declarations = discovered
+      return generation === declarationGeneration
+        ? declarations ?? discovered
+        : discovered
     })
     .finally(() => {
-      declarationsPromise = null
+      if (declarationsPromise === pending) declarationsPromise = null
     })
-  return declarationsPromise
+  declarationsPromise = pending
+  return pending
 }
 
 function stop(send: LiaScriptDynamicSend): void {
   send.lia("LIA: stop")
 }
 
+function currentRequest(revealId: string, request: RenderRequest): boolean {
+  return (
+    request.generation === declarationGeneration &&
+    renderRequests.get(revealId) === request
+  )
+}
+
 async function renderInlineReveal(
   revealId: string,
-  authoredKind: string,
-  send: LiaScriptDynamicSend,
+  request: RenderRequest,
 ): Promise<void> {
-  const host = revealHost(revealId)
-  const kind = normalizedKind(authoredKind)
-  if (!host || !kind) {
-    stop(send)
+  let sourceTimeout: number | undefined
+  let source: CourseInlineRevealDeclaration[]
+  try {
+    source = await Promise.race([
+      courseInlineDeclarations(),
+      new Promise<never>((_, reject) => {
+        sourceTimeout = window.setTimeout(
+          () => reject(new Error("Inline reveal source timeout")),
+          SOURCE_TIMEOUT,
+        )
+      }),
+    ])
+  } catch {
+    if (currentRequest(revealId, request)) failInlineReveal(revealId, "source")
+    return
+  } finally {
+    window.clearTimeout(sourceTimeout)
+  }
+  if (!currentRequest(revealId, request)) return
+  if (source.length === 0) {
+    failInlineReveal(revealId, "source")
     return
   }
 
-  const source = await courseInlineDeclarations()
-  const declaration = declarationForHost(host, kind, source)
-  if (!declaration) {
-    stop(send)
-    return
+  const deadline = Date.now() + OUTPUT_TIMEOUT
+  while (currentRequest(revealId, request)) {
+    // In particular, do not retain the host from before source resolution.
+    const host = revealHost(revealId)
+    const declaration = host
+      ? declarationForHost(host, request.kind, source)
+      : null
+    if (host && declaration) {
+      applyDeclaration(host, request.kind, declaration)
+      cleanCompilerTail(revealId, declaration.trailingSource)
+      if (!declaration.deferred || hasRenderedPayload(host)) {
+        host.removeAttribute(ERROR_ATTRIBUTE)
+        retireMarker(rendererMarker(revealId), RENDERER_ATTRIBUTE)
+        return
+      }
+      const renderer = rendererForRequest(revealId)
+      if (renderer) {
+        const output = observeDynamicOutput(revealId, request.kind, declaration)
+        if (
+          !hasRenderedPayload(revealHost(revealId)) &&
+          !output.requestedRenderers.has(renderer)
+        ) {
+          output.requestedRenderers.add(renderer)
+          request.send.liascript(declaration.content)
+        }
+        return
+      }
+    }
+    if (Date.now() >= deadline) {
+      failInlineReveal(revealId, host ? "declaration-or-renderer" : "host")
+      return
+    }
+    await new Promise<void>((resolve) =>
+      window.setTimeout(resolve, HOST_RETRY_DELAY),
+    )
   }
-
-  host.setAttribute(
-    "data-options",
-    `${kindToken(kind)}${declaration.options ? `; ${declaration.options}` : ""}`,
-  )
-  cleanCompilerTail(
-    revealId,
-    declaration.trailingSource,
-    host,
-  )
-  if (!declaration.deferred) {
-    rendererMarker(revealId)?.remove()
-    stop(send)
-    return
-  }
-  if (host.getAttribute(RENDERED_ATTRIBUTE) === "true") {
-    stop(send)
-    return
-  }
-  if (dynamicOutputObservers.has(revealId)) {
-    stop(send)
-    return
-  }
-
-  const renderer = rendererMarker(revealId)
-  if (!renderer) {
-    stop(send)
-    return
-  }
-  host.setAttribute(RENDERED_ATTRIBUTE, "true")
-  observeDynamicOutput(revealId, kind, declaration)
-  send.liascript(declaration.content)
-  stop(send)
 }
 
 function installSourceListener(): void {
@@ -691,6 +768,9 @@ function installSourceListener(): void {
   sourceListenerInstalled = true
   onCourseMarkdownChange((markdown) => {
     declarationGeneration += 1
+    declarationBindings.clear()
+    renderRequests.clear()
+    knownKinds.clear()
     disposeDynamicOutputObservers()
     resetCompilerTailTracking()
     declarations = parseCourseInlineRevealDeclarations(markdown)
@@ -702,8 +782,43 @@ export function installInlineRevealRendering(): void {
   if (window.__LIA_LOOT_INLINE_REVEALS__) return
   installSourceListener()
   window.__LIA_LOOT_INLINE_REVEALS__ = {
-    render(revealId, kind, send) {
-      void renderInlineReveal(revealId, kind, send).catch(() => stop(send))
+    render(revealId, authoredKind, send) {
+      const kind = normalizedKind(authoredKind)
+      if (!kind) {
+        stop(send)
+        return
+      }
+      knownKinds.set(revealId, kind)
+      const previous = renderRequests.get(revealId)
+      if (previous && previous.generation === declarationGeneration) {
+        // A replacement script supplies the live output channel while the
+        // shared source lookup is pending. Emit once through the latest one.
+        if (previous.kind !== kind || previous.send === send) {
+          if (previous.send !== send) stop(send)
+          return
+        }
+        stop(previous.send)
+        previous.send = send
+        return
+      }
+      const request: RenderRequest = {
+        generation: declarationGeneration,
+        kind,
+        send,
+      }
+      renderRequests.set(revealId, request)
+      void renderInlineReveal(revealId, request)
+        .catch(() => {
+          if (currentRequest(revealId, request)) {
+            failInlineReveal(revealId, "render")
+          }
+        })
+        .finally(() => {
+          if (renderRequests.get(revealId) === request) {
+            renderRequests.delete(revealId)
+          }
+          stop(request.send)
+        })
     },
   }
 }

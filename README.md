@@ -5,7 +5,7 @@ language: de
 edit:     true
 comment:  Loot ergänzt LiaScript-Kurse um konfigurierbare Gamification. Das erste Feature ermittelt einen Highscore aus Fehlversuchen, verwendeten Hinweisen und sekundengenauem Zeitabzug und zeigt ihn mit einer Trophäe an.
 
-link:     data:text/css;base64,OmlzKHAsLmxpYS1wYXJhZ3JhcGgpOmhhcyhbZGF0YS1sb290LWlubGluZS10YWlsXSl7dmlzaWJpbGl0eTpoaWRkZW4haW1wb3J0YW50fQ==
+link:     data:text/css;base64,bGlhLWxvb3QtcmV2ZWFsW2RhdGEtcmV2ZWFsLWxheW91dD1pbmxpbmVdOm5vdChbZGF0YS1sb290LXJldmVhbC1raW5kXSksbGlhLWxvb3QtcmV2ZWFsW2RhdGEtbG9vdC1pbmxpbmUtZXJyb3JdLFtkYXRhLWxvb3QtaW5saW5lLXJlbmRlcmVyXSxbZGF0YS1sb290LWlubGluZS10YWlsXXtkaXNwbGF5Om5vbmUhaW1wb3J0YW50fQ==
 script:   ./dist/index.js
 
 @Highscore
@@ -154,7 +154,7 @@ script:   ./dist/index.js
 @end
 
 @LootRevealInline_
-<lia-loot-reveal data-reveal-id='@0' data-options='@1; @2' data-reveal-layout='inline' data-loot-inline-kind='@1' hidden>@3</lia-loot-reveal>
+<lia-loot-reveal data-reveal-id='@0' data-options='@1; @2' data-reveal-layout='inline' data-loot-inline-kind='@1'>@3</lia-loot-reveal>
 <span data-loot-inline-renderer='@0'>
 <script modify="false">
 (function waitForLootInline(remaining) {

@@ -1142,3 +1142,26 @@ test("wiederholt die frühe Quelltextladung nach einem vorübergehenden Fehler",
     else globalThis.window = previousWindow
   }
 })
+
+
+test("ordnet die originalen Gartenabsaetze der spaeteren Folie in Quellreihenfolge zu", () => {
+  const markdown = readFileSync(
+    new URL("./browser/fixtures/reveal-inline-garden.md", import.meta.url),
+    "utf8",
+  )
+  const declarations = parseCourseInlineRevealDeclarations(markdown)
+  assert.deepEqual(
+    declarations.map(({ section, kind, content, deferred, trailingSource }) =>
+      ({ section, kind, content, deferred, trailingSource })),
+    [
+      ["soil", "@Energiekiste", ""],
+      ["plant", "@Energiekiste", ""],
+      ["soil", "@Puzzleteil(tuerkis; 1)", " )"],
+      ["plant", "@Puzzleteil(tuerkis; 2)", " )"],
+      ["plant", "@Puzzleteil(tuerkis; 3)", " )"],
+      ["soil", "@Puzzleteil(tuerkis; 4)", " )"],
+    ].map(([kind, content, trailingSource]) => ({
+      section: 1, kind, content, deferred: true, trailingSource,
+    })),
+  )
+})

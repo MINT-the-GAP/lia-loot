@@ -58,6 +58,7 @@ test("verbirgt Lade-Artefakte beim verzögerten Runtime-Start", async ({
       preflightActive: false,
       seenPending: false,
       visibleArtifacts: [],
+      hiddenParagraphs: [],
     }
     window.__lootLoadingProbe = probe
 
@@ -99,14 +100,16 @@ test("verbirgt Lade-Artefakte beim verzögerten Runtime-Start", async ({
           .map((marker) => marker.closest("p, .lia-paragraph"))
           .filter(Boolean),
       )
+      // Only an instance's pending host and compiler markers may be hidden.
+      // A failed or delayed instance must never hide its surrounding paragraph.
       for (const paragraph of paragraphs) {
-        const text = paragraph.innerText
-        if (
-          visible(paragraph) &&
-          (/[)]/u.test(text) || /@(Erdhaufen|Pflanze)/u.test(text))
-        ) {
-          probe.visibleArtifacts.push(text)
-        }
+        if (!visible(paragraph)) probe.hiddenParagraphs.push(paragraph.textContent)
+      }
+      for (const element of document.querySelectorAll(
+        '[data-loot-inline-renderer], [data-loot-inline-tail], ' +
+          'lia-loot-reveal[data-reveal-layout="inline"]:not([data-loot-reveal-kind])',
+      )) {
+        if (visible(element)) probe.visibleArtifacts.push(element.outerHTML)
       }
       for (const marker of document.querySelectorAll(
         'a[href^="#lia-loot-reveal-end-"]',
@@ -132,6 +135,11 @@ test("verbirgt Lade-Artefakte beim verzögerten Runtime-Start", async ({
   expect(probe.preflightActive).toBe(true)
   expect(probe.seenPending).toBe(true)
   expect(probe.visibleArtifacts).toEqual([])
+  expect(probe.hiddenParagraphs).toEqual([])
+  // Compiler suffixes are removed once their source is available, without
+  // concealing unrelated text while that source is still being fetched.
+  expect(await page.locator(".lia-slide__content:not([hidden])").innerText())
+    .not.toContain(")")
 })
 
 test("bereinigt einen Tail auch nach dem Output-Timeout", async ({
@@ -310,6 +318,178 @@ test("bereinigt einen spät erscheinenden Tail nach Reentry", async ({
       { timeout: 5_000 },
     )
     .toEqual({ marker: false, tail: "" })
+})
+
+
+test("bereinigt direkte Absatz-Tails und bewahrt Nachsatz und Nachbarinstanzen", async ({
+  page,
+}) => {
+  test.setTimeout(90_000)
+
+  await page.goto(
+    editorUrl("/tests/browser/fixtures/reveal-inline-garden.md") + "#2",
+    {
+      timeout: 30_000,
+      waitUntil: "domcontentloaded",
+    },
+  )
+  await waitForInlineRendering(page)
+  await page.waitForTimeout(2_000)
+  await waitForInlineRendering(page)
+
+  const before = await page.evaluate(async () => {
+    const hosts = [
+      ...document.querySelectorAll(
+        "lia-loot-reveal[data-loot-inline-rendered=true]",
+      ),
+    ].filter((host) => host.querySelector("lia-loot-puzzle-piece"))
+    const [host, neighbor] = hosts
+    const paragraph = host?.closest("p")
+    const id = host?.getAttribute("data-reveal-id")
+    const kind = host?.getAttribute("data-loot-inline-kind")
+    const api = window.__LIA_LOOT_INLINE_REVEALS__
+    if (
+      !host ||
+      !neighbor ||
+      !paragraph ||
+      host.parentElement !== paragraph ||
+      neighbor.parentElement !== paragraph ||
+      !id ||
+      !kind ||
+      !api
+    ) {
+      throw new Error("Zwei direkte Inline-Hosts im selben Absatz fehlen.")
+    }
+
+    let sentDynamicOutput = false
+    await new Promise((resolve) => {
+      api.render(id, kind, {
+        lia(message) {
+          if (message === "LIA: stop") resolve()
+        },
+        liascript() {
+          sentDynamicOutput = true
+        },
+      })
+    })
+
+    paragraph.setAttribute("data-loot-test-direct-tail-paragraph", "")
+    const marker = document.createElement("span")
+    marker.hidden = true
+    marker.setAttribute("data-loot-inline-tail", id)
+    const text = document.createTextNode(
+      " ) Sichtbarer Nachsatz (bleibt). ",
+    )
+    paragraph.insertBefore(marker, neighbor)
+    paragraph.insertBefore(text, neighbor)
+
+    const inner = neighbor.querySelector("lia-loot-puzzle-piece")
+    window.__lootDirectTailProbe = {
+      host,
+      id,
+      marker,
+      neighbor,
+      paragraph,
+      text,
+    }
+    return {
+      directTextBeforeNeighbor:
+        marker.parentElement === paragraph &&
+        marker.nextSibling === text &&
+        text.nextSibling === neighbor,
+      neighborId: neighbor.getAttribute("data-reveal-id"),
+      pieceId: inner?.getAttribute("data-piece-id"),
+      pieceOptions: inner?.getAttribute("data-options"),
+      sentDynamicOutput,
+    }
+  })
+
+  expect(before.directTextBeforeNeighbor).toBe(true)
+  expect(before.sentDynamicOutput).toBe(false)
+  expect(before.neighborId).toBeTruthy()
+  expect(before.pieceId).toBeTruthy()
+  expect(before.pieceOptions).toBe("tuerkis; 2")
+
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const { marker, text } = window.__lootDirectTailProbe
+          return {
+            markerActive: marker.hasAttribute("data-loot-inline-tail"),
+            markerConnected: marker.isConnected,
+            tailText: text.textContent,
+          }
+        }),
+      { timeout: 5_000 },
+    )
+    .toEqual({
+      markerActive: false,
+      markerConnected: true,
+      tailText: " Sichtbarer Nachsatz (bleibt). ",
+    })
+
+  const after = await page.evaluate(async () => {
+    const probe = window.__lootDirectTailProbe
+    const { host, id, neighbor, paragraph, text } = probe
+    const foreignContent = document.createElement("span")
+    foreignContent.hidden = true
+    foreignContent.inert = true
+    foreignContent.textContent = ") Fremder Makroinhalt (bleibt)."
+    neighbor.prepend(foreignContent)
+
+    const beforeNeighbor = document.createElement("span")
+    beforeNeighbor.hidden = true
+    beforeNeighbor.setAttribute("data-loot-inline-tail", id)
+    paragraph.insertBefore(beforeNeighbor, neighbor)
+
+    const afterParagraph = document.createElement("p")
+    afterParagraph.textContent = ") Fremder Absatz (bleibt)."
+    paragraph.after(afterParagraph)
+    const atParagraphEnd = document.createElement("span")
+    atParagraphEnd.hidden = true
+    atParagraphEnd.setAttribute("data-loot-inline-tail", id)
+    paragraph.append(atParagraphEnd)
+
+    // Allow the observer to process both markers without inserting a compiler
+    // tail: neither the next reveal nor the next paragraph belongs to this ID.
+    await new Promise((resolve) => setTimeout(resolve, 500))
+
+    const inner = neighbor.querySelector("lia-loot-puzzle-piece")
+    const payload = neighbor.querySelector(
+      ":scope > [data-loot-reveal-payload]",
+    )
+    return {
+      foreignContent: foreignContent.textContent,
+      foreignParagraph: afterParagraph.textContent,
+      hostConnected: host.isConnected,
+      neighborConnected: neighbor.isConnected,
+      neighborId: neighbor.getAttribute("data-reveal-id"),
+      payloadHidden: payload?.hidden,
+      payloadInert: payload?.inert,
+      pieceId: inner?.getAttribute("data-piece-id"),
+      pieceOptions: inner?.getAttribute("data-options"),
+      suffix: text.textContent,
+      visibility: getComputedStyle(paragraph).visibility,
+    }
+  })
+
+  expect(after).toEqual({
+    foreignContent: ") Fremder Makroinhalt (bleibt).",
+    foreignParagraph: ") Fremder Absatz (bleibt).",
+    hostConnected: true,
+    neighborConnected: true,
+    neighborId: before.neighborId,
+    payloadHidden: true,
+    payloadInert: true,
+    pieceId: before.pieceId,
+    pieceOptions: before.pieceOptions,
+    suffix: " Sichtbarer Nachsatz (bleibt). ",
+    visibility: "visible",
+  })
+  await expect(
+    page.locator("[data-loot-test-direct-tail-paragraph]"),
+  ).toBeVisible()
 })
 
 test("ordnet getrennt materialisierte Tails nur ihrem Ursprung zu", async ({
