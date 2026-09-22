@@ -1070,6 +1070,15 @@ a[href="#lia-loot-if-end"],
   display: none !important;
 }
 
+/* DynFlex also declares display with !important; a blocked range must win. */
+.dynFlex:is(
+  [data-loot-reveal-range-blocked],
+  [data-loot-if-range-blocked],
+  [data-loot-puzzle-range-blocked]
+) {
+  display: none !important;
+}
+
 lia-loot-puzzle-piece {
   min-width: 4.5rem;
   min-height: 4.5rem;
@@ -2204,6 +2213,12 @@ lia-loot-chest.loot-treasure-host--portal-source {
   filter: drop-shadow(2px 2px 0 rgba(8, 15, 28, 0.38));
 }
 
+/* Keep the small revealed click target stationary between pointerdown and click. */
+.loot-magnifier-secret .loot-treasure-chest:hover:not(:disabled),
+.loot-magnifier-secret .loot-treasure-chest:active:not(:disabled) {
+  transform: none;
+}
+
 .loot-treasure-chest:focus-visible {
   outline: 3px solid #54d5f5;
   outline-offset: 3px;
@@ -2218,6 +2233,7 @@ lia-loot-chest.loot-treasure-host--portal-source {
   height: 100%;
   overflow: visible;
   image-rendering: pixelated;
+  pointer-events: none;
 }
 
 .loot-chest-shadow {

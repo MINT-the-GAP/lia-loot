@@ -127,6 +127,18 @@ test("oeffnet eine zauberstaubverdeckte Truhe mit echten Mausereignissen", async
   )
 
   await page.mouse.down()
+  await page.mouse.move(box.x + box.width + 100, box.y + box.height + 100)
+  await page.mouse.up()
+  await expect(gold).toHaveText("0")
+
+  const edge = { x: box.x + 2, y: box.y + 2 }
+  await page.mouse.move(edge.x, edge.y)
+  await expect(chestHost).toHaveClass(/loot-magnifier-secret--under-lens/u)
+  expect(await page.evaluate(({ x, y }) =>
+    Boolean(document.elementFromPoint(x, y)?.closest('[data-loot-chest-button]')),
+  edge)).toBe(true)
+  await page.mouse.down()
+  await page.waitForTimeout(150)
   await page.mouse.up()
 
   await expect(gold).toHaveText("1")

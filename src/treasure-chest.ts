@@ -363,6 +363,44 @@ function handleChestButtonClick(event: MouseEvent): void {
 function installChestClickListener(ownerDocument: Document): void {
   if (clickListenerDocuments.has(ownerDocument)) return
   clickListenerDocuments.add(ownerDocument)
+  const pressedDustChests = new Map<number, {
+    button: HTMLButtonElement
+    pointerType: string
+    x: number
+    y: number
+  }>()
+  ownerDocument.addEventListener("pointerdown", (event) => {
+    if (!event.isPrimary || event.button !== 0) return
+    const button = chestButtonFromEvent(event)
+    if (button?.closest(".loot-magnifier-secret--under-lens")) {
+      pressedDustChests.set(event.pointerId, {
+        button,
+        pointerType: event.pointerType,
+        x: event.clientX,
+        y: event.clientY,
+      })
+    }
+  }, true)
+  ownerDocument.addEventListener("pointerup", (event) => {
+    const pressed = pressedDustChests.get(event.pointerId)
+    pressedDustChests.delete(event.pointerId)
+    if (
+      pressed &&
+      pressed.button.isConnected &&
+      !pressed.button.disabled &&
+      chestButtonFromEvent(event) === pressed.button &&
+      pressed.button.closest(".loot-magnifier-secret--under-lens") &&
+      (pressed.pointerType !== "touch" ||
+        Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) <= 10)
+    ) {
+      // Chromium can omit click for a chest clipped by the magnifier lens.
+      // Opening here also covers a real click; openingIds prevents duplicates.
+      handleChestButtonClick(event)
+    }
+  }, true)
+  ownerDocument.addEventListener("pointercancel", (event) => {
+    pressedDustChests.delete(event.pointerId)
+  }, true)
   ownerDocument.addEventListener("click", handleChestButtonClick, true)
 }
 

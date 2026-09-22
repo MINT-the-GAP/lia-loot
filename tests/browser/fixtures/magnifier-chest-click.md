@@ -12,4 +12,4 @@ import: ../../../README.md
 @Ressourcen(0, 0, 0)
 @Lupe
 
-@Schatztruhe(zauberstaub)
+@Schatztruhe(1; zauberstaub; anker)
