@@ -54,6 +54,61 @@ test("begrenzt Prüfen nur bei konfigurierter Energie", () => {
   assert.equal(store.state()?.diamonds, 1)
 })
 
+test("meldet jeden erfolgreichen Energiewechsel mit vorherigem Zustand", () => {
+  browserSession()
+  const store = new ResourceStore()
+  const transitions = []
+  const unsubscribe = store.subscribe((previous, current) => {
+    transitions.push([previous?.energy ?? null, current?.energy ?? null])
+  })
+
+  store.configure(0, 0, 2)
+  store.spend("energy")
+  store.spend("energy")
+  store.exchange({}, { energy: 3 })
+  unsubscribe()
+  store.spend("energy")
+
+  assert.deepEqual(transitions, [
+    [null, 2],
+    [2, 1],
+    [1, 0],
+    [0, 3],
+  ])
+})
+
+test("prüft und verbucht kombinierte Shoppreise atomar", () => {
+  browserSession()
+  const store = new ResourceStore()
+  store.configure(5, 2, 4)
+
+  const price = { gold: 3, diamonds: 1, energy: 2 }
+  assert.equal(store.canAfford(price), true)
+  assert.equal(store.exchange(price, { diamonds: 2 }), true)
+  assert.deepEqual(
+    {
+      diamonds: store.state()?.diamonds,
+      energy: store.state()?.energy,
+      gold: store.state()?.gold,
+    },
+    { diamonds: 3, energy: 2, gold: 2 },
+  )
+
+  const previous = store.state()
+  assert.equal(store.exchange({ gold: 3 }, { energy: 100 }), false)
+  assert.deepEqual(store.state(), previous)
+})
+
+test("lehnt Energiepreise und Energieangebote ohne Energiebestand ab", () => {
+  browserSession()
+  const store = new ResourceStore()
+  store.configure(5, 2)
+
+  assert.equal(store.canAfford({ energy: 1 }), false)
+  assert.equal(store.exchange({ gold: 1 }, { energy: 1 }), false)
+  assert.equal(store.exchange({ gold: 1 }, { diamonds: 1 }), true)
+})
+
 test("behält den Verbrauch bei erneuter Konfiguration mit gleichen Startwerten", () => {
   browserSession()
   const first = new ResourceStore()

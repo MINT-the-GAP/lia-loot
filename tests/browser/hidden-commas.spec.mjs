@@ -8,7 +8,7 @@ function editorUrl() {
   return editorPath + "?" + new URL(fixturePath, testOrigin).href
 }
 
-test("bewahrt Kommas in Unsichtbar und Zauberstaub im echten Editor", async ({
+test("bewahrt Kommas und entfernt interne Trenner im echten Editor", async ({
   browserName,
   page,
 }) => {
@@ -50,6 +50,18 @@ test("bewahrt Kommas in Unsichtbar und Zauberstaub im echten Editor", async ({
     ).toHaveText(text)
     await expect(host).toHaveAttribute("aria-hidden", "true")
   }
+
+  const fogHosts = page.locator("lia-loot-fog")
+  const expectedFog = [
+    "Hallo, diese Nebelzeile bleibt sauber",
+    "Eins, zwei, drei, vier",
+    "Mit Backticks, bleibt auch im Nebel, alles da.",
+  ]
+  await expect(fogHosts).toHaveCount(expectedFog.length)
+  for (const [index, text] of expectedFog.entries()) {
+    await expect(fogHosts.nth(index)).toHaveText(text)
+  }
+  await expect(page.locator("body")).not.toContainText("LIALOOTHIDDEN7QARGSEP")
 
   await page.getByRole("button", { name: "Lupe einsammeln" }).click()
   const magnifier = page.getByRole("button", {

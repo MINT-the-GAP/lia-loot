@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="de" class="lia-theme-default lia-variant-light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Loot Taschenlampen-E2E</title>
+  <style>
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      padding: 5rem 3rem;
+      font: 18px/1.5 system-ui, sans-serif;
+    }
+    main { max-width: 46rem; }
+    #inline-area, #block-area { margin-block: 2rem; }
+    #block-area { margin-bottom: 0; }
+    #outside-footer { border-top: 2px solid #777; }
+    button { min-width: 9rem; min-height: 3rem; }
+  </style>
+</head>
+<body>
+  <nav id="lia-toc" hidden aria-hidden="true">
+    <div class="lia-toc__content">
+      <a id="focusedToc" class="lia-toc__link" href="#1">
+        Taschenlampen-Testkurs
+      </a>
+    </div>
+  </nav>
+  <div class="lia-slide__container">
+  <main class="lia-slide__content">
+    <h1>Taschenlampen-Testkurs</h1>
+    <lia-loot-flashlight
+      id="fixture-flashlight"
+      data-flashlight-id="fixture-flashlight"
+      data-options=""
+    ></lia-loot-flashlight>
+
+    <p id="inline-area">
+      Davor
+      <lia-loot-fog id="inline-fog" data-fog-id="inline-fog">
+        <button id="inline-action" type="button">Inline-Aktion</button>
+      </lia-loot-fog>
+      danach.
+    </p>
+
+    <section id="block-area">
+      <lia-loot-fog-start data-fog-id="block-fog"></lia-loot-fog-start>
+      <p id="block-copy">Dieser ganze Absatz liegt im Nebel.</p>
+      <button id="block-action" type="button">Block-Aktion</button>
+      <lia-loot-fog-end hidden aria-hidden="true"></lia-loot-fog-end>
+    </section>
+    <footer id="outside-footer">Diese Fußzeile liegt außerhalb des Nebels.</footer>
+  </main>
+  </div>
+  <script>
+    window.LIA = {
+      defaultCourseURL: new URL(
+        "/tests/browser/fixtures/flashlight.md",
+        window.location.origin,
+      ).href,
+      fetch: async function fetchCourse() {
+        return new Response(
+          "<!--\nversion: 1.0.0\n-->\n# Taschenlampen-Testkurs\n@Taschenlampe\n@Nebel(Inline)\n@NebelStart\nBlock\n@NebelEnd",
+          {
+            headers: { "content-type": "text/markdown; charset=utf-8" },
+            status: 200,
+          },
+        )
+      },
+      settings: { light: true, theme: "default" },
+    }
+  </script>
+  <script src="/dist/index.js"></script>
+</body>
+</html>

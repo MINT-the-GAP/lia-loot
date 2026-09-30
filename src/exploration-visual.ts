@@ -1,6 +1,8 @@
+import type { AxeTier } from "./axe.ts"
+
 const SVG_NS = "http://www.w3.org/2000/svg"
 
-export type ExplorationToolVisualKind = "shovel" | "watering-can"
+export type ExplorationToolVisualKind = "shovel" | "watering-can" | "axe"
 export type RevealCoverVisualKind = "soil" | "plant"
 export type PlantVisualPhase = "seedling" | "bloomed"
 
@@ -24,20 +26,48 @@ function graphic(
 export function createExplorationToolGraphic(
   kind: ExplorationToolVisualKind,
   ownerDocument: Document = document,
+  axeTier: AxeTier = "stone",
 ): SVGSVGElement {
   if (kind === "shovel") {
     return graphic(
       "loot-shovel-graphic",
       `
-        <rect class="loot-exploration-shadow" x="7" y="54" width="50" height="5"/>
-        <path class="loot-exploration-outline" d="M38 2h12v4h4v12h-4v4h-4v8h-4v8h-4v8h10v4h4v8H22v-8h4v-4h4v-8h4v-8h4v-8h-4v-4h-4V6h4V2h4Z"/>
-        <path class="loot-shovel-handle" d="M38 6h8v4h4v4h-4v4h-8v-4h-4v-4h4V6Z"/>
-        <path class="loot-shovel-shaft" d="M38 18h8v8h-4v8h-4v8h-8v-4h4v-8h4V18Z"/>
-        <path class="loot-shovel-metal" d="M30 42h12v4h6v8H26v-8h4v-4Z"/>
-        <path class="loot-shovel-light" d="M34 46h8v4h-12v-2h4v-2Z"/>
+        <rect class="loot-exploration-shadow" x="1" y="59" width="38" height="4"/>
+        <path class="loot-exploration-outline" d="M47 1 60 14 54 20 41 7Z"/>
+        <path class="loot-shovel-handle" d="M48 5 56 13 53 16 45 8Z"/>
+        <path class="loot-exploration-outline" d="m45 8 8 8-28 39-10-10 30-37Z"/>
+        <path class="loot-shovel-shaft" d="m47 13 4 4-27 34-4-4 27-34Z"/>
+        <path class="loot-shovel-shaft-light" d="m46 12 2 2-27 34-2-2 27-34Z"/>
+        <path class="loot-exploration-outline" d="M12 29 39 49 35 58 25 64 9 63 0 54 0 40 6 33Z"/>
+        <path class="loot-shovel-metal" d="M14 35 33 50 30 55 22 61 11 59 5 52 6 42Z"/>
+        <path class="loot-shovel-light" d="M8 40 15 37 15 56 10 56 5 50Z"/>
+        <path class="loot-shovel-socket" d="M16 38h8v4h4v7h-4v4h-8v-4h-4v-7h4v-4Z"/>
+        <rect class="loot-shovel-rivet" x="18" y="44" width="4" height="4"/>
       `,
       ownerDocument,
     )
+  }
+
+  if (kind === "axe") {
+    const svg = graphic(
+      "loot-axe-graphic",
+      `
+        <rect class="loot-exploration-shadow" x="8" y="58" width="43" height="5"/>
+        <path class="loot-exploration-outline" d="M29 20h13l13 41H39L29 20Z"/>
+        <path class="loot-axe-handle" d="M34 24h5l11 33h-8L34 24Z"/>
+        <path class="loot-axe-handle-light" d="M35 26h2l8 28h-3l-7-28Z"/>
+        <path class="loot-exploration-outline" d="M7 6h29l10 7h9l4 6-4 12h-9l-11 8H12L2 31V14L7 6Z"/>
+        <path class="loot-axe-head" d="M10 11h23l9 6h9l2 3-2 6H41l-9 8H15l-7-7 1-13 1-3Z"/>
+        <path class="loot-axe-head-dark" d="M8 24h10l7 6h12l-5 4H15l-7-7v-3Z"/>
+        <path class="loot-axe-head-light" d="M11 11h20l6 4H17l-6 5-3-3 3-6Z"/>
+        <path class="loot-axe-chip" d="M8 17h7l-4 10-6 3 2-10 1-3Z"/>
+        <path class="loot-axe-binding" d="M29 19h15v5H30Zm2 8h13v5H32Z"/>
+        <rect class="loot-axe-rivet" x="35" y="22" width="4" height="4"/>
+      `,
+      ownerDocument,
+    )
+    svg.dataset.lootAxeTier = axeTier
+    return svg
   }
 
   return graphic(

@@ -31,6 +31,19 @@ export type AchievementExplorationCounts = Record<
 
 type AchievementNotifier = (achievement: AchievementDefinition) => void
 
+export interface AchievementProgressEntry {
+  available: boolean
+  complete: boolean
+  current: number
+  total: number | null
+  unlocked: boolean
+}
+
+export type AchievementProgressSnapshot = Record<
+  AchievementId,
+  AchievementProgressEntry
+>
+
 const CHEST_ACHIEVEMENT_BY_REWARD: Readonly<
   Record<ResourceKind, AchievementId>
 > = {
@@ -223,6 +236,83 @@ export class AchievementManager {
 
   state(): AchievementState {
     return this.store.state()
+  }
+
+  progress(): AchievementProgressSnapshot {
+    const unlocked = new Set(this.store.state().unlocked)
+    const entry = (
+      id: AchievementId,
+      current: number,
+      total: number | null,
+    ): AchievementProgressEntry => ({
+      available: total === null || total > 0,
+      complete: total !== null && total > 0 && current >= total,
+      current: normalizedCount(current),
+      total,
+      unlocked: unlocked.has(id),
+    })
+    return {
+      "all-quizzes-solved": entry(
+        "all-quizzes-solved",
+        this.allQuizzesCompleted ? 1 : 0,
+        1,
+      ),
+      "perfect-highscore": entry(
+        "perfect-highscore",
+        this.perfectHighscore ? 1 : 0,
+        1,
+      ),
+      "all-treasure-chests-opened": entry(
+        "all-treasure-chests-opened",
+        this.collectedChests.gold,
+        this.chestTotals.gold,
+      ),
+      "all-diamond-chests-opened": entry(
+        "all-diamond-chests-opened",
+        this.collectedChests.diamonds,
+        this.chestTotals.diamonds,
+      ),
+      "all-energy-chests-opened": entry(
+        "all-energy-chests-opened",
+        this.collectedChests.energy,
+        this.chestTotals.energy,
+      ),
+      "all-invisible-objects-found": entry(
+        "all-invisible-objects-found",
+        this.explorationCompleted.solid,
+        this.explorationTotals.solid,
+      ),
+      "all-magic-dust-objects-found": entry(
+        "all-magic-dust-objects-found",
+        this.explorationCompleted.dust,
+        this.explorationTotals.dust,
+      ),
+      "all-soil-dug": entry(
+        "all-soil-dug",
+        this.explorationCompleted.soil,
+        this.explorationTotals.soil,
+      ),
+      "all-plants-bloomed": entry(
+        "all-plants-bloomed",
+        this.explorationCompleted.plant,
+        this.explorationTotals.plant,
+      ),
+      "all-locks-opened": entry(
+        "all-locks-opened",
+        this.unlockedLocks,
+        this.lockTotal,
+      ),
+      "all-puzzle-gates-opened": entry(
+        "all-puzzle-gates-opened",
+        this.solvedPuzzleGates,
+        this.puzzleGateTotal,
+      ),
+      "secret-slide-found": entry(
+        "secret-slide-found",
+        this.secretFound || unlocked.has("secret-slide-found") ? 1 : 0,
+        1,
+      ),
+    }
   }
 
   private evaluateAll(): void {

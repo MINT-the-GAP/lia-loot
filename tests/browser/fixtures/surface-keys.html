@@ -209,7 +209,7 @@
     ;(function prepareFixture() {
       const parameters = new URLSearchParams(window.location.search)
       const requestedCase = parameters.get("case")
-      const variant = ["concealed", "conditions", "layers"].includes(requestedCase)
+      const variant = ["concealed", "conditions", "fog", "layers"].includes(requestedCase)
         ? requestedCase
         : "access"
       const requestedVersion = parameters.get("version") || "1.0.0"
@@ -263,6 +263,17 @@
           "@Schluessel(gelb; translator; theme-rot; darkmode; ohne-annotation)",
           "@Schatztruhe(2; menu; theme-rot; darkmode; ohne-annotation)",
         ].join("\n"),
+        fog: [
+          "<!--",
+          "version: " + version,
+          "-->",
+          "# Kisten in Dunkelheit",
+          "@Ressourcen(0, 0, 0)",
+          "@Taschenlampe",
+          "@Schatztruhe(2; menu; nebel)",
+          "@Schatztruhe(nebel)",
+          "@Schatztruhe(erde-unsichtbar; pflanze-zauberstaub; nebel; unsichtbar)",
+        ].join("\n"),
       }
 
       const template = document.getElementById("support-menu-template")
@@ -302,6 +313,32 @@
         document
           .getElementById("fixture-watering-can")
           .setAttribute("data-options", compoundOptions)
+      }
+
+      if (variant === "fog") {
+        const flashlight = document.createElement("lia-loot-flashlight")
+        flashlight.id = "fixture-flashlight"
+        flashlight.setAttribute("data-flashlight-id", "surface-fog-flashlight")
+        flashlight.setAttribute("data-options", "")
+
+        const inlineChest = document.createElement("lia-loot-chest")
+        inlineChest.id = "fog-inline-chest"
+        inlineChest.setAttribute("data-chest-id", "fog-inline-chest")
+        inlineChest.setAttribute("data-placement", "1; nebel")
+        inlineChest.setAttribute("data-reward", "gold")
+
+        const combinedChest = document.createElement("lia-loot-chest")
+        combinedChest.id = "fog-combined-chest"
+        combinedChest.setAttribute("data-chest-id", "fog-combined-chest")
+        combinedChest.setAttribute(
+          "data-placement",
+          "1; erde-unsichtbar; pflanze-zauberstaub; nebel; unsichtbar",
+        )
+        combinedChest.setAttribute("data-reward", "gold")
+
+        document
+          .getElementById("fixture-slide")
+          .append(flashlight, inlineChest, combinedChest)
       }
 
       window.__LOOT_E2E_FIXTURE__ = { variant, version }

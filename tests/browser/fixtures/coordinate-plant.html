@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Loot Coordinate Plant</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      font-family: system-ui, sans-serif;
+    }
+
+    body {
+      padding: 2rem;
+    }
+
+    .lia-slide__content {
+      display: grid;
+      gap: 1.5rem;
+      justify-items: start;
+    }
+
+    .jxgbox {
+      width: 700px;
+      height: 420px;
+      border: 2px solid #334155;
+      background:
+        linear-gradient(#dbeafe 1px, transparent 1px),
+        linear-gradient(90deg, #dbeafe 1px, transparent 1px),
+        #fff;
+      background-size: 35px 35px;
+      box-sizing: border-box;
+      position: relative;
+    }
+  </style>
+</head>
+<body>
+  <nav id="lia-toc" hidden aria-hidden="true">
+    <div class="lia-toc__content">
+      <a id="focusedToc" class="lia-toc__link" href="#1">Lia9_02</a>
+    </div>
+  </nav>
+
+  <main class="lia-slide__content">
+    <h1>Aufgabe 3: Geometrie im Koordinatensystem</h1>
+
+    <lia-loot-tool
+      id="fixture-watering-can"
+      data-tool-id="lia9-02-watering-can"
+      data-tool="watering-can"
+      data-options="anker"
+    ></lia-loot-tool>
+
+    <div id="L902V3" class="jxgbox" aria-label="Koordinatensystem"></div>
+
+    <lia-loot-chest
+      id="fixture-coordinate-chest"
+      data-chest-id="lia9-02-coordinate-chest"
+      data-placement="2; coordinate; pflanze; anker"
+      data-reward="gold"
+    ></lia-loot-chest>
+  </main>
+
+  <script>
+    ;(function prepareFixture() {
+      const course = [
+        "# Lia9_02",
+        "@Ressourcen(0, 0, 0)",
+        "@Giesskanne(anker)",
+        "## Aufgabe 3: Geometrie im Koordinatensystem",
+        "@Schatztruhe(2; coordinate; pflanze; anker)",
+        "@Koordinatensystem(`xmin=-5;xmax=7;ymin=-5;ymax=7;width=700;id=L902V3;1;1;1`)",
+      ].join("\n")
+
+      const board = document.getElementById("L902V3")
+      window.__coord = {}
+      window.__boards = {
+        L902V3: { containerObj: board },
+      }
+      window.LIA = {
+        defaultCourseURL: new URL(
+          "/tests/browser/fixtures/coordinate-plant.md",
+          window.location.origin,
+        ).href,
+        fetch: async function fetchCourse() {
+          return new Response(course, {
+            headers: { "content-type": "text/markdown; charset=utf-8" },
+            status: 200,
+          })
+        },
+      }
+    })()
+  </script>
+  <script src="/dist/index.js"></script>
+</body>
+</html>

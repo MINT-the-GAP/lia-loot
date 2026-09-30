@@ -112,6 +112,20 @@ test('prüft den lokalen Containerkurs und den öffentlichen Makrovertrag', asyn
     /^@Giesskanne: @LootWerkzeug_\(@uid,watering-can,@0\)$/mu,
   )
   expect(templateHeader).toMatch(
+    /^@Axt: @LootWerkzeug_\(@uid,axe,@0\)$/mu,
+  )
+  expect(templateHeader).toMatch(/^@Kiste: @LootKiste_\(@uid\)$/mu)
+  expect(templateHeader).toMatch(
+    /^@Taschenlampe: @LootTaschenlampe_\(@uid,@0\)$/mu,
+  )
+  expect(templateHeader).toMatch(
+    /^@Nebel: @LootNebel_\(@uid,`@0`,`@1`,`@2`,`@3`,`@4`,`@5`,`@6`,`@7`,`@8`\)$/mu,
+  )
+  expect(templateHeader).toMatch(
+    /^@NebelStart: @LootNebelStart_\(@uid\)$/mu,
+  )
+  expect(templateHeader).toMatch(/^@NebelEnd: @LootNebelEnd_$/mu)
+  expect(templateHeader).toMatch(
     /^@Erdhaufen: @LootRevealStart_\(@uid,erde,@0\)$/mu,
   )
   expect(templateHeader).toMatch(

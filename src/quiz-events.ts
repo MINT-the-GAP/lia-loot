@@ -8,12 +8,14 @@ const RESOLVE_SELECTOR = ".lia-quiz__resolve"
 
 export interface QuizEventHandlers {
   active(): boolean
+  checkSettled?(quiz: Element): void
   failed(): void
   hint(count: number): void
+  includeSection?(section: number): boolean
   solved(quiz: Element): void
   allSolved?(): void
   courseCompleted(): boolean
-  useCheck(): boolean
+  useCheck(quiz: Element): boolean
   useHint(): boolean
   useResolve(): boolean
 }
@@ -333,7 +335,11 @@ export function installQuizEventTracking(handlers: QuizEventHandlers): void {
   let reportAfterCapture = false
 
   const captureCourseProgress = (): void => {
-    const sections = expectedCourseSections()
+    const sections = new Set(
+      [...expectedCourseSections()].filter(
+        (section) => handlers.includeSection?.(section) !== false,
+      ),
+    )
     if (sections.size === 0) return
     courseProgress.expectSections(sections)
 
@@ -388,6 +394,9 @@ export function installQuizEventTracking(handlers: QuizEventHandlers): void {
     typeof MutationObserver !== "undefined"
   ) {
     observeLiaSlideActivity(() => scheduleCapture(true))
+    document.addEventListener("lia-loot:reserve-slides-changed", () => {
+      scheduleCapture(false)
+    })
     const catalogObserver = new MutationObserver((mutations) => {
       if (
         mutations.some(
@@ -445,7 +454,7 @@ export function installQuizEventTracking(handlers: QuizEventHandlers): void {
           blockClick(event)
           return
         }
-        if (!handlers.useCheck()) {
+        if (!handlers.useCheck(quiz)) {
           blockClick(event)
           return
         }
@@ -470,17 +479,24 @@ export function installQuizEventTracking(handlers: QuizEventHandlers): void {
           },
           (result) => {
             clearPending()
-            if (result === "failed") {
-              handlers.failed()
-            } else if (result === "resolved") {
-              handlers.failed()
-              reportCourseCompletion()
-            } else {
-              handlers.solved(quiz)
-              reportCourseCompletion()
+            try {
+              if (result === "failed") {
+                handlers.failed()
+              } else if (result === "resolved") {
+                handlers.failed()
+                reportCourseCompletion()
+              } else {
+                handlers.solved(quiz)
+                reportCourseCompletion()
+              }
+            } finally {
+              handlers.checkSettled?.(quiz)
             }
           },
-          clearPending,
+          () => {
+            clearPending()
+            handlers.checkSettled?.(quiz)
+          },
         )
         return
       }

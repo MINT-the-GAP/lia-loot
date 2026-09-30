@@ -104,7 +104,7 @@ test('scheiternde Quellaufloesung blendet die Gartenabsaetze nicht aus', async (
     const original = window.fetch.bind(window)
     window.__gardenSourceFailures = 0
     window.fetch = (input, options) => {
-      if (String(input).includes('reveal-inline-garden.md') && options?.cache === 'no-cache') {
+      if (String(input).includes('reveal-inline-garden.md') && options?.cache === 'force-cache') {
         window.__gardenSourceFailures += 1
         return Promise.reject(new Error('Injected course source failure'))
       }

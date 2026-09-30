@@ -17,6 +17,10 @@ import {
   type ToolKind,
 } from "./exploration-options.ts"
 import {
+  AXE_TIER_DETAILS,
+  type AxeTier,
+} from "./axe.ts"
+import {
   createExplorationToolGraphic,
   createRevealCoverGraphic,
 } from "./exploration-visual.ts"
@@ -76,10 +80,17 @@ const TOOL_DETAILS: Readonly<
     label: "Gießkanne",
     slug: "watering-can",
   },
+  axe: {
+    collectLabel: "Steinaxt einsammeln",
+    collectedMessage: "Steinaxt gefunden.",
+    label: "Steinaxt",
+    slug: "axe",
+  },
 }
 
 export interface ExplorationController {
   activeTool(): ToolKind | null
+  axeTier(): AxeTier
   collectTool(kind: ToolKind): boolean
   digLayer(layerId: string): boolean
   isLayerDug(layerId: string): boolean
@@ -976,10 +987,11 @@ function handleToolPickupClick(event: MouseEvent): void {
   const keyboardActivated = event.detail === 0
   button.disabled = true
   button.classList.add("loot-exploration-pickup--collected")
-  button.setAttribute("aria-label", `${TOOL_DETAILS[kind].label} gefunden`)
+  const label = toolDisplayLabel(kind)
+  button.setAttribute("aria-label", `${label} gefunden`)
   renderActionTools()
   announce(
-    `${TOOL_DETAILS[kind].collectedMessage} Du kannst sie jetzt in der Leiste aktivieren.`,
+    `${label} gefunden. Du kannst sie jetzt in der Leiste aktivieren.`,
   )
   syncAllToolPickups()
   window.setTimeout(() => {
@@ -1005,9 +1017,12 @@ function createToolPickup(
   button.className = `loot-exploration-pickup loot-exploration-pickup--${kind}`
   button.dataset.lootToolPickup = toolId
   button.dataset.lootToolKind = kind
-  button.setAttribute("aria-label", TOOL_DETAILS[kind].collectLabel)
+  const axeTier = controller?.axeTier() ?? "stone"
+  const label =
+    kind === "axe" ? AXE_TIER_DETAILS[axeTier].label : TOOL_DETAILS[kind].label
+  button.setAttribute("aria-label", label + " einsammeln")
   button.append(
-    createExplorationToolGraphic(kind, ownerDocument),
+    createExplorationToolGraphic(kind, ownerDocument, axeTier),
     rewardBadge(ownerDocument),
   )
   bindToolPickupButton(button)
@@ -1103,7 +1118,15 @@ function focusToolControl(kind: ToolKind): void {
 }
 
 function toolControlLabel(kind: ToolKind, active: boolean): string {
-  return `${TOOL_DETAILS[kind].label} ${active ? "deaktivieren" : "aktivieren"}`
+  return `${toolDisplayLabel(kind)} ${active ? "deaktivieren" : "aktivieren"}`
+}
+
+function toolDisplayLabel(kind: ToolKind): string {
+  return (
+    kind === "axe"
+      ? AXE_TIER_DETAILS[controller?.axeTier() ?? "stone"].label
+      : TOOL_DETAILS[kind].label
+  )
 }
 
 function createToolControl(kind: ToolKind): HTMLButtonElement {
@@ -1112,7 +1135,13 @@ function createToolControl(kind: ToolKind): HTMLButtonElement {
   button.type = "button"
   button.className = `loot-exploration-tool loot-exploration-tool--${kind}`
   button.dataset.lootToolControl = kind
-  button.append(createExplorationToolGraphic(kind))
+  button.append(
+    createExplorationToolGraphic(
+      kind,
+      document,
+      controller?.axeTier() ?? "stone",
+    ),
+  )
   button.addEventListener("click", () => {
     if (!controller) return
     const active = controller.activeTool()
@@ -1120,8 +1149,8 @@ function createToolControl(kind: ToolKind): HTMLButtonElement {
     renderActionTools()
     announce(
       controller.activeTool() === kind
-        ? `${TOOL_DETAILS[kind].label} aktiviert.`
-        : `${TOOL_DETAILS[kind].label} deaktiviert.`,
+        ? `${toolDisplayLabel(kind)} aktiviert.`
+        : `${toolDisplayLabel(kind)} deaktiviert.`,
     )
   })
   return button
@@ -1160,6 +1189,15 @@ function renderActionTools(): void {
     if (!button) {
       button = createToolControl(kind)
       bar.appendChild(button)
+    }
+    if (kind === "axe") {
+      const axeTier = controller.axeTier()
+      const graphic = button.querySelector<SVGSVGElement>(".loot-axe-graphic")
+      if (graphic?.dataset.lootAxeTier !== axeTier) {
+        button.replaceChildren(
+          createExplorationToolGraphic("axe", document, axeTier),
+        )
+      }
     }
     const active = activeTool === kind
     button.classList.toggle("loot-exploration-tool--active", active)
@@ -1484,4 +1522,9 @@ export function installExploration(
   renderActionTools()
   syncAllRevealContainers()
   syncAllToolPickups()
+}
+
+export function refreshExploration(): void {
+  renderActionTools()
+  syncExplorationRuntime()
 }

@@ -1,5 +1,8 @@
 import type { KeyColor, KeyCounts } from "./key-colors"
 import type { InlineRevealRenderingApi } from "./inline-reveal"
+import type { GiftRenderingApi } from "./gift"
+import type { WoodCrateRenderingApi } from "./wood-crate"
+import type { CatFoodRenderingApi } from "./cat-food"
 
 export type TrophyTier = "gold" | "silver" | "copper" | null
 export const RESOURCE_KINDS = ["gold", "diamonds", "energy"] as const
@@ -83,6 +86,36 @@ export interface MagnifierState {
   collected: boolean
 }
 
+export interface FlashlightState {
+  version: 1
+  collected: boolean
+}
+
+export interface CatCompanionState {
+  version: 3
+  unlocked: import("./cat-catalog.ts").CatVariant[]
+  selected: import("./cat-catalog.ts").CatVariant | null
+  unlockedCollars: import("./cat-collar.ts").CatCollarColor[]
+  selectedCollar: import("./cat-collar.ts").CatCollarColor | null
+}
+
+export interface CatFoodState {
+  version: 1
+  collected: string[]
+  fed: string[]
+}
+
+export interface GiftState {
+  version: 1
+  opened: string[]
+}
+
+export interface WoodCrateState {
+  version: 2
+  broken: string[]
+  damage: Record<string, number>
+}
+
 export interface AchievementState {
   version: 1
   unlocked: AchievementId[]
@@ -122,6 +155,9 @@ export interface LootRuntimeState {
 declare global {
   interface Window {
     __LIA_LOOT_HIGHSCORE__?: HighscoreApi
+    __LIA_LOOT_GIFTS__?: GiftRenderingApi
+    __LIA_LOOT_WOOD_CRATES__?: WoodCrateRenderingApi
+    __LIA_LOOT_CAT_FOOD__?: CatFoodRenderingApi
     __LIA_LOOT_INLINE_REVEALS__?: InlineRevealRenderingApi
     __LIA_LOOT_RUNTIME__?: LootRuntimeState
   }

@@ -410,6 +410,52 @@ test("Theme- und Moduswerte sind je Achse OR und default entspricht tuerkis", as
   await expect(turquoiseChest).toBeHidden()
 })
 
+test("einzelne Inline- und Menükisten verbinden Nebel mit weiteren Schichten", async ({
+  page,
+}) => {
+  await page.goto(fixtureUrl + "?case=fog&version=fog-chests")
+  await waitForRuntime(page)
+
+  const inlineTarget = page.locator(
+    "#fog-inline-chest[data-loot-fog-direct]",
+  )
+  const menuTarget = page.locator(
+    '[data-loot-chest-portal][data-loot-chest-location="menu"]' +
+      '[data-loot-fog-direct]',
+  )
+  for (const target of [inlineTarget, menuTarget]) {
+    await expect(target).toHaveAttribute("data-loot-fog-blocked", "true")
+    await expect(target).toHaveClass(/\bloot-fog-target--range\b/u)
+    expect(
+      await target.evaluate((element) => getComputedStyle(element).clipPath),
+    ).toContain("circle(0px")
+  }
+  await expect(page.locator(".loot-fog-overlay:visible")).toHaveCount(2)
+
+  const combined = page.locator("#fog-combined-chest")
+  const soil = combined.locator('[data-loot-reveal-kind="soil"]')
+  const plant = combined.locator('[data-loot-reveal-kind="plant"]')
+  const finalContent = combined.locator(
+    '[data-loot-reveal-final-content][data-loot-fog-direct]',
+  )
+  await expect(soil).toHaveAttribute("data-loot-reveal-concealment", "solid")
+  await expect(plant).toHaveAttribute("data-loot-reveal-concealment", "dust")
+  await expect(finalContent).toHaveAttribute("data-loot-concealment", "solid")
+
+  await page.getByRole("button", { name: "Taschenlampe einsammeln" }).click()
+  const tool = page.locator("#lia-loot-flashlight-tool")
+  await tool.click()
+
+  for (const target of [inlineTarget, menuTarget]) {
+    const box = await target.boundingBox()
+    expect(box).not.toBeNull()
+    if (!box) throw new Error("Die Nebelkiste hat keine Geometrie.")
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await expect(target).toHaveClass(/\bloot-fog-target--under-beam\b/u)
+    await expect(target.locator("[data-loot-chest-button]")).toBeVisible()
+  }
+})
+
 test("direkte Surface-Layer werden außen nach innen freigelegt und bleiben über Remount eindeutig", async ({
   page,
 }) => {

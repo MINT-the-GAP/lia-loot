@@ -209,8 +209,8 @@ test("hält fremdabhängige README-Beispiele aus dem Livekatalog heraus", () => 
     /^ {0,3}#{1,6}(?:\s+|$)/u.test(line)
   ).length
   assert.deepEqual(portalCalls, [
-    { macro: "Portal", section: 10, target: 12 },
-    { macro: "Einwegportal", section: 10, target: 9 },
+    { macro: "Portal", section: 15, target: 17 },
+    { macro: "Einwegportal", section: 15, target: 10 },
   ])
   assert.ok(
     portalCalls.every(
@@ -220,7 +220,7 @@ test("hält fremdabhängige README-Beispiele aus dem Livekatalog heraus", () => 
   )
   assert.match(
     markdown,
-    /^@Portal\(12\)\r?\n@Schloss\(portal, blau\)$/mu,
+    /^@Portal\(17\)\r?\n@Schloss\(portal, blau\)$/mu,
   )
 })
 

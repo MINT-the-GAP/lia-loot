@@ -52,6 +52,12 @@ test("leitet Item-Verbergungen aus der konkreten Fundinstanz ab", () => {
   )
   assert.equal(
     concealmentIdOf(
+      fakeElement({}, { "data-loot-flashlight-button": "flashlight:1:inline" }),
+    ),
+    "flashlight:flashlight:1:inline",
+  )
+  assert.equal(
+    concealmentIdOf(
       fakeElement({}, { "data-loot-tool-pickup": "tool:shovel:1" }),
     ),
     "tool:tool:shovel:1",

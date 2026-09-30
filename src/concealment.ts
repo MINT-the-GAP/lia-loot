@@ -10,8 +10,10 @@ const CONCEALED_ITEM_ID_SELECTORS = [
   ["data-loot-chest-button", "chest"],
   ["data-loot-key-button", "key"],
   ["data-loot-magnifier-button", "magnifier"],
+  ["data-loot-flashlight-button", "flashlight"],
   ["data-loot-tool-pickup", "tool"],
   ["data-loot-puzzle-pickup", "puzzle"],
+  ["data-loot-bonus-pickup", "bonus"],
 ] as const
 
 const MODE_BY_OPTION: Readonly<Record<string, ConcealmentMode>> = {

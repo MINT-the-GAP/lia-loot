@@ -1,7 +1,39 @@
 import { AchievementManager } from "./achievements"
 import { showAchievement } from "./achievement-overlay"
 import { AchievementStore } from "./achievement-store"
+import {
+  AXE_TIER_DETAILS,
+  axeTierForUnlock,
+} from "./axe"
+import { installAtlas, refreshAtlas } from "./atlas"
+import {
+  installBonusPickups,
+  refreshBonusPickups,
+} from "./bonus-pickup"
+import {
+  installCatCompanion,
+  notifyCatItemFound,
+  notifyCatTaskSolved,
+  refreshCatCompanion,
+} from "./cat"
+import { catCollarLabel } from "./cat-collar"
+import { CatCompanionStore } from "./cat-store"
+import { installCatFood } from "./cat-food"
+import { CatFoodStore } from "./cat-food-store"
 import { KeyInventoryStore } from "./inventory-store"
+import {
+  FLASHLIGHT_RADIUS,
+  installFlashlight,
+  refreshFlashlight,
+} from "./flashlight"
+import { FlashlightStore } from "./flashlight-store"
+import { installGifts } from "./gift"
+import { GiftStore } from "./gift-store"
+import {
+  installWoodCrates,
+  refreshWoodCrates,
+} from "./wood-crate"
+import { WoodCrateStore } from "./wood-crate-store"
 import { installInlineRevealRendering } from "./inline-reveal"
 import { KEY_COLOR_DETAILS } from "./key-colors"
 import {
@@ -10,9 +42,13 @@ import {
   renderKeyInventory,
 } from "./key-inventory-bar"
 import { installKeyPickups } from "./key-pickup"
-import { installMagnifier } from "./magnifier"
+import {
+  installMagnifier,
+  MAGNIFIER_RADIUS,
+  refreshMagnifier,
+} from "./magnifier"
 import { MagnifierStore } from "./magnifier-store"
-import { installExploration } from "./exploration"
+import { installExploration, refreshExploration } from "./exploration"
 import { ExplorationStore } from "./exploration-store"
 import {
   installLootIf,
@@ -39,11 +75,31 @@ import {
 } from "./resource-bar"
 import { ResourceStore } from "./resource-store"
 import { parseResourceOptions } from "./resource-options"
+import {
+  deferReserveEntryForQuiz,
+  installReserveSlides,
+  reserveQuizCheckIsFree,
+  reserveSlideCountsForCourseProgress,
+  rewardReserveQuiz,
+  settleReserveQuizCheck,
+} from "./reserve-slide"
 import { calculateScore, createConfig } from "./score"
 import { installSecretSlides } from "./secret-slides"
 import { installSlidePortals } from "./slide-portal"
-import { installPuzzles } from "./puzzle-runtime"
+import { installPuzzles, refreshPuzzles } from "./puzzle-runtime"
 import { PuzzleStore } from "./puzzle-store"
+import {
+  installShops,
+  refreshShops,
+  type ShopAvailability,
+  type ShopPurchaseResult,
+} from "./shop"
+import type { ShopOffer } from "./shop-options"
+import {
+  applyPercentageBonus,
+  percentageRadius,
+  ShopStore,
+} from "./shop-store"
 import { injectStyles } from "./style"
 import { HighscoreStore } from "./store"
 import { installTimerEventTracking } from "./timer-events"
@@ -59,11 +115,17 @@ function boot(): void {
   const resourceStore = new ResourceStore()
   const store = new HighscoreStore(() => resourceStore.scoreBonus())
   const keyInventoryStore = new KeyInventoryStore()
+  const flashlightStore = new FlashlightStore()
+  const giftStore = new GiftStore()
+  const woodCrateStore = new WoodCrateStore()
   const magnifierStore = new MagnifierStore()
   const explorationStore = new ExplorationStore()
   const lootIfStore = new LootIfStore()
   const achievementStore = new AchievementStore()
   const puzzleStore = new PuzzleStore()
+  const shopStore = new ShopStore()
+  const catStore = new CatCompanionStore()
+  const catFoodStore = new CatFoodStore()
   const achievements = new AchievementManager(
     achievementStore,
     showAchievement,
@@ -92,6 +154,7 @@ function boot(): void {
       )
     }
     refreshLootIf()
+    refreshShops()
     return allowed
   }
 
@@ -100,25 +163,31 @@ function boot(): void {
     reward: ResourceKind,
     amount: number,
   ): boolean => {
-    if (!resourceStore.collectChest(chestId, reward, amount)) return false
+    const rewardedAmount =
+      reward === "energy"
+        ? applyPercentageBonus(amount, shopStore.perk("energy-chest"))
+        : amount
+    if (!resourceStore.collectChest(chestId, reward, rewardedAmount)) return false
     const resources = resourceStore.state()
     if (!resources) return false
     achievements.chestCollected(resourceStore.collectedChestCounts())
     renderResources(resources.gold, resources.diamonds, resources.energy)
     announceResource(
-      amount === 1
+      rewardedAmount === 1
         ? reward === "diamonds"
           ? "Diamanttruhe geöffnet: einen Diamanten erhalten."
           : reward === "energy"
             ? "Energiekiste geöffnet: einen Energiepunkt erhalten."
             : "Schatztruhe geöffnet: eine Goldmünze erhalten."
         : reward === "diamonds"
-          ? "Diamanttruhe geöffnet: " + amount + " Diamanten erhalten."
+          ? "Diamanttruhe geöffnet: " + rewardedAmount + " Diamanten erhalten."
           : reward === "energy"
-            ? "Energiekiste geöffnet: " + amount + " Energiepunkte erhalten."
-            : "Schatztruhe geöffnet: " + amount + " Goldmünzen erhalten.",
+            ? "Energiekiste geöffnet: " + rewardedAmount + " Energiepunkte erhalten."
+            : "Schatztruhe geöffnet: " + rewardedAmount + " Goldmünzen erhalten.",
     )
     refreshLootIf()
+    refreshShops()
+    notifyCatItemFound()
     return true
   }
 
@@ -140,6 +209,7 @@ function boot(): void {
     renderResources(resources.gold, resources.diamonds, resources.energy)
     refreshTreasureChests()
     refreshLootIf()
+    refreshShops()
   }
 
   const api: HighscoreApi = {
@@ -220,6 +290,43 @@ function boot(): void {
   }
 
   injectStyles()
+  installGifts({
+    isOpened: (giftId) => giftStore.isOpened(giftId),
+    open: (giftId) => giftStore.open(giftId),
+  })
+  installWoodCrates({
+    activeTool: () => explorationStore.activeTool(),
+    axeTier: () => shopStore.axeTier(),
+    damage: (crateId) => woodCrateStore.damage(crateId),
+    isAxeCollected: () => explorationStore.isToolCollected("axe"),
+    isBroken: (crateId) => woodCrateStore.isBroken(crateId),
+    strike: (crateId) =>
+      woodCrateStore.strike(
+        crateId,
+        AXE_TIER_DETAILS[shopStore.axeTier()].power,
+      ),
+  })
+  installCatCompanion({
+    collar: () => catStore.selectedCollar(),
+    collars: () => catStore.unlockedCollars(),
+    collected: () => catStore.isCollected(),
+    collectCollar: (color) => catStore.collectCollar(color),
+    collect: (variant) => catStore.collect(variant),
+    isCollarUnlocked: (color) => catStore.isCollarUnlocked(color),
+    isUnlocked: (variant) => catStore.isUnlocked(variant),
+    selectCollar: (color) => catStore.selectCollar(color),
+    select: (variant) => catStore.select(variant),
+    selected: () => catStore.selectedVariant(),
+    unlocked: () => catStore.unlockedVariants(),
+  })
+  installCatFood({
+    availableIds: () => catFoodStore.availableIds(),
+    collect: (foodId) => catFoodStore.collect(foodId),
+    feed: (foodId) => catFoodStore.feed(foodId),
+    isCatCollected: () => catStore.isCollected(),
+    isCollected: (foodId) => catFoodStore.isCollected(foodId),
+    isFed: (foodId) => catFoodStore.isFed(foodId),
+  })
   installLootIf(
     {
       chestCounts: () => resourceStore.collectedChestCounts(),
@@ -234,8 +341,13 @@ function boot(): void {
     catalogReady: (total, solved) => {
       achievements.puzzleCatalogReady(total, solved)
       refreshLootIf()
+      refreshShops()
     },
-    changed: refreshLootIf,
+    changed: () => {
+      refreshLootIf()
+      refreshShops()
+    },
+    pieceCollected: notifyCatItemFound,
     gateSolved: (solved) => {
       achievements.puzzleGateSolved(solved)
       refreshLootIf()
@@ -246,6 +358,22 @@ function boot(): void {
       achievements.secretSlideFound()
       recordLootIfSecretSlideVisited()
     },
+  })
+  installReserveSlides({
+    currentEnergy: () => resourceStore.state()?.energy ?? null,
+    rewardEnergy: (amount) => {
+      if (!resourceStore.exchange({}, { energy: amount })) return false
+      const resources = resourceStore.state()
+      if (!resources) return false
+      renderResources(resources.gold, resources.diamonds, resources.energy)
+      refreshLootIf()
+      refreshShops()
+      return true
+    },
+    subscribeEnergy: (listener) =>
+      resourceStore.subscribe((previous, current) => {
+        listener(previous?.energy ?? null, current?.energy ?? null)
+      }),
   })
   installSlidePortals()
 
@@ -299,7 +427,11 @@ function boot(): void {
     collected: () => magnifierStore.isCollected(),
     collect: () => {
       const collected = magnifierStore.collect()
-      if (collected) refreshLootIf()
+      if (collected) {
+        refreshLootIf()
+        refreshShops()
+        notifyCatItemFound()
+      }
       return collected
     },
     find: (concealmentId, mode) => {
@@ -312,11 +444,41 @@ function boot(): void {
           : exploration.foundInvisibleObjects.length,
       )
     },
+    radius: () =>
+      percentageRadius(
+        MAGNIFIER_RADIUS,
+        shopStore.perk("magnifier-radius"),
+      ),
+  })
+
+  installFlashlight({
+    collected: () => flashlightStore.isCollected(),
+    collect: () => {
+      const collected = flashlightStore.collect()
+      if (collected) {
+        refreshShops()
+        notifyCatItemFound()
+      }
+      return collected
+    },
+    radius: () =>
+      percentageRadius(
+        FLASHLIGHT_RADIUS,
+        shopStore.perk("flashlight-radius"),
+      ),
   })
 
   installExploration({
     activeTool: () => explorationStore.activeTool(),
-    collectTool: (kind) => explorationStore.collectTool(kind),
+    axeTier: () => shopStore.axeTier(),
+    collectTool: (kind) => {
+      const collected = explorationStore.collectTool(kind)
+      if (collected) {
+        refreshShops()
+        notifyCatItemFound()
+      }
+      return collected
+    },
     digLayer: (layerId) => {
       if (!explorationStore.digLayer(layerId)) return false
       achievements.soilDug(explorationStore.state().dugLayers.length)
@@ -335,6 +497,245 @@ function boot(): void {
       )
       return true
     },
+  })
+
+  const shopAvailability = (
+    purchaseId: string,
+    offer: ShopOffer,
+  ): ShopAvailability => {
+    if (shopStore.isPurchased(purchaseId)) {
+      return {
+        message: "Dieses Angebot wurde bereits gekauft.",
+        state: "purchased",
+      }
+    }
+    if (offer.product.kind === "atlas" && shopStore.hasUnlock("atlas")) {
+      return {
+        message: "Die Atlaskarte ist bereits im Inventar.",
+        state: "owned",
+      }
+    }
+    if (
+      offer.product.kind === "collar" &&
+      catStore.isCollarUnlocked(offer.product.color)
+    ) {
+      return {
+        message: "Dieses Katzenhalsband ist bereits freigeschaltet.",
+        state: "owned",
+      }
+    }
+    if (
+      offer.product.kind === "unlock" &&
+      shopStore.hasEffectiveUnlock(offer.product.unlock)
+    ) {
+      const axeTier = axeTierForUnlock(offer.product.unlock)
+      return {
+        message: axeTier
+          ? "Diese oder eine bessere Axtstufe ist bereits freigeschaltet."
+          : "Dieser Atlas-Perk ist bereits freigeschaltet.",
+        state: "owned",
+      }
+    }
+    if (
+      offer.product.kind === "unlock" &&
+      !axeTierForUnlock(offer.product.unlock) &&
+      !shopStore.hasUnlock("atlas")
+    ) {
+      return {
+        message: "Kaufe zuerst die Atlaskarte.",
+        state: "unavailable",
+      }
+    }
+    const resources = resourceStore.state()
+    if (!resources) {
+      return {
+        message: "Aktiviere zuerst @Ressourcen(...), damit der Shop Preise abbuchen kann.",
+        state: "unavailable",
+      }
+    }
+    if (
+      (offer.price.energy > 0 ||
+        (offer.product.kind === "resource" &&
+          offer.product.resource === "energy")) &&
+      resources.energy === null
+    ) {
+      return {
+        message: "Dieses Angebot benötigt den Energiebestand von @Ressourcen(...).",
+        state: "unavailable",
+      }
+    }
+    if (offer.product.kind === "tool") {
+      const owned =
+        offer.product.tool === "magnifier"
+          ? magnifierStore.isCollected()
+          : offer.product.tool === "flashlight"
+            ? flashlightStore.isCollected()
+            : explorationStore.isToolCollected(offer.product.tool)
+      if (owned) {
+        return {
+          message: "Dieses Werkzeug ist bereits im Inventar.",
+          state: "owned",
+        }
+      }
+    }
+    if (offer.product.kind === "puzzle-piece") {
+      if (
+        puzzleStore.isPieceCollected(
+          offer.product.color,
+          offer.product.number,
+        )
+      ) {
+        return {
+          message: "Dieses Puzzleteil ist bereits im Inventar.",
+          state: "owned",
+        }
+      }
+      if (
+        !puzzleStore.canCollectPiece(
+          offer.product.color,
+          offer.product.number,
+        )
+      ) {
+        return {
+          message: "Das Puzzleteil gehört zu keinem gültig konfigurierten Puzzletor.",
+          state: "unavailable",
+        }
+      }
+    }
+    if (!resourceStore.canAfford(offer.price)) {
+      return {
+        message: "Für dieses Angebot fehlen Ressourcen.",
+        state: "insufficient",
+      }
+    }
+    return { message: "Angebot kaufen.", state: "available" }
+  }
+
+  const buyShopOffer = (
+    purchaseId: string,
+    offer: ShopOffer,
+  ): ShopPurchaseResult => {
+    const availability = shopAvailability(purchaseId, offer)
+    if (availability.state !== "available") {
+      return { message: availability.message, ok: false }
+    }
+
+    const product = offer.product
+    let granted = false
+    if (product.kind === "resource") {
+      granted = resourceStore.exchange(offer.price, {
+        [product.resource]: product.amount,
+      })
+    } else if (resourceStore.exchange(offer.price)) {
+      granted =
+        product.kind === "perk"
+          ? true
+          : product.kind === "collar"
+            ? catStore.collectCollar(product.color)
+          : product.kind === "atlas" || product.kind === "unlock"
+            ? true
+          : product.kind === "puzzle-piece"
+            ? puzzleStore.collectPiece(product.color, product.number)
+            : product.tool === "magnifier"
+              ? magnifierStore.collect()
+              : product.tool === "flashlight"
+                ? flashlightStore.collect()
+                : explorationStore.collectTool(product.tool)
+    }
+
+    if (!granted) {
+      return {
+        message: "Der Kauf konnte nicht abgeschlossen werden.",
+        ok: false,
+      }
+    }
+    const recorded = shopStore.recordPurchase(
+      purchaseId,
+      product.kind === "perk"
+        ? { kind: "perk", perk: product.perk, percent: product.percent }
+        : product.kind === "collar"
+          ? { kind: "collar", color: product.color }
+        : product.kind === "atlas" || product.kind === "unlock"
+          ? { kind: "unlock", unlock: product.unlock }
+          : undefined,
+    )
+    if (!recorded) {
+      return { message: "Der Kauf war bereits verbucht.", ok: false }
+    }
+
+    const resources = resourceStore.state()
+    if (resources) {
+      renderResources(resources.gold, resources.diamonds, resources.energy)
+    }
+    refreshMagnifier()
+    refreshFlashlight()
+    refreshExploration()
+    refreshWoodCrates()
+    refreshPuzzles()
+    refreshAtlas()
+    refreshCatCompanion()
+    refreshBonusPickups()
+    refreshLootIf()
+    refreshShops()
+    const message =
+      product.kind === "atlas"
+        ? "Atlaskarte gekauft und ins Inventar gelegt."
+        : product.kind === "collar"
+          ? `${catCollarLabel(product.color)} gekauft und der Pixelkatze angelegt.`
+        : product.kind === "unlock"
+          ? axeTierForUnlock(product.unlock)
+            ? `${AXE_TIER_DETAILS[axeTierForUnlock(product.unlock)!].label} gekauft und freigeschaltet.`
+            : "Atlas-Perk gekauft und freigeschaltet."
+          : product.kind === "perk"
+        ? `Perk gekauft: +${product.percent} %.`
+        : "Gekauft und sofort ins Inventar übernommen."
+    announceResource(message)
+    return { message, ok: true }
+  }
+
+  installAtlas({
+    achievements: () => achievements.progress(),
+    courseCountsUnlocked: () => shopStore.hasUnlock("atlas-course-counts"),
+    owned: () => shopStore.hasUnlock("atlas"),
+    runtime: () => ({
+      collectedChestIds: resourceStore.state()?.collectedChests ?? [],
+      exploration: explorationStore.state(),
+      puzzle: puzzleStore.state(),
+      unlockedLockIds: keyInventoryStore.state().unlockedLocks,
+    }),
+    slideInfoUnlocked: () => shopStore.hasUnlock("atlas-slide-info"),
+  })
+
+  installBonusPickups({
+    collect: (id, grant) => {
+      const recorded = shopStore.recordPurchase("pickup:" + id, grant)
+      if (!recorded) return false
+      if (grant.kind === "collar" && !catStore.collectCollar(grant.color)) {
+        return false
+      }
+      refreshMagnifier()
+      refreshFlashlight()
+      refreshExploration()
+      refreshWoodCrates()
+      refreshAtlas()
+      refreshCatCompanion()
+      refreshLootIf()
+      refreshShops()
+      refreshBonusPickups()
+      notifyCatItemFound()
+      return true
+    },
+    collected: (id, grant) =>
+      shopStore.isPurchased("pickup:" + id) ||
+      (grant.kind === "collar" && catStore.isCollarUnlocked(grant.color)) ||
+      (grant.kind === "unlock" &&
+        shopStore.hasEffectiveUnlock(grant.unlock)),
+  })
+
+  installShops({
+    availability: shopAvailability,
+    buy: buyShopOffer,
+    resources: () => resourceStore.state(),
   })
 
   installTreasureChests({
@@ -371,6 +772,7 @@ function boot(): void {
       if (!keyInventoryStore.collectKey(keyId, color)) return false
       renderKeyInventory(keyInventoryStore.state().keys)
       announceKeyFound(KEY_COLOR_DETAILS[color].foundMessage)
+      notifyCatItemFound()
       return true
     },
     focusInventory: focusKeyInventory,
@@ -403,14 +805,24 @@ function boot(): void {
 
   installQuizEventTracking({
     active: () => true,
+    checkSettled: settleReserveQuizCheck,
     failed: () => store.fail(),
     hint: (count) => store.hint(count),
+    includeSection: reserveSlideCountsForCourseProgress,
     solved: (quiz) => {
+      rewardReserveQuiz(quiz)
       recordLootIfQuizSolved(quiz)
+      notifyCatTaskSolved()
     },
     allSolved: () => achievements.quizzesCompleted(),
     courseCompleted: () => api.finish() !== null,
-    useCheck: () => spendResource("energy"),
+    useCheck: (quiz) => {
+      if (reserveQuizCheckIsFree(quiz)) return true
+      deferReserveEntryForQuiz(quiz)
+      const allowed = spendResource("energy")
+      if (!allowed) settleReserveQuizCheck(quiz)
+      return allowed
+    },
     useHint: () => spendResource("gold"),
     useResolve: () => spendResource("diamonds"),
   })

@@ -137,6 +137,15 @@ export class PuzzleStore {
     return true
   }
 
+  canCollectPiece(color: KeyColor, number: number): boolean {
+    const pattern = this.patterns.get(color)
+    return Boolean(
+      this.configured &&
+        pattern?.includes(number) &&
+        !this.current.collected[color].includes(number),
+    )
+  }
+
   isPieceCollected(color: KeyColor, number: number): boolean {
     return this.current.collected[color].includes(number)
   }

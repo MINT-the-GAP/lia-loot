@@ -34,6 +34,58 @@ async function highscoreState(page) {
   })
 }
 
+test("bleibt ohne neue Makros visuell und funktional rückwärtskompatibel", async ({
+  page,
+}) => {
+  test.setTimeout(150_000)
+
+  await page.goto(editorUrl(), {
+    timeout: 30_000,
+    waitUntil: "domcontentloaded",
+  })
+  await expect(
+    page.getByRole("heading", {
+      name: "Erste Highscore-Aufgabe",
+      exact: true,
+    }),
+  ).toBeVisible({ timeout: 55_000 })
+  await expect
+    .poll(
+      () => page.evaluate(() => window.__LIA_LOOT_RUNTIME__?.status ?? null),
+      { timeout: 55_000 },
+    )
+    .toBe("ready")
+
+  await expect(page.locator("lia-loot-shop")).toHaveCount(0)
+  await expect(page.locator("lia-loot-flashlight")).toHaveCount(0)
+  await expect(page.locator("lia-loot-fog, lia-loot-fog-start, lia-loot-fog-end")).toHaveCount(0)
+  await expect(page.locator(".loot-bonus-pickup")).toHaveCount(0)
+  await expect(page.locator(".loot-shop-overlay, .loot-atlas-overlay, .loot-fog-overlay")).toHaveCount(0)
+  const resourceBar = page.locator("#lia-loot-resource-bar")
+  await expect(resourceBar).toHaveClass(/\bloot-resource-bar--empty\b/u)
+  await expect(resourceBar).not.toBeVisible()
+  await expect(page.locator("#lia-loot-atlas-tool, #lia-loot-flashlight-tool")).toHaveCount(0)
+  await expect(page.locator("lia-loot-cat, #lia-loot-cat-companion")).toHaveCount(0)
+  await expect(page.locator("body")).not.toHaveClass(/\bloot-cat-owned\b/u)
+  await expect(page.locator("body")).not.toHaveClass(/\bloot-(?:atlas|flashlight|shop)-open\b/u)
+
+  const quiz = page.locator(".lia-quiz")
+  await expect(quiz).toHaveCount(1)
+  await quiz.getByRole("textbox", { name: "quiz answer" }).fill("11")
+  await expect(quiz.getByRole("textbox", { name: "quiz answer" })).toHaveValue("11")
+
+  await page.locator("#lia-btn-next").click()
+  await expect(
+    page.getByRole("heading", {
+      name: "Zweite Highscore-Aufgabe",
+      exact: true,
+    }),
+  ).toBeVisible()
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  ).toBe(true)
+})
+
 test("zeigt den Highscore erst nach allen gelösten oder aufgelösten Aufgaben", async ({
   browserName,
   page,

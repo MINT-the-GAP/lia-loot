@@ -19,6 +19,7 @@ import {
   parseCourseLockCatalogDeclarations,
   parseCourseLockDeclarations,
   parseCourseResourceDeclaration,
+  parseCourseReserveSlideDeclarations,
   parseCourseSecretSlideDeclarations,
 } from "../src/course-chests.ts"
 
@@ -703,13 +704,41 @@ Text @Geheimfolie
   assert.deepEqual(declarations, [{ section: 0 }])
 })
 
+test("liest Reservefolien mit positiver ganzzahliger Energiebelohnung", () => {
+  const declarations = parseCourseReserveSlideDeclarations(`
+# Kursstart
+@Reservefolie(3)
+
+## Ungültige Reserve
+@Reservefolie(0)
+@Reservefolie(1.5)
+
+## Bedingt
+@lootif(Energie = 0; spawn)
+@Reservefolie(9)
+@Endelootif
+
+## Beispiel
+\`\`\`markdown
+@Reservefolie(7)
+\`\`\`
+`)
+
+  assert.deepEqual(declarations, [
+    { energy: 3, section: 0 },
+    { energy: null, section: 1 },
+    { energy: null, section: 1 },
+  ])
+})
+
 test("katalogisiert alle verdeckten Itemfamilien und multipliziert Portaltruhen", () => {
   const markdown = [
     "# Fundkette",
     "@Unsichtbar(A) und @Zauberstaub(B (C))",
-    "@Schatztruhe(menu; toc; menu; unsichtbar; erde-zauberstaub; pflanze)",
+    "@Schatztruhe(menu; toc; menu; nebel; unsichtbar; erde-zauberstaub; pflanze)",
     "@Schluessel(blau; translator; zauberstaub; erde-unsichtbar)",
     "@Lupe(unsichtbar; pflanze-zauberstaub)",
+    "@Taschenlampe(zauberstaub; erde-unsichtbar)",
     "@Schaufel(erde; zauberstaub)",
     "@Giesskanne(pflanze-unsichtbar)",
     "@Erdhaufen(unsichtbar)",
@@ -720,10 +749,10 @@ test("katalogisiert alle verdeckten Itemfamilien und multipliziert Portaltruhen"
   ].join("\n")
 
   assert.deepEqual(parseCourseAchievementCatalog(markdown), {
-    dust: 7,
+    dust: 8,
     plant: 5,
-    soil: 5,
-    solid: 8,
+    soil: 6,
+    solid: 9,
   })
 })
 
@@ -997,6 +1026,7 @@ test("katalogisiert interne Live-Makros ohne Definitionen mitzuzählen", () => {
     "@LootTruhe_(@uid,menu; toc; erde-unsichtbar; zauberstaub,gold)",
     "@LootSchluessel_(@uid,blau; pflanze-zauberstaub)",
     "@LootLupe_(@uid,unsichtbar)",
+    "@LootTaschenlampe_(@uid,zauberstaub)",
     "@LootWerkzeug_(@uid,shovel,erde; zauberstaub)",
     "@LootRevealStart_(@uid,pflanze,unsichtbar)",
     "@LootVersteckt_(@uid,dust,Text)",
@@ -1004,7 +1034,7 @@ test("katalogisiert interne Live-Makros ohne Definitionen mitzuzählen", () => {
   ].join("\n")
 
   assert.deepEqual(parseCourseAchievementCatalog(markdown), {
-    dust: 5,
+    dust: 6,
     plant: 2,
     soil: 3,
     solid: 4,
@@ -1081,7 +1111,7 @@ test("enthält das geheime Labor als echte Live-Demo außerhalb des Codeblocks",
   const laboratoryHeadings = markdown.match(/^## Das geheime Labor\s*$/gmu) ?? []
 
   assert.equal(laboratoryHeadings.length, 2)
-  assert.deepEqual(declarations, [{ section: 13 }])
+  assert.deepEqual(declarations, [{ section: 18 }])
 })
 
 test("wiederholt die frühe Quelltextladung nach einem vorübergehenden Fehler", async () => {
@@ -1137,6 +1167,41 @@ test("wiederholt die frühe Quelltextladung nach einem vorübergehenden Fehler",
     })
     assert.deepEqual(secretSlides, [{ section: 0 }])
     assert.equal(version, "3.2.1")
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window
+    else globalThis.window = previousWindow
+  }
+})
+
+test("nutzt für Freeze-Links die fragmentlose bereits geladene Kursquelle", async () => {
+  const previousWindow = globalThis.window
+  const courseChests = await import(
+    `../src/course-chests.ts?freeze-source=${Date.now()}`
+  )
+  const requests = []
+  globalThis.window = {
+    location: {
+      href: "https://viewer.test/course/?https%3A%2F%2Fcourses.example%2Fraum.md%23submission%3Dtoken#3",
+      search:
+        "?https%3A%2F%2Fcourses.example%2Fraum.md%23submission%3Dtoken",
+    },
+    fetch: async (input, options) => {
+      requests.push({ input: String(input), options })
+      return {
+        ok: true,
+        text: async () => "<!--\nversion: 4.5.6\n-->\n# Kurs\n",
+      }
+    },
+    setTimeout: (callback) => globalThis.setTimeout(callback, 0),
+    clearTimeout: (timer) => globalThis.clearTimeout(timer),
+  }
+
+  try {
+    assert.equal(await courseChests.discoverCourseVersion(), "4.5.6")
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].input, "https://courses.example/raum.md")
+    assert.equal(requests[0].options.cache, "force-cache")
+    assert.equal(requests[0].options.credentials, "same-origin")
   } finally {
     if (previousWindow === undefined) delete globalThis.window
     else globalThis.window = previousWindow

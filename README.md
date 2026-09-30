@@ -92,8 +92,17 @@ script:   ./dist/index.js
 @Puzzleteil: @LootPuzzleteil_(@uid,@0)
 @Puzzletor: @LootPuzzletor_(@uid,@0)
 @Lupe: @LootLupe_(@uid,@0)
+@Taschenlampe: @LootTaschenlampe_(@uid,@0)
 @Schaufel: @LootWerkzeug_(@uid,shovel,@0)
 @Giesskanne: @LootWerkzeug_(@uid,watering-can,@0)
+@Axt: @LootWerkzeug_(@uid,axe,@0)
+@Shop: @LootShop_(@uid,@0)
+@Atlaskarte: @LootBonus_(@uid,atlas,@0)
+@Perk: @LootBonus_(@uid,perk,@0)
+@Katze: @LootKatze_(@uid,@0)
+@Futter: @LootFutter_(@uid)
+@Geschenk: @LootGeschenk_(@uid)
+@Kiste: @LootKiste_(@uid)
 @Erdhaufen: @LootRevealStart_(@uid,erde,@0)
 @Erdhaufen.inline: @LootRevealInline_(@uid,erde,@1,@0)
 @EndeErdhaufen: @LootRevealEnd_(erde)
@@ -108,8 +117,12 @@ script:   ./dist/index.js
 @Einbahnportal: @LootPortal_(@uid,@0,one-way)
 @Unsichtbar: @LootVersteckt_(@uid,solid,`@0LIALOOTHIDDEN7QARGSEP1X9END@1LIALOOTHIDDEN7QARGSEP2X9END@2LIALOOTHIDDEN7QARGSEP3X9END@3LIALOOTHIDDEN7QARGSEP4X9END@4LIALOOTHIDDEN7QARGSEP5X9END@5LIALOOTHIDDEN7QARGSEP6X9END@6LIALOOTHIDDEN7QARGSEP7X9END@7LIALOOTHIDDEN7QARGSEP8X9END@8LIALOOTHIDDEN7QARGSEP9X9END@9`)
 @Zauberstaub: @LootVersteckt_(@uid,dust,`@0LIALOOTHIDDEN7QARGSEP1X9END@1LIALOOTHIDDEN7QARGSEP2X9END@2LIALOOTHIDDEN7QARGSEP3X9END@3LIALOOTHIDDEN7QARGSEP4X9END@4LIALOOTHIDDEN7QARGSEP5X9END@5LIALOOTHIDDEN7QARGSEP6X9END@6LIALOOTHIDDEN7QARGSEP7X9END@7LIALOOTHIDDEN7QARGSEP8X9END@8LIALOOTHIDDEN7QARGSEP9X9END@9`)
+@Nebel: @LootNebel_(@uid,`@0`,`@1`,`@2`,`@3`,`@4`,`@5`,`@6`,`@7`,`@8`)
+@NebelStart: @LootNebelStart_(@uid)
+@NebelEnd: @LootNebelEnd_
 @Schloss: @LootSchloss_(@uid,@0,@1)
 @Geheimfolie: @LootGeheimfolie_(@uid)
+@Reservefolie: @LootReservefolie_(@uid,@0)
 
 @LootTruhe_
 <lia-keep>
@@ -141,10 +154,103 @@ script:   ./dist/index.js
 </lia-keep>
 @end
 
+@LootTaschenlampe_
+<lia-keep>
+<lia-loot-flashlight data-flashlight-id="@0" data-options="@1"></lia-loot-flashlight>
+</lia-keep>
+@end
+
 @LootWerkzeug_
 <lia-keep>
 <lia-loot-tool data-tool-id='@0' data-tool='@1' data-options='@2'></lia-loot-tool>
 </lia-keep>
+@end
+
+@LootShop_
+<lia-keep>
+<lia-loot-shop data-shop-id='@0' data-options='@1'></lia-loot-shop>
+</lia-keep>
+@end
+
+@LootBonus_
+<lia-keep>
+<lia-loot-bonus data-bonus-id='@0' data-bonus-kind='@1' data-options='@2'></lia-loot-bonus>
+</lia-keep>
+@end
+
+@LootKatze_
+<lia-keep>
+<lia-loot-cat data-cat-id='@0' data-options='@1'></lia-loot-cat>
+</lia-keep>
+@end
+
+@LootFutter_
+<lia-keep>
+<lia-loot-cat-food data-food-id="@0"></lia-loot-cat-food>
+</lia-keep>
+<span data-loot-cat-food-renderer="@0" hidden>
+<script modify="false">
+(function waitForLootCatFood(remaining) {
+  var api = window.__LIA_LOOT_CAT_FOOD__;
+  if (api) {
+    api.render("@0", send);
+    return;
+  }
+  if (remaining > 0) {
+    window.setTimeout(function () { waitForLootCatFood(remaining - 1); }, 50);
+  } else {
+    send.lia("LIA: stop");
+  }
+})(400);
+"LIA: wait"
+</script>
+</span>
+@end
+
+@LootGeschenk_
+<lia-keep>
+<lia-loot-gift data-gift-id="@0"></lia-loot-gift>
+</lia-keep>
+<span data-loot-gift-renderer="@0" hidden>
+<script modify="false">
+(function waitForLootGift(remaining) {
+  var api = window.__LIA_LOOT_GIFTS__;
+  if (api) {
+    api.render("@0", send);
+    return;
+  }
+  if (remaining > 0) {
+    window.setTimeout(function () { waitForLootGift(remaining - 1); }, 50);
+  } else {
+    send.lia("LIA: stop");
+  }
+})(400);
+"LIA: wait"
+</script>
+</span>
+@end
+
+@LootKiste_
+<lia-keep>
+<lia-loot-wood-crate data-crate-id="@0"></lia-loot-wood-crate>
+</lia-keep>
+<span data-loot-wood-crate-renderer="@0" hidden>
+<script modify="false">
+(function waitForLootWoodCrate(remaining) {
+  var api = window.__LIA_LOOT_WOOD_CRATES__;
+  if (api) {
+    api.render("@0", send);
+    return;
+  }
+  if (remaining > 0) {
+    window.setTimeout(function () { waitForLootWoodCrate(remaining - 1); }, 50);
+  } else {
+    send.lia("LIA: stop");
+  }
+})(400);
+"LIA: wait"
+</script>
+</span>
 @end
 
 @LootRevealStart_
@@ -190,6 +296,28 @@ script:   ./dist/index.js
 <lia-loot-hidden data-secret-id="@0" data-loot-concealment="@1" inert aria-hidden="true">@2</lia-loot-hidden>
 @end
 
+@LootNebel_
+<lia-loot-fog data-fog-id="@0"></lia-loot-fog>
+<span data-loot-fog-renderer="@0">
+<script modify="false">
+send.liascript(`@'1LIALOOTHIDDEN7QARGSEP1X9END@'2LIALOOTHIDDEN7QARGSEP2X9END@'3LIALOOTHIDDEN7QARGSEP3X9END@'4LIALOOTHIDDEN7QARGSEP4X9END@'5LIALOOTHIDDEN7QARGSEP5X9END@'6LIALOOTHIDDEN7QARGSEP6X9END@'7LIALOOTHIDDEN7QARGSEP7X9END@'8LIALOOTHIDDEN7QARGSEP8X9END@'9`)
+"LIA: stop"
+</script>
+</span>
+@end
+
+@LootNebelStart_
+<lia-keep>
+<lia-loot-fog-start data-fog-id="@0"></lia-loot-fog-start>
+</lia-keep>
+@end
+
+@LootNebelEnd_
+<lia-keep>
+<lia-loot-fog-end hidden aria-hidden="true"></lia-loot-fog-end>
+</lia-keep>
+@end
+
 @LootSchloss_
 <lia-keep>
 <lia-loot-lock data-lock-id="@0" data-target="@1" data-color="@2"></lia-loot-lock>
@@ -199,6 +327,12 @@ script:   ./dist/index.js
 @LootGeheimfolie_
 <lia-keep>
 <lia-loot-secret-slide data-secret-id="@0"></lia-loot-secret-slide>
+</lia-keep>
+@end
+
+@LootReservefolie_
+<lia-keep>
+<lia-loot-reserve-slide data-reserve-id="@0" data-energy="@1"></lia-loot-reserve-slide>
 </lia-keep>
 @end
 -->
@@ -289,7 +423,8 @@ Der erste Wert ist die Zahl der Goldmünzen, der zweite die Zahl der Diamanten u
 der optionale dritte Zahlenwert der Energiebestand. Jeder gültige Klick auf **Prüfen**
 und jeder erfolgreiche Start über den manuellen `onclick`-Button von lia-timer
 kostet jeweils genau eine Energie. Bei `0` wird die betreffende Aktion vollständig
-blockiert.
+blockiert. Eine mit `@Reservefolie(N)` konfigurierte Notfallfolie kann diesen
+Zustand automatisch auffangen und wieder Energie bereitstellen.
 Jeder geöffnete Hinweis kostet weiterhin eine Goldmünze, jedes Auflösen einen Diamanten.
 Ohne ausreichenden Bestand wird die jeweilige Aktion nicht ausgeführt. Der verbleibende
 Bestand bleibt beim Neuladen innerhalb desselben Browser-Tabs erhalten.
@@ -318,7 +453,181 @@ deaktivierst du den jeweiligen Bonus. Die benannten Optionen dürfen auch mit
 Semikolon in einem Argument zusammengefasst werden, etwa
 `@Ressourcen(10, 3, diamantwert=250; goldwert=100)`.
 
-@Ressourcen(1, 1, 2)
+@Ressourcen(100, 100, 200)
+
+## `@Shop`
+
+          --{{0}}--
+Mit `@Shop(...)` setzt du ein kleines Pixelgebäude direkt an die Aufrufstelle.
+Ein Klick öffnet einen zugänglichen Dialog mit genau den Angeboten, die im Makro
+aufgeführt sind. Nicht aufgeführte Artikel werden nicht angeboten:
+
+```markdown
+@Ressourcen(12, 4, 8)
+
+@Shop(schaufel=3gold; giesskanne=3gold; lupe=2diamanten; taschenlampe=2diamanten)
+```
+
+Jedes Angebot hat die Form `artikel=preis`; mehrere Angebote werden mit
+Semikolon getrennt. Als Preisressourcen stehen `gold`, `diamant` beziehungsweise
+`diamanten` und `energie` zur Verfügung. Ein Preis darf mehrere Ressourcen
+kombinieren:
+
+```markdown
+@Shop(schaufel=3gold+1diamant; energie-5=2gold; diamanten-2=6energie)
+```
+
+Ressourcenartikel tragen ihre Menge nach einem Bindestrich. Werkzeuge werden ohne
+Menge geschrieben. Folgende Artikelbezeichner sind verfügbar:
+
+| Angebot | Wirkung |
+|:--|:--|
+| `schaufel` | legt die Schaufel ins Inventar |
+| `giesskanne` | legt die Gießkanne ins Inventar |
+| `lupe` | legt die Lupe ins Inventar |
+| `taschenlampe` | legt die Taschenlampe ins Inventar |
+| `eisenaxt` | verbessert die Steinaxt auf vier Hiebe pro Frachtkiste |
+| `goldaxt` | verbessert die Axt auf zwei Hiebe pro Frachtkiste |
+| `diamantaxt` | verbessert die Axt auf einen Hieb pro Frachtkiste |
+| `atlaskarte` | legt eine alte Atlaskarte ins Inventar; ein Klick öffnet die Achievement-Übersicht |
+| `energie-N` | schreibt `N` Energiepunkte gut |
+| `gold-N` | schreibt `N` Goldmünzen gut |
+| `diamanten-N` | schreibt `N` Diamanten gut |
+| `puzzleteil-FARBE-NUMMER` | legt ein vorhandenes Teil eines gültigen Puzzletors ins Inventar |
+| `atlas-kurszahlen` | schaltet in der Atlaskarte exakte Kurs- und Fortschrittszahlen frei |
+| `atlas-folieninfo` | schaltet „Auf dieser Folie sind noch …“ in der Atlaskarte frei |
+| `katzenhalsband-FARBE` | schaltet ein farbiges Halsband frei und legt es der Pixelkatze sofort an |
+
+Ein Puzzleteilangebot funktioniert nur, wenn Farbe und Nummer im Kurs zu einem
+gültig konfigurierten Puzzletor gehören. Beispiel:
+
+```markdown
+@Shop(puzzleteil-rot-1=2gold)
+```
+
+
+
+Dauerhafte Verbesserungen werden ebenfalls als normale Angebote notiert. Die Zahl
+am Ende ist ein frei wählbarer positiver ganzzahliger Prozentwert von 1 bis 500:
+
+```markdown
+@Shop(energiekistenbonus-10=2diamanten; lupenradius-15=4gold; taschenlampenradius-20=5gold)
+@Shop(eisenaxt=3gold; goldaxt=2diamanten; diamantaxt=5diamanten)
+@Shop(katzenhalsband-rot=2gold; katzenhalsband-blau=1diamant)
+```
+
+Hier kannst du alle drei Perks direkt ausprobieren. Jeder Perk gewährt `+10 %`
+und kostet genau eine Goldmünze:
+
+@Shop(energiekistenbonus-10=1gold; lupenradius-10=1gold; taschenlampenradius-10=1gold; atlaskarte=2gold; atlas-kurszahlen=1gold; atlas-folieninfo=1gold)
+
+- `energiekistenbonus-N` erhöht die erwartete Energie jeder künftig geöffneten
+  Energiekiste um `N %`. Nichtganzzahlige Zusatzenergie wird fair ausgewürfelt:
+  Bei einer Ein-Punkt-Kiste und `+10 %` besteht eine zehnprozentige Chance auf
+  einen zweiten Punkt.
+- `lupenradius-N` und `taschenlampenradius-N` vergrößern sowohl die sichtbare
+  Darstellung als auch die tatsächliche Trefferfläche um `N %`.
+
+Die `atlaskarte` erscheint nach dem Kauf als Schriftrollen-Button in der
+Ressourcenleiste. Ihre Grundansicht zeigt für alle zwölf festen Achievements, ob
+sie bereits erreicht, noch offen oder im aktuellen Kurs nicht vorhanden sind.
+`atlas-kurszahlen` ergänzt die exakten Fortschrittswerte und einen vollständigen
+Kursbestand für Kistenarten, Geheimfolien, Puzzleteile, Puzzletore, Schlösser,
+Verbergungen, Erdschichten und Pflanzen. `atlas-folieninfo` zeigt zusätzlich nur
+für die gerade aktive Folie, welche dieser Funde noch offen sind. Beim Kauf setzen
+beide Perks eine bereits vorhandene Atlaskarte voraus. Alle drei Preise sind wie bei
+jedem anderen Shopartikel frei wählbar.
+
+Mehrere gekaufte Prozent-Perks addieren sich. Jedes konkrete Angebot kann pro
+Browser-Tab genau einmal gekauft werden; Käufe und Perks bleiben beim Neuladen
+erhalten und sind wie der übrige Loot-Zustand an Kurs-URL, Kursversion und
+Quellstand gebunden. Bereits anderweitig gefundene Werkzeuge, Puzzleteile, die
+Atlaskarte oder Atlas-Freischaltungen werden als „Schon vorhanden“ angezeigt.
+Für Preise und Ressourcenangebote muss
+`@Ressourcen(...)` aktiviert sein; Energieangebote benötigen dessen dritten Wert.
+
+Die Axtstufen addieren sich nicht: Es gilt immer die beste gefundene oder
+gekaufte Stufe. Eine bessere Axt kann schon vor der eigentlichen `@Axt`
+freigeschaltet werden.
+
+**Findbare Atlaskarte und Perks**
+
+          --{{0}}--
+Atlaskarte und Verbesserungen müssen nicht im Shop gekauft werden. Mit
+`@Atlaskarte` setzt du die Schriftrolle als einmalig findbares Item direkt an die
+Aufrufstelle:
+
+```markdown
+@Atlaskarte
+```
+
+Nach dem Einsammeln erscheint derselbe Atlas-Button in der Ressourcenleiste wie
+nach einem Kauf. Die Karte und ihr Zustand bleiben kurs-, versions- und
+quellstandgebunden im aktuellen Browser-Tab erhalten.
+
+`@Perk(...)` setzt eine einzelne Verbesserung als sichtbares Funditem. Die
+Artikelbezeichnungen entsprechen den gleichnamigen Shopangeboten. Der
+Perkbezeichner steht im Aufruf an erster Stelle; danach folgen optionale
+Bedingungen:
+
+| Fundaufruf | Wirkung |
+|:--|:--|
+| `@Perk(energiekistenbonus-N)` | künftig `N %` mehr Energie aus Energiekisten; Restwerte werden weiterhin fair ausgewürfelt |
+| `@Perk(lupenradius-N)` | vergrößert Lupendarstellung und Trefferfläche um `N %` |
+| `@Perk(taschenlampenradius-N)` | vergrößert Lichtkegel und Trefferfläche um `N %` |
+| `@Perk(atlas-kurszahlen)` | schaltet genaue Kurs- und Fortschrittszahlen im Atlas frei |
+| `@Perk(atlas-folieninfo)` | schaltet die offenen Funde der aktuellen Folie im Atlas frei |
+| `@Perk(eisenaxt)` | Eisenaxt: vier Hiebe pro Frachtkiste |
+| `@Perk(goldaxt)` | Goldaxt: zwei Hiebe pro Frachtkiste |
+| `@Perk(diamantaxt)` | Diamantaxt: ein Hieb pro Frachtkiste |
+| `@Perk(katzenhalsband-FARBE)` | schaltet die Halsbandfarbe frei, legt sie sofort an und ergänzt die Begleiterauswahl |
+
+Der Prozentwert `N` ist wie im Shop eine positive ganze Zahl von 1 bis 500.
+Mehrere gefundene oder gekaufte Prozent-Perks addieren sich. Atlas-Perks dürfen
+bereits vor der Atlaskarte gefunden werden; sie werden gespeichert und erscheinen
+automatisch, sobald die Karte später gefunden oder gekauft wird.
+
+Halsbänder verwenden dieselben zwölf Farbnamen wie Schlüssel und Puzzleteile:
+`rot`, `blau`, `gruen`, `gelb`, `lila`, `orange`, `magenta`, `weiss`,
+`schwarz`, `tuerkis`, `grau` und `braun`. Ein gefundenes Halsband darf bereits
+vor der Katze eingesammelt werden. Nach dem Katzenfund erscheint es zusammen mit
+„Ohne Halsband“ in der Begleiter-Subbar. Neue Farben werden zunächst automatisch
+angelegt; die spätere Auswahl bleibt beim Neuladen erhalten.
+
+Beide Fundmakros akzeptieren dieselben Bedingungen und Schichten wie andere
+Funditems: `anker`, Verzögerungen, Theme-, Farbmodus- und
+Annotationsbedingungen, `unsichtbar`, `zauberstaub`, `nebel` sowie direkte
+`erde`-/`pflanze`-Schichten. Alle Angaben werden mit Semikolons kombiniert:
+
+```markdown
+@Atlaskarte(anker; erde-unsichtbar)
+@Perk(lupenradius-15; zauberstaub; 12s)
+@Perk(taschenlampenradius-20; nebel; pflanze)
+@Perk(atlas-kurszahlen; theme=blau; farbmodus=dunkel)
+@Perk(atlas-folieninfo; annotationen=aus)
+@Perk(eisenaxt; anker)
+@Perk(goldaxt; zauberstaub)
+@Perk(diamantaxt; 12s)
+@Perk(katzenhalsband-rot; zauberstaub)
+```
+
+Jeder Aufruf besitzt eine eigene Fund-ID und kann genau einmal eingesammelt
+werden. Ein bereits gekaufter einmaliger Atlas-Unlock lässt sein entsprechendes
+Funditem verschwinden; Prozent-Perks bleiben dagegen absichtlich stapelbar.
+
+Direkte Live-Beispiele:
+
+@Atlaskarte
+@Perk(energiekistenbonus-10)
+@Perk(lupenradius-10)
+@Perk(taschenlampenradius-10)
+@Perk(atlas-kurszahlen)
+@Perk(atlas-folieninfo)
+@Perk(eisenaxt)
+@Perk(goldaxt)
+@Perk(diamantaxt)
+@Perk(katzenhalsband-rot)
+@Perk(katzenhalsband-blau)
 
 ## `@Schatztruhe`
 
@@ -388,7 +697,7 @@ Werkzeugleisten von Board-Mode, Marker und Annotation werden dagegen unabhängig
 der Folie im per Same-Origin erreichbaren Top-Dokument gesucht. In der Spalte
 „Versteck-Aufruf“ kann `@Schatztruhe` jeweils durch `@Diamanttruhe` oder
 `@Energiekiste` ersetzt werden. Diese Zielparameter gelten für die drei
-Truhenarten. Die Lupe bleibt ein eigenständiger Inline-Fund; Schlüssel besitzen
+Truhenarten. Lupe und Taschenlampe bleiben eigenständige Inline-Funde; Schlüssel besitzen
 zusätzlich die unten dokumentierten offiziellen Oberflächenziele.
 
 | Template / Ziel-ID | Truhe dort verstecken | Schloss davor setzen | Tatsächlicher Zielort und Besonderheiten |
@@ -471,8 +780,9 @@ Mehrere Werte derselben Achse sind Alternativen (**ODER**):
 `theme=rot; theme=blau` erlaubt also Rot oder Blau. Bedingungen verschiedener
 Achsen gelten gemeinsam (**UND**). Dasselbe gilt für `anker`, eine Verzögerung,
 die Verbergung mit `unsichtbar` oder `zauberstaub` und direkte `erde`-/`pflanze`-
-Schichten: Ein Objekt wird erst sichtbar beziehungsweise bedienbar, wenn alle
-angegebenen Bedingungen erfüllt sind.
+Schichten. Bei Truhen kann zusätzlich `nebel` als Dunkelheitsschicht hinzukommen:
+Ein Objekt wird erst sichtbar beziehungsweise bedienbar, wenn alle angegebenen
+Bedingungen erfüllt sind.
 
 Die Sichtbarkeitsbedingungen gelten für alle echten Fund- und Freigabeobjekte:
 
@@ -480,7 +790,9 @@ Die Sichtbarkeitsbedingungen gelten für alle echten Fund- und Freigabeobjekte:
 |:--|:--|
 | Schlüssel | `@Schluessel` |
 | alle drei Truhenarten | `@Schatztruhe`, `@Diamanttruhe`, `@Energiekiste` |
-| Such- und Aktionswerkzeuge | `@Lupe`, `@Schaufel`, `@Giesskanne` |
+| Such- und Aktionswerkzeuge | `@Lupe`, `@Taschenlampe`, `@Schaufel`, `@Giesskanne` |
+| Atlas und Verbesserungen | `@Atlaskarte`, `@Perk` |
+| Begleiter | `@Katze` |
 | Puzzleteile | `@Puzzleteil` |
 | freizugebende Bereiche | `@Erdhaufen`, `@Pflanze` und der Alias `@Blume` |
 
@@ -492,8 +804,10 @@ Beispiele mit einzelnen und kombinierten Bedingungen:
 @Diamanttruhe(theme=tuerkis; ohne-annotation)
 @Energiekiste(theme=standard; farbmodus=hell)
 @Lupe(theme=blau; annotationen=aus)
+@Taschenlampe(theme=gelb; farbmodus=dunkel)
 @Schaufel(theme=rot; darkmode)
 @Giesskanne(theme=türkis; lightmode; ohne-annotation)
+@Katze(theme=gelb; farbmodus=dunkel)
 
 @Erdhaufen(unsichtbar; theme=rot; theme=blau; farbmodus=dunkel)
 @Pflanze(zauberstaub; annotationen=aus)
@@ -903,6 +1217,247 @@ Ein Schlüssel mit kaum sichtbarem Zauberstaub:
 
 @Schluessel(lila; zauberstaub)
 
+## `@Taschenlampe`, `@Nebel`, `@NebelStart` und `@NebelEnd`
+
+          --{{0}}--
+Mit `@Taschenlampe` setzt du ein weiteres einmalig findbares Suchwerkzeug in den
+Kurs. Es funktioniert ohne `@Ressourcen(...)` und akzeptiert dieselben Fundoptionen
+wie die Lupe, beispielsweise `anker`, eine Verzögerung sowie Theme-, Farbmodus-,
+Annotations-, Verbergungs- und direkte Schichtoptionen:
+
+```markdown
+@Taschenlampe
+@Taschenlampe(anker; 12s)
+@Taschenlampe(theme=gelb; farbmodus=dunkel)
+```
+
+Nach dem Einsammeln liegt die Taschenlampe in der Ressourcenleiste. Ein Klick
+aktiviert den runden Lichtkegel am Mauszeiger; ein weiterer Klick oder Escape
+deaktiviert ihn. Auf Touchgeräten bleibt der Lichtkegel sichtbar und lässt sich am
+Griff oder mit den Pfeiltasten verschieben.
+
+`@Nebel(Inhalt)` legt dunkle, leicht bewegte Nebelwolken über einen einzeiligen
+Inhalt. Die Wolken besitzen eine pixelige Bewegung und laufen an ihren leicht
+weichgezeichneten Außenkanten aus. Der Platz des Inhalts bleibt dabei erhalten.
+Der Inhalt ist zunächst nicht bedienbar und wird erst im Lichtkegel wieder les- und
+bedienbar:
+
+```markdown
+@Nebel(Dieser Hinweis wird erst im Lichtkegel lesbar.)
+```
+
+Kommas im einzeiligen Inhalt werden wie bei `@Unsichtbar(...)` zusammengesetzt. Für
+mehr als acht ungeschützte Kommas oder komplexe Argumente wird der vollständige
+Parameter nach den LiaScript-Makroregeln in Backticks gesetzt.
+
+Mit `@NebelStart` und `@NebelEnd` lässt sich ein ganzer blockweiser Bereich
+einnebeln. Beide Marker stehen als eigene Zeile auf derselben Folienebene. Der
+Bereich darf Absätze, Listen, Bilder, Quizze und andere Makros enthalten:
+
+```markdown
+@NebelStart
+Dieser ganze Absatz liegt im Nebel.
+
+- Auch diese Liste ist zunächst verdeckt.
+- Bedienelemente werden erst im Lichtkegel freigegeben.
+
+@NebelEnd
+```
+
+Einzelne Münz-, Diamant- und Energiekisten sowie `@Atlaskarte` und `@Perk`
+akzeptieren Dunkelheit außerdem direkt als Option `nebel`. Bei Truhen funktioniert
+das sowohl inline als auch an allen Zieloberflächen,
+also beispielsweise in `menu`, `toc`, `classroom` oder einem Template-Menü. Die
+Aliasse `dunkel`, `dunkelheit`, `fog` und `darkness` sind gleichwertig. Die explizite
+Bedingung `farbmodus=dunkel` bleibt davon unabhängig und bedeutet weiterhin nur,
+dass der Fund ausschließlich im dunklen LiaScript-Farbmodus erscheint:
+
+```markdown
+@Schatztruhe(nebel)
+@Diamanttruhe(menu; nebel)
+@Energiekiste(3; toc; anker; nebel)
+```
+
+`nebel`, `unsichtbar` beziehungsweise `zauberstaub` und direkte Erd-/Pflanzenschichten
+werden unabhängig kombiniert. Jede Schicht muss mit ihrem zugehörigen Werkzeug
+freigegeben werden. Bei der folgenden Menükiste wird daher zuerst die unsichtbare
+Erde gefunden und weggegraben, anschließend die Zauberstaub-Pflanze gefunden,
+gegossen und geöffnet; die eigentliche Kiste benötigt danach sowohl Lupe als auch
+Taschenlampe:
+
+```markdown
+@Diamanttruhe(3; menu; erde-unsichtbar; pflanze-zauberstaub; nebel; unsichtbar)
+```
+
+Nebel ist ein visueller Spieleffekt und keine Zugriffssicherheit: Der Inhalt bleibt
+im Kursquelltext und im DOM vorhanden. Bereiche dürfen verschachtelt werden, müssen
+aber in umgekehrter Reihenfolge geschlossen werden.
+
+Eine einzige verpflichtende Taschenlampe darf nicht hinter ihrem eigenen Nebel
+liegen. Platziere sie vorher sichtbar oder stelle einen zweiten erreichbaren
+Lösungsweg bereit.
+
+
+@Nebel( @Energiekiste )
+
+Sammle die Taschenlampe ein und probiere beide Varianten aus:
+
+@Taschenlampe
+
+@Nebel(Diese Zeile wird im Lichtkegel wieder klar.)
+
+@NebelStart
+Dieser Absatz und die folgende Liste bilden einen gemeinsamen Nebelbereich.
+
+- Erster Eintrag
+- Zweiter Eintrag
+@NebelEnd
+
+## `@Axt` und `@Kiste` – eine Holzkiste aufbrechen
+
+          --{{0}}--
+Mit `@Axt` setzt du eine einmalig findbare Steinaxt in den Kurs. Nach dem
+Einsammeln erscheint sie wie Schaufel und Gießkanne in der Ressourcenleiste und
+muss dort aktiviert werden.
+
+Eine `@Kiste(...)` verpackt genau ein anderes Item in einer dreidimensionalen
+Holzkiste mit gerahmten Seiten und X-Verstrebungen. Ohne
+eingesammelte und aktivierte Axt bleibt sie geschlossen. Die Steinaxt benötigt
+acht einzelne Hiebe. Nach jedem Klick entstehen zusätzliche Risse, Löcher und
+verschobene Bretter; erst nach dem achten Hieb zerbricht die Kiste vollständig
+und ihr Inhalt wird erzeugt:
+
+```markdown
+@Axt
+@Kiste(@Katze)
+@Kiste(`@Schluessel(blau)`)
+@Kiste(@Schatztruhe)
+```
+
+Hat das enthaltene Item eigene Klammerparameter, wird wieder der vollständige
+Aufruf mit Backticks geschützt. Die Axt wird dabei nicht verbraucht und kann
+beliebig viele Kisten öffnen. Auch Teilschäden und zerstörte Kisten bleiben
+für diesen Kurs im aktuellen Browser-Tab gespeichert.
+
+Mit findbaren oder kaufbaren Perks wird die aktive Axt sichtbar aufgewertet:
+
+| Perk | Axt | Hiebe pro neuer Kiste |
+|:--|:--|--:|
+| ohne | Steinaxt | 8 |
+| `@Perk(eisenaxt)` | Eisenaxt | 4 |
+| `@Perk(goldaxt)` | Goldaxt | 2 |
+| `@Perk(diamantaxt)` | Diamantaxt | 1 |
+
+Es gilt immer die beste freigeschaltete Stufe. Wird eine bereits beschädigte
+Kiste später mit einer besseren Axt getroffen, bleibt ihr bisheriger Schaden
+erhalten und der neue Hieb verursacht entsprechend mehr Schaden.
+
+@Axt
+
+@Perk(eisenaxt)
+@Perk(goldaxt)
+@Perk(diamantaxt)
+
+@Kiste(@Katze)
+
+## `@Geschenk` – ein Item verpacken
+
+          --{{0}}--
+Mit `@Geschenk(...)` wird genau ein anderes Item zunächst in ein anklickbares
+Geschenk verpackt. Der Inhalt wird erst beim Öffnen erzeugt und ist vorher weder
+sichtbar noch aktiv. Das Geschenk selbst vergibt keine Ressource und zählt nicht
+als zusätzlicher Fund.
+
+```markdown
+@Geschenk(@Katze)
+@Geschenk(`@Katze(grau)`)
+@Geschenk(`@Schluessel(blau)`)
+@Geschenk(@Schatztruhe)
+```
+
+Ein Item ohne eigene Parameter kann direkt eingesetzt werden. Hat das verpackte
+Item selbst Klammerparameter, wird sein vollständiger Aufruf – wie oben gezeigt –
+mit Backticks geschützt, damit LiaScript die beiden Klammerpaare eindeutig trennt.
+
+Das geöffnete Geschenk bleibt im aktuellen Browser-Tab für diesen Kurs geöffnet.
+Danach verhält sich das enthaltene Item genau wie ein normal gesetztes Item.
+
+@Geschenk(@Katze)
+
+## `@Katze` – Pixelbegleiter
+
+          --{{0}}--
+Mit `@Katze` setzt du eine einmalig findbare Pixelkatze in den Kurs. Nach dem
+Einsammeln sitzt sie dauerhaft unten rechts und reagiert auf den Lernfortschritt:
+
+- Bei einem neuen Fund nickt sie kurz zufrieden.
+- Nach einer richtig gelösten Aufgabe springt sie vor Freude hoch.
+- Nach 30 und 45 Sekunden ohne Bedienung gähnt sie.
+- Nach 60 Sekunden ohne Bedienung rollt sie sich ein und schläft.
+- Ein Klick auf die schlafende Katze weckt sie wieder auf.
+- Der Katzenkopf in der Ressourcenleiste öffnet die Auswahl aller gefundenen
+  Katzen und Halsbänder; beide Auswahlen bleiben beim Neuladen im selben Tab erhalten.
+
+@Katze
+@Katze(grau)
+@Katze(schwarz)
+@Katze(weiß)
+@Katze(dreifarbig)
+
+```markdown
+@Katze
+@Katze(grau; anker; 12s)
+@Katze(dreifarbig; erde-unsichtbar; theme=blau)
+```
+
+Als Fellfarben stehen `orange` (Standard), `grau`, `schwarz`, `weiß` und
+`dreifarbig` zur Verfügung. Jede Farbe ist ein eigener Fund. Wird eine neue
+Farbe eingesammelt, erscheint sie in der Pet-Auswahl der Ressourcenleiste und
+wird zunächst automatisch als Begleiter aktiviert.
+
+Die Katze unterstützt dieselben Sichtbarkeits-, Verzögerungs-, Verbergungs- und
+direkten `erde`-/`pflanze`-Optionen wie andere Funditems. Kurse ohne
+`@Katze` erhalten weder den Begleiter noch dessen Inaktivitätstimer.
+
+**`@Futter(Item)` – die Pixelkatze füttern**
+
+Mit `@Futter(...)` wird genau ein anderes Item in einer Portion Katzenfutter
+versteckt. Das Futter wird zuerst im Kurs eingesammelt und erscheint danach in
+der Ressourcenleiste. Dort wird es aktiviert. Erst ein anschließender Klick auf
+die gefundene Pixelkatze lässt sie fressen. Das enthaltene Funditem wird danach
+sofort automatisch eingesammelt; es muss nicht noch einmal im Folientext gesucht
+oder angeklickt werden. Bei Ressourcen zeigt die Katze `+1` zusammen mit dem
+tatsächlichen Gold-, Diamant- oder Energie-Icon der Ressourcenleiste. Andere
+Belohnungen werden weiterhin konkret benannt, beispielsweise `+1 Blauer Schlüssel`:
+
+```markdown
+@Katze
+@Futter(@Schatztruhe)
+@Futter(`@Schluessel(blau)`)
+@Futter(`@Katze(grau)`)
+```
+
+@Futter(@Schatztruhe)
+@Futter(@Diamanttruhe)
+@Futter(@Energiekiste)
+
+@Perk(katzenhalsband-gruen)
+@Perk(katzenhalsband-blau)
+@Perk(katzenhalsband-rot)
+
+Hat das enthaltene Item eigene Klammerparameter, wird sein vollständiger Aufruf
+mit Backticks geschützt. Ohne bereits gefundene Katze bleibt das eingesammelte
+Futter in der Ressourcenleiste, kann aber noch nicht aktiviert werden. Mehrere
+Portionen liegen gruppiert hinter einem Futterbutton in einer eigenen Subbar.
+Sobald nur noch eine Portion übrig ist, verschwindet die Subbar und der Button
+aktiviert diese Portion direkt. Aktives Futter wird als Mauszeiger dargestellt.
+
+Pro Fütterung wird genau eine Portion verbraucht. Eingesammeltes und verfüttertes
+Futter sowie das automatisch eingesammelte Item bleiben im aktuellen Browser-Tab
+für diesen Kurs gespeichert. `@Futter(...)` ist für echte Funditems wie Truhen,
+Schlüssel, Werkzeuge, Puzzleteile, Atlaskarten, Perks oder Katzen vorgesehen;
+interaktive Bereiche wie Shops und Puzzletore sind kein Futterinhalt.
+
 ## `@Schaufel`, `@Giesskanne`, `@Erdhaufen` und `@Pflanze`
 
           --{{0}}--
@@ -1019,9 +1574,11 @@ und Zeitoptionen bleiben dabei erhalten:
 | --- | --- |
 | Schlüssel | `@Schluessel` |
 | alle Truhenbelohnungen und -ziele | `@Schatztruhe`, `@Diamanttruhe`, `@Energiekiste` |
-| Suchwerkzeug | `@Lupe` |
+| Suchwerkzeuge | `@Lupe`, `@Taschenlampe` |
 | Aktionswerkzeuge | `@Schaufel`, `@Giesskanne` |
 | Puzzleteile | `@Puzzleteil` |
+| Atlas und Verbesserungen | `@Atlaskarte`, `@Perk` |
+| Begleiter | `@Katze` |
 
 ```markdown
 @Schluessel(blau; translator; erde-unsichtbar; pflanze; unsichtbar)
@@ -1120,12 +1677,12 @@ das Schloss auf dem Zweiwegportal zur nächsten Folie:
 
 @Schluessel(blau; anker)
 
-@Portal(12)
+@Portal(17)
 @Schloss(portal, blau)
 
 Dieses Einwegportal führt zurück zur Lupenfolie und erzeugt dort keinen Rückweg:
 
-@Einwegportal(9)
+@Einwegportal(10)
 
 Portale selbst vergeben und verbrauchen weder Gold, Diamanten, Energie noch
 Schlüssel und werden nicht als Fundgegenstände gezählt. Ein Portalschloss ist
@@ -1310,6 +1867,52 @@ keine vertraulichen Daten oder unerwünschten Seiteneffekte enthalten.
 
 Du hast das geheime Labor gefunden. Diese echte Demo-Folie erscheint nur nach der
 exakten Suche nach `Das geheime Labor` im Inhaltsverzeichnis.
+
+## `@Reservefolie` – Energie-Notfallfolie
+
+          --{{0}}--
+Mit genau einer `@Reservefolie(N)` kann ein Kurs einen Rückweg aus einem leeren
+Energiebestand anbieten. `N` ist eine positive ganze Zahl und bestimmt, wie viele
+Energiepunkte jedes dort erstmals korrekt gelöste native Quiz vergibt:
+
+```markdown
+## Energiereserve
+
+@Reservefolie(2)
+
+Welche Zahl ist doppelt so groß wie 3?
+
+[[6]]
+
+Welche Zahl folgt auf 9?
+
+[[10]]
+```
+
+Die Reservefolie ist wie eine Geheimfolie aus Inhaltsverzeichnis, Suche,
+Vor-/Zurück-Navigation, direkten Folienaufrufen und Portalen ausgeblendet. Sie wird
+ausschließlich dann automatisch geöffnet, wenn der Energiebestand von einem
+positiven Wert auf `0` fällt. Ein Kurs, der bereits mit `0` Energie startet, löst
+deshalb noch keinen Sprung aus.
+
+Vor dem Wechsel merkt sich Loot die aktuelle Folie. **Prüfen** kostet auf der
+Reservefolie keine Energie. Eine falsche Prüfung vergibt nichts; ein korrekt
+gelöstes Quiz schreibt genau `N` Energiepunkte gut. Sobald wieder mindestens ein
+Energiepunkt vorhanden ist – auch durch eine andere dort erreichbare Belohnung –
+kehrt Loot automatisch zur gemerkten Folie zurück. Der Rückweg bleibt auch bei
+einem Neuladen im selben Browser-Tab erhalten.
+
+Nach der Rückkehr lässt sich die Reservefolie nicht manuell erneut öffnen. Erst ein
+neuer Übergang von positiver Energie auf `0` startet einen weiteren Reservezyklus.
+Mehrere Quizze auf der Folie können dadurch nacheinander bei späteren Notfällen
+verwendet werden. Reservequizze zählen nicht zum normalen Kursabschluss und nicht
+zum Erfolg **Aufgaben-Meister**; Lernende müssen ihre Energie also nicht absichtlich
+aufbrauchen, um den Kurs abzuschließen.
+
+Voraussetzung ist ein aktivierter Energiebestand über den dritten Wert von
+`@Ressourcen(...)`. Pro Kurs ist genau ein gültiger Aufruf erlaubt. Fehlende,
+mehrfache, nichtganzzahlige oder nichtpositive Belohnungen deaktivieren die
+Reservefunktion sicher und erzeugen eine Warnung in der Browserkonsole.
 
 ## `@lootif` und `@achievements`
 

@@ -39,7 +39,9 @@ test("sammelt Werkzeuge und führt Layertransitionen idempotent aus", () => {
   assert.equal(store.collectTool("shovel"), true)
   assert.equal(store.collectTool("shovel"), false)
   assert.equal(store.collectTool("watering-can"), true)
+  assert.equal(store.collectTool("axe"), true)
   assert.equal(store.isToolCollected("shovel"), true)
+  assert.equal(store.isToolCollected("axe"), true)
 
   assert.equal(store.digLayer(" soil-1 "), true)
   assert.equal(store.digLayer("soil-1"), false)

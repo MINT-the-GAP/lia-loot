@@ -31,6 +31,7 @@ test("parst vollständig unsichtbare und staubverdeckte Inline-Truhen", () => {
     amount: 1,
     concealment: "solid",
     errors: [],
+    fog: false,
     inline: true,
     layers: [],
     placements: [],
@@ -41,6 +42,7 @@ test("parst vollständig unsichtbare und staubverdeckte Inline-Truhen", () => {
     amount: 1,
     concealment: "dust",
     errors: [],
+    fog: false,
     inline: true,
     layers: [],
     placements: [],
@@ -56,6 +58,7 @@ test("parst eine positive Ganzzahl am Anfang als Belohnungsmenge", () => {
     amount: 3,
     concealment: null,
     errors: [],
+    fog: false,
     inline: true,
     layers: [],
     placements: [],
@@ -68,6 +71,7 @@ test("parst eine positive Ganzzahl am Anfang als Belohnungsmenge", () => {
       amount: 3,
       concealment: null,
       errors: [],
+      fog: false,
       inline: false,
       layers: [],
       placements: ["menu"],
@@ -88,6 +92,7 @@ test("trennt Annotation-Portal und gemeinsame Sichtbarkeitsoptionen", () => {
       amount: 2,
       concealment: null,
       errors: [],
+      fog: false,
       inline: false,
       layers: [],
       placements: ["annotation"],
@@ -129,6 +134,7 @@ test("kombiniert Verbergung mit Zeit, Anker und mehreren Portalzielen", () => {
       amount: 1,
       concealment: "dust",
       errors: [],
+      fog: false,
       inline: false,
       layers: [],
       placements: ["toc", "mode"],
@@ -145,6 +151,7 @@ test("parst alle zwölf Template-Ziele als unabhängige Portalplätze", () => {
     amount: 1,
     concealment: null,
     errors: [],
+    fog: false,
     inline: false,
     layers: [],
     placements: [...TEMPLATE_TARGETS],
@@ -162,6 +169,7 @@ test("bewahrt Erde und Pflanze in Optionsreihenfolge vor dem Enditem", () => {
       amount: 3,
       concealment: "dust",
       errors: [],
+      fog: false,
       inline: false,
       layers: [
         { kind: "soil", concealment: "solid" },
@@ -191,6 +199,43 @@ test("weist doppelte und widersprüchliche Verbergungsoptionen fail-closed zurü
     assert.equal(parsed.valid, false, specification)
     assert.ok(parsed.errors.length > 0, specification)
   }
+})
+
+test("kombiniert Dunkelheit mit Portal, Lupe, Erde und Pflanze", () => {
+  assert.deepEqual(
+    parseTreasureChestOptions(
+      "3; menu; nebel; erde-unsichtbar; pflanze-zauberstaub; unsichtbar; anker",
+    ),
+    {
+      amount: 3,
+      concealment: "solid",
+      errors: [],
+      fog: true,
+      inline: false,
+      layers: [
+        { kind: "soil", concealment: "solid" },
+        { kind: "plant", concealment: "dust" },
+      ],
+      placements: ["menu"],
+      valid: true,
+      visibility: visibility({ onlyOnSlide: true }),
+    },
+  )
+
+  for (const alias of ["dunkel", "dunkelheit", "fog", "darkness"]) {
+    const parsed = parseTreasureChestOptions(alias)
+    assert.equal(parsed.valid, true, alias)
+    assert.equal(parsed.fog, true, alias)
+    assert.equal(parsed.inline, true, alias)
+  }
+
+  const darkMode = parseTreasureChestOptions("farbmodus=dunkel")
+  assert.equal(darkMode.fog, false)
+  assert.deepEqual(darkMode.visibility.variants, ["dark"])
+
+  const duplicate = parseTreasureChestOptions("nebel; dunkelheit")
+  assert.equal(duplicate.valid, false)
+  assert.match(duplicate.errors.join(" "), /nur einmal/u)
 })
 
 test("zählt alle drei verborgenen Truhentypen mit ihren Portalinstanzen", () => {
@@ -294,7 +339,7 @@ test("propagiert Portalmodi und räumt unsichtbare Inline-Hosts vollständig auf
 
   assert.match(
     source,
-    /const contentHost = setHostRevealLayers\(wrapper, chestId, request\.layers\)[\s\S]*?contentHost\.replaceChildren\(\s*createChestButton[\s\S]*?setHostConcealment\(contentHost, request\.concealment\)/u,
+    /const contentHost = setHostRevealLayers\(wrapper, chestId, request\.layers\)[\s\S]*?contentHost\.replaceChildren\(\s*createChestButton[\s\S]*?setHostConcealment\(contentHost, request\.concealment\)[\s\S]*?setHostFog\(contentHost, request\.fog \? chestId : null\)/u,
   )
   assert.match(
     source,

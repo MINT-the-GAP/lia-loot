@@ -24,6 +24,7 @@ import {
   REVEAL_CHANGED_EVENT,
   setHostRevealLayers,
 } from "./exploration.ts"
+import { clearHostFog, setHostFog } from "./flashlight.ts"
 import {
   observeLiaSlideActivity,
   liaSlideIsAccessible,
@@ -81,6 +82,7 @@ interface HostRequest {
   baseId: string
   concealment: ConcealmentMode | null
   errors: string[]
+  fog: boolean
   inline: boolean
   layers: RevealLayerOption[]
   placements: ChestPlacement[]
@@ -94,6 +96,7 @@ interface HostRequest {
 interface PortalRequest {
   amount: number
   concealment: ConcealmentMode | null
+  fog: boolean
   layers: RevealLayerOption[]
   placements: Set<ChestPlacement>
   reward: ResourceKind
@@ -492,6 +495,39 @@ function resolveChestPlacement(value: string): ChestPlacement | null {
 
 const NUMBER_LIKE_TOKEN =
   /^[+-]?(?:(?:\d+(?:[.,]\d*)?)|(?:[.,]\d+))(?:e[+-]?\d+)?$/iu
+const FOG_OPTION_TOKENS = new Set([
+  "darkness",
+  "dunkel",
+  "dunkelheit",
+  "fog",
+  "nebel",
+])
+
+function extractFogOptions(rawSpecification: string): {
+  enabled: boolean
+  errors: string[]
+  options: string
+} {
+  const values: string[] = []
+  const errors: string[] = []
+  let enabled = false
+  for (const rawToken of rawSpecification.split(";")) {
+    const token = rawToken.trim()
+    if (!token) continue
+    const normalized = token
+      .normalize("NFKC")
+      .toLocaleLowerCase("de-DE")
+    if (!FOG_OPTION_TOKENS.has(normalized)) {
+      values.push(token)
+      continue
+    }
+    if (enabled) {
+      errors.push("Nebel beziehungsweise Dunkelheit darf nur einmal angegeben werden.")
+    }
+    enabled = true
+  }
+  return { enabled, errors, options: values.join("; ") }
+}
 
 function parseChestAmount(rawSpecification: string): {
   amount: number
@@ -541,6 +577,7 @@ export function parseTreasureChestOptions(rawSpecification: string): {
   amount: number
   concealment: ConcealmentMode | null
   errors: string[]
+  fog: boolean
   inline: boolean
   layers: RevealLayerOption[]
   placements: ChestPlacement[]
@@ -548,18 +585,23 @@ export function parseTreasureChestOptions(rawSpecification: string): {
   visibility: CollectibleVisibilityRule
 } {
   const amount = parseChestAmount(rawSpecification)
-  const parsed = parseCollectibleOptions(amount.options)
+  const fog = extractFogOptions(amount.options)
+  const parsed = parseCollectibleOptions(fog.options)
   const concealment = extractConcealmentOptions(parsed.values)
   const exploration = parseExplorationOptions(concealment.values)
   const errors = [
     ...amount.errors,
     ...parsed.errors,
+    ...fog.errors,
     ...concealment.errors,
     ...invalidPlacementErrors(exploration.values),
   ]
   const placements = readPlacements(exploration.values)
   const hasOptions =
-    parsed.hasOptions || concealment.mode !== null || exploration.layers.length > 0
+    parsed.hasOptions ||
+    fog.enabled ||
+    concealment.mode !== null ||
+    exploration.layers.length > 0
   const inline =
     amount.options.trim() === "" ||
     (hasOptions && exploration.values.length === 0)
@@ -568,6 +610,7 @@ export function parseTreasureChestOptions(rawSpecification: string): {
     amount: amount.amount,
     concealment: concealment.mode,
     errors,
+    fog: fog.enabled,
     inline,
     layers: exploration.layers,
     placements,
@@ -626,6 +669,7 @@ function readHostRequest(host: HTMLElement): HostRequest {
     baseId,
     concealment: parsed.concealment,
     errors: parsed.errors,
+    fog: parsed.fog,
     inline: parsed.inline,
     layers: parsed.layers,
     placements: parsed.placements,
@@ -640,7 +684,7 @@ function readHostRequest(host: HTMLElement): HostRequest {
 function portalSignature(request: PortalRequest): string {
   return `${request.reward}:${request.amount}:${[
     ...request.placements,
-  ].sort().join(";")}:${collectibleVisibilitySignature(request.visibility)}:${request.concealment ?? "none"}:${request.layers
+  ].sort().join(";")}:${collectibleVisibilitySignature(request.visibility)}:${request.concealment ?? "none"}:${request.fog ? "fog" : "clear"}:${request.layers
     .map((layer) => `${layer.kind}-${layer.concealment ?? "visible"}`)
     .join(";")}`
 }
@@ -708,6 +752,7 @@ function registerSourceDeclarations(
     const request: PortalRequest = {
       amount: parsed.amount,
       concealment: parsed.concealment,
+      fog: parsed.fog,
       layers: parsed.layers,
       placements,
       reward: declaration.reward,
@@ -757,6 +802,7 @@ function registerHost(host: HTMLElement): HostRequest {
     portalRequests.delete(request.baseId)
     matchedSourceHosts.delete(request.baseId)
     clearHostRevealLayers(host)
+    clearHostFog(host)
     setHostConcealment(host, null)
     host.classList.add("loot-treasure-host--portal-source")
     host.setAttribute("aria-hidden", "true")
@@ -773,6 +819,7 @@ function registerHost(host: HTMLElement): HostRequest {
     const portalRequest: PortalRequest = {
       amount: request.amount,
       concealment: request.concealment,
+      fog: request.fog,
       layers: request.layers,
       placements: new Set(request.placements),
       reward: request.reward,
@@ -785,6 +832,7 @@ function registerHost(host: HTMLElement): HostRequest {
     } else {
       pendingPortalRequests.set(request.baseId, portalRequest)
     }
+    clearHostFog(host)
     clearHostRevealLayers(host)
     setHostConcealment(host, null)
     host.classList.add("loot-treasure-host--portal-source")
@@ -854,6 +902,7 @@ function syncInline(
   if (unavailable) {
     eligibleChestIds.delete(chestId)
     visibilityGate.forget(`chest:${request.baseId}`)
+    clearHostFog(host)
     clearHostRevealLayers(host)
     setHostConcealment(host, null)
     if (host.childElementCount > 0) host.replaceChildren()
@@ -861,6 +910,7 @@ function syncInline(
   }
   if (!liaSlideIsAccessible(request.sourceSection) && !opening) {
     eligibleChestIds.delete(chestId)
+    clearHostFog(host)
     clearHostRevealLayers(host)
     setHostConcealment(host, null)
     if (host.childElementCount > 0) host.replaceChildren()
@@ -874,6 +924,7 @@ function syncInline(
     scheduleSync,
   )
   if (!visible && !opening) {
+    clearHostFog(host)
     clearHostRevealLayers(host)
     setHostConcealment(host, null)
     if (host.childElementCount > 0) host.replaceChildren()
@@ -891,6 +942,7 @@ function syncInline(
     )
   }
   setHostConcealment(contentHost, request.concealment)
+  setHostFog(contentHost, request.fog ? chestId : null)
   if (visible && !hostIsRevealBlocked(host)) eligibleChestIds.add(chestId)
   else eligibleChestIds.delete(chestId)
 }
@@ -1120,6 +1172,7 @@ function ensurePortal(
     )
   }
   setHostConcealment(contentHost, request.concealment)
+  setHostFog(contentHost, request.fog ? chestId : null)
   if (destination.templateLayout === "floating") {
     const portal = wrapper
     trackFloatingPosition(portal, destination.anchor, () => {

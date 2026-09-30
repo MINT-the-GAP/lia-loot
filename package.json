@@ -7,6 +7,7 @@
     "build": "parcel build src/index.ts --dist-dir dist --no-scope-hoist --no-cache",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "test:browser": "playwright test",
+    "test:matrix": "playwright test --config playwright.matrix.config.mjs --repeat-each=2",
     "test:stress": "npm run build && node tests/run-browser-stress.mjs",
     "typecheck": "tsc --noEmit"
   },
@@ -17,6 +18,8 @@
   ],
   "devDependencies": {
     "@liascript/editor": "1.1.43--1.1.0",
+    "@parcel/optimizer-data-url": "^2.16.4",
+    "@parcel/transformer-inline-string": "^2.16.4",
     "@playwright/test": "1.62.0",
     "parcel": "^2.16.4",
     "typescript": "^5.8.3"

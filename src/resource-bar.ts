@@ -1,21 +1,9 @@
+import { createResourceGraphic } from "./resource-visual.ts"
+
 const BAR_ID = "lia-loot-resource-bar"
 const STATUS_ID = "lia-loot-resource-status"
 const HEADER_SELECTORS = ["header", ".lia-header", "[role='banner']"]
 type ResourceBarKind = "coins" | "gems" | "energy"
-
-function resourceIcon(kind: ResourceBarKind): SVGSVGElement {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
-  svg.setAttribute("viewBox", "0 0 32 32")
-  svg.setAttribute("aria-hidden", "true")
-  svg.classList.add("loot-resource-icon", `loot-resource-icon--${kind}`)
-  svg.innerHTML =
-    kind === "coins"
-      ? `<ellipse cx="16" cy="8" rx="10" ry="5"/><path d="M6 8v6c0 2.8 4.5 5 10 5s10-2.2 10-5V8"/><path d="M6 14v6c0 2.8 4.5 5 10 5s10-2.2 10-5v-6"/>`
-      : kind === "gems"
-        ? `<path d="M8 5h16l5 7-13 15L3 12l5-7Z"/><path d="m3 12 8-2 5 17 5-17 8 2M8 5l3 5 5-5 5 5 3-5"/>`
-        : `<path d="M19 2 7 18h8l-2 12 12-18h-8l2-10Z"/>`
-  return svg
-}
 
 function resourceItem(kind: ResourceBarKind, label: string): HTMLDivElement {
   const item = document.createElement("div")
@@ -25,7 +13,7 @@ function resourceItem(kind: ResourceBarKind, label: string): HTMLDivElement {
   value.className = "loot-resource-value"
   value.dataset.lootResource = kind
   value.textContent = "0"
-  item.append(resourceIcon(kind), value)
+  item.append(createResourceGraphic(kind), value)
   return item
 }
 
@@ -101,17 +89,29 @@ export function refreshResourceBarVisibility(): void {
   const hasKeys = bar.querySelector("[data-loot-key-color]") !== null
   const hasMagnifier =
     bar.querySelector("[data-loot-magnifier-tool]") !== null
+  const hasFlashlight =
+    bar.querySelector("[data-loot-flashlight-tool]") !== null
   const hasExplorationTool =
     bar.querySelector("[data-loot-tool-control]") !== null
   const hasPuzzlePiece =
     bar.querySelector("[data-loot-puzzle-inventory-piece]") !== null
+  const hasAtlas = bar.querySelector("[data-loot-atlas-tool]") !== null
+  const hasPet = bar.querySelector("[data-loot-pet-control]") !== null
+  const hasCatFood =
+    bar.querySelector(
+      "[data-loot-cat-food-control], [data-loot-cat-food-menu-control]",
+    ) !== null
   bar.classList.toggle(
     "loot-resource-bar--empty",
     !hasVisibleResource &&
       !hasKeys &&
       !hasMagnifier &&
+      !hasFlashlight &&
       !hasExplorationTool &&
-      !hasPuzzlePiece,
+      !hasPuzzlePiece &&
+      !hasAtlas &&
+      !hasPet &&
+      !hasCatFood,
   )
 }
 

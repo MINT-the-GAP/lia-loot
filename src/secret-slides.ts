@@ -1,7 +1,10 @@
 import {
   onCourseMarkdownChange,
+  parseCourseReserveSlideDeclarations,
   parseCourseSecretSlideDeclarations,
+  requireCourseReserveSlideDeclarations,
   requireCourseSecretSlideDeclarations,
+  type CourseReserveSlideDeclaration,
   type CourseSecretSlideDeclaration,
 } from "./course-chests.ts"
 import { liaCourseIdentity } from "./course-identity.ts"
@@ -29,7 +32,6 @@ const PUZZLE_BLOCKED_LINK_CLASS = "loot-puzzle-slide-link--blocked"
 const PUZZLE_BLOCKED_ROW_CLASS = "loot-puzzle-slide-row--blocked"
 const BLOCKED_ROOT_CLASS = "loot-secret-slide-blocked"
 const DISCOVERING_ROOT_CLASS = "loot-secret-slide-discovering"
-const DISCOVERY_FAILED_ROOT_CLASS = "loot-secret-slide-discovery-failed"
 const PERMIT_KEY = "lia-loot-secret-slide-permit:v1"
 const PERMIT_TTL = 15_000
 const GATE_MESSAGE_DELAY = 250
@@ -73,8 +75,11 @@ export interface PuzzleSlideAccessGuard {
 }
 
 const secretSections = new Set<number>()
+const reserveSections = new Set<number>()
 const renderedSecretSections = new Set<number>()
+const renderedReserveSections = new Set<number>()
 const sourceSecretSections = new Set<number>()
+const sourceReserveSections = new Set<number>()
 const gatedElements = new Map<HTMLElement, GatedElementState>()
 let tocObserver: MutationObserver | null = null
 let documentObserver: MutationObserver | null = null
@@ -83,7 +88,7 @@ let observedToc: HTMLElement | null = null
 let syncTimer: number | null = null
 let gateMessageTimer: number | null = null
 let installed = false
-let discoveryState: "pending" | "complete" | "failed" = "pending"
+let discoveryState: "pending" | "complete" = "pending"
 let sourceDeclarationsReady = false
 let routeBlocked = false
 let pendingPermitSection: number | null = null
@@ -449,6 +454,7 @@ function exactSecretMatches(
     if (
       section === null ||
       !secretSections.has(section) ||
+      reserveSections.has(section) ||
       (nativeSections.has(section) &&
         !link.matches(NATIVE_TOC_LINK_SELECTOR)) ||
       linkTitle(link) !== query
@@ -503,10 +509,6 @@ function enforceRootClasses(): void {
     DISCOVERING_ROOT_CLASS,
     discoveryState !== "complete",
   )
-  root.classList.toggle(
-    DISCOVERY_FAILED_ROOT_CLASS,
-    discoveryState === "failed",
-  )
   root.classList.toggle(BLOCKED_ROOT_CLASS, routeBlocked)
   rootClassObserver?.takeRecords()
 }
@@ -522,8 +524,9 @@ function collectibleSlideAllowed(section: number | null): boolean {
   if (discoveryState !== "complete") return false
   return (
     section === null ||
-    (puzzleSlideAccessGuard?.allowed(section) !== false &&
-      (!secretSections.has(section) || allowedCurrentSection === section))
+    ((reserveSections.has(section) && allowedCurrentSection === section) ||
+      (puzzleSlideAccessGuard?.allowed(section) !== false &&
+        (!secretSections.has(section) || allowedCurrentSection === section)))
   )
 }
 
@@ -550,7 +553,13 @@ function guardActiveSection(totalSections: number): void {
     return
   }
 
-  if (puzzleSlideAccessGuard?.allowed(section) === false) {
+  const permittedReserve =
+    reserveSections.has(section) &&
+    (allowedCurrentSection === section || pendingPermitSection === section)
+  if (
+    !permittedReserve &&
+    puzzleSlideAccessGuard?.allowed(section) === false
+  ) {
     allowedCurrentSection = null
     const fallback = puzzleFallbackSection(section)
     if (fallback === null) {
@@ -594,8 +603,12 @@ function guardActiveSection(totalSections: number): void {
     redirectingFromSection = null
     removeStoredPermit()
     setRouteBlocked(false)
-    controller?.found(section)
-    announce("Geheimfolie geöffnet.")
+    if (reserveSections.has(section)) {
+      announce("Reservefolie geöffnet.")
+    } else {
+      controller?.found(section)
+      announce("Geheimfolie geöffnet.")
+    }
     return
   }
 
@@ -662,6 +675,10 @@ function eventElement(target: EventTarget | null): Element | null {
 
 function authorizeSection(section: number): boolean {
   if (!secretSections.has(section)) return false
+  if (reserveSections.has(section)) {
+    announce("Die Reservefolie wird nur bei leerer Energie geöffnet.")
+    return false
+  }
   if (puzzleSlideAccessGuard?.allowed(section) === false) {
     announce(puzzleSlideAccessGuard.message(section))
     return false
@@ -818,8 +835,24 @@ export function permitPortalSlideNavigation(section: number): boolean {
   ) {
     return false
   }
+  if (reserveSections.has(section)) return false
   if (puzzleSlideAccessGuard?.allowed(section) === false) return false
   if (secretSections.has(section)) storePermit(section)
+  return true
+}
+
+export function permitReserveSlideNavigation(section: number): boolean {
+  if (
+    discoveryState !== "complete" ||
+    !Number.isInteger(section) ||
+    section < 0 ||
+    !reserveSections.has(section)
+  ) {
+    return false
+  }
+  if (allowedCurrentSection === section) return true
+  storePermit(section)
+  scheduleSync()
   return true
 }
 
@@ -926,20 +959,31 @@ function handleRouteChange(): void {
 
 function registerDeclarations(
   declarations: readonly CourseSecretSlideDeclaration[],
+  reserves: readonly CourseReserveSlideDeclaration[],
 ): void {
   sourceSecretSections.clear()
+  sourceReserveSections.clear()
   for (const declaration of declarations) {
     if (declaration.section >= 0) sourceSecretSections.add(declaration.section)
   }
+  for (const declaration of reserves) {
+    if (declaration.section >= 0) sourceReserveSections.add(declaration.section)
+  }
   secretSections.clear()
   for (const section of sourceSecretSections) secretSections.add(section)
+  for (const section of sourceReserveSections) secretSections.add(section)
   for (const section of renderedSecretSections) secretSections.add(section)
+  for (const section of renderedReserveSections) secretSections.add(section)
+  reserveSections.clear()
+  for (const section of sourceReserveSections) reserveSections.add(section)
+  for (const section of renderedReserveSections) reserveSections.add(section)
 }
 
 function refreshLiveEditorDeclarations(markdown: string): void {
   discoveryState = "pending"
   sourceDeclarationsReady = false
   renderedSecretSections.clear()
+  renderedReserveSections.clear()
   allowedCurrentSection = null
   lastAcceptedSection = null
   lastSearchInput = null
@@ -947,7 +991,10 @@ function refreshLiveEditorDeclarations(markdown: string): void {
   redirectingFromSection = null
   routeBlocked = false
   removeStoredPermit()
-  registerDeclarations(parseCourseSecretSlideDeclarations(markdown))
+  registerDeclarations(
+    parseCourseSecretSlideDeclarations(markdown),
+    parseCourseReserveSlideDeclarations(markdown),
+  )
   sourceDeclarationsReady = true
   enforceRootClasses()
   syncInteractionGate()
@@ -960,6 +1007,15 @@ function registerRenderedSection(section: number): void {
   secretSections.add(section)
 }
 
+export function registerRenderedReserveSlide(marker: HTMLElement): void {
+  const section = renderedMarkerSection(marker)
+  if (section === null) return
+  renderedReserveSections.add(section)
+  reserveSections.add(section)
+  secretSections.add(section)
+  syncBeforePaint()
+}
+
 function handleLiveEditorMarkdown(markdown: string): void {
   refreshLiveEditorDeclarations(markdown)
 }
@@ -969,7 +1025,10 @@ function attachCourseMarkdownListener(): void {
 }
 
 function renderedMarkerSection(marker: HTMLElement): number | null {
-  const authoredId = marker.getAttribute("data-secret-id") ?? ""
+  const authoredId =
+    marker.getAttribute("data-secret-id") ??
+    marker.getAttribute("data-reserve-id") ??
+    ""
   const idSection = sectionFromLootId(authoredId)
   if (idSection !== null) return idSection
 
@@ -992,22 +1051,25 @@ function registerRenderedMarker(marker: HTMLElement): void {
 
 function completeDiscovery(
   declarations: readonly CourseSecretSlideDeclaration[],
+  reserves: readonly CourseReserveSlideDeclaration[],
 ): void {
-  registerDeclarations(declarations)
+  registerDeclarations(declarations, reserves)
   sourceDeclarationsReady = true
   syncBeforePaint()
 }
 
-function failDiscovery(error: unknown): void {
-  discoveryState = "failed"
-  enforceRootClasses()
-  showGateStatus(
-    "Geheimfolien konnten nicht sicher geladen werden. Bitte prüfe die Kursquelle und lade den Kurs neu.",
-    true,
+function fallbackDiscovery(error: unknown): void {
+  // The source lookup is an enhancement over the rendered marker. Losing a
+  // redundant fetch must never hide every slide permanently. Continue with
+  // markers that are already present (and with markers registered when a
+  // slide renders); registerRenderedMarker still redirects an unpermitted
+  // direct visit before the secret slide becomes usable.
+  completeDiscovery([], [])
+  console.warn(
+    "Loot: Kursquelle für Geheimfolien nicht erneut verfügbar; " +
+      "der Kurs wird mit gerenderten Markern fortgesetzt.",
+    error,
   )
-  syncInteractionGate()
-  refreshLiaSlideActivity()
-  console.error("Loot: Geheimfolien-Initialisierung fehlgeschlagen.", error)
 }
 
 function attachTocObserver(): void {
@@ -1104,8 +1166,13 @@ export function installSecretSlides(
     subtree: true,
   })
 
-  void requireCourseSecretSlideDeclarations()
-    .then(completeDiscovery)
-    .catch(failDiscovery)
+  void Promise.all([
+    requireCourseSecretSlideDeclarations(),
+    requireCourseReserveSlideDeclarations(),
+  ])
+    .then(([declarations, reserves]) =>
+      completeDiscovery(declarations, reserves),
+    )
+    .catch(fallbackDiscovery)
   scheduleSync()
 }

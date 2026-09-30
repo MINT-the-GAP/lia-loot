@@ -1,15 +1,29 @@
 import { createConfig } from "./score.ts"
+import {
+  DEFAULT_CAT_VARIANT,
+  isCatVariant,
+  type CatVariant,
+} from "./cat-catalog.ts"
+import {
+  isCatCollarColor,
+  type CatCollarColor,
+} from "./cat-collar.ts"
 import { createEmptyKeyCounts, KEY_COLORS } from "./key-colors.ts"
 import { liaCourseIdentity } from "./course-identity.ts"
 import type {
   AchievementState,
+  CatCompanionState,
+  CatFoodState,
   ChestRewardState,
+  FlashlightState,
+  GiftState,
   HighscoreState,
   KeyInventoryState,
   MagnifierState,
   PuzzleState,
   ResourceKind,
   ResourceState,
+  WoodCrateState,
 } from "./types"
 import {
   ACHIEVEMENT_IDS,
@@ -22,6 +36,11 @@ const RESOURCES_STORAGE_PREFIX = "lia-loot:resources:v1:"
 const CHEST_REWARDS_STORAGE_PREFIX = "lia-loot:chest-rewards:v1:"
 const KEY_INVENTORY_STORAGE_PREFIX = "lia-loot:key-inventory:v1:"
 const MAGNIFIER_STORAGE_PREFIX = "lia-loot:magnifier:v1:"
+const FLASHLIGHT_STORAGE_PREFIX = "lia-loot:flashlight:v1:"
+const CAT_COMPANION_STORAGE_PREFIX = "lia-loot:cat-companion:v1:"
+const CAT_FOOD_STORAGE_PREFIX = "lia-loot:cat-food:v1:"
+const GIFT_STORAGE_PREFIX = "lia-loot:gifts:v1:"
+const WOOD_CRATE_STORAGE_PREFIX = "lia-loot:wood-crates:v1:"
 const ACHIEVEMENTS_STORAGE_PREFIX = "lia-loot:achievements:v1:"
 const PUZZLE_STORAGE_PREFIX = "lia-loot:puzzles:v1:"
 
@@ -69,6 +88,26 @@ function keyInventoryStorageKey(): string {
 
 function magnifierStorageKey(): string {
   return courseStorageKey(MAGNIFIER_STORAGE_PREFIX)
+}
+
+function flashlightStorageKey(): string {
+  return courseStorageKey(FLASHLIGHT_STORAGE_PREFIX)
+}
+
+function catCompanionStorageKey(): string {
+  return courseStorageKey(CAT_COMPANION_STORAGE_PREFIX)
+}
+
+function catFoodStorageKey(): string {
+  return courseStorageKey(CAT_FOOD_STORAGE_PREFIX)
+}
+
+function giftStorageKey(): string {
+  return courseStorageKey(GIFT_STORAGE_PREFIX)
+}
+
+function woodCrateStorageKey(): string {
+  return courseStorageKey(WOOD_CRATE_STORAGE_PREFIX)
 }
 
 function achievementsStorageKey(): string {
@@ -497,6 +536,252 @@ export function saveMagnifier(state: MagnifierState): void {
     )
   } catch {
     // The magnifier still works in memory when browser storage is unavailable.
+  }
+}
+
+function normalizeFlashlightState(value: unknown): FlashlightState | null {
+  if (!value || typeof value !== "object") return null
+  const state = value as Record<string, unknown>
+  if (state.version !== 1 || typeof state.collected !== "boolean") return null
+  return { version: 1, collected: state.collected }
+}
+
+export function loadFlashlight(): FlashlightState | null {
+  try {
+    const raw = window.sessionStorage.getItem(flashlightStorageKey())
+    if (!raw) return null
+    return normalizeFlashlightState(JSON.parse(raw))
+  } catch {
+    return null
+  }
+}
+
+export function saveFlashlight(state: FlashlightState): void {
+  try {
+    window.sessionStorage.setItem(
+      flashlightStorageKey(),
+      JSON.stringify(state),
+    )
+  } catch {
+    // The flashlight still works in memory when browser storage is unavailable.
+  }
+}
+
+function normalizeCatCompanionState(
+  value: unknown,
+): CatCompanionState | null {
+  if (!value || typeof value !== "object") return null
+  const state = value as Record<string, unknown>
+  if (state.version === 1 && typeof state.collected === "boolean") {
+    return state.collected
+      ? {
+          version: 3,
+          unlocked: [DEFAULT_CAT_VARIANT],
+          selected: DEFAULT_CAT_VARIANT,
+          unlockedCollars: [],
+          selectedCollar: null,
+        }
+      : {
+          version: 3,
+          unlocked: [],
+          selected: null,
+          unlockedCollars: [],
+          selectedCollar: null,
+        }
+  }
+  if (
+    (state.version !== 2 && state.version !== 3) ||
+    !Array.isArray(state.unlocked)
+  ) return null
+  const unlocked = state.unlocked.filter(isCatVariant)
+  if (
+    unlocked.length !== state.unlocked.length ||
+    new Set(unlocked).size !== unlocked.length
+  ) {
+    return null
+  }
+  const selected = state.selected
+  if (selected !== null && !isCatVariant(selected)) return null
+  if (selected !== null && !unlocked.includes(selected)) return null
+  if (unlocked.length > 0 && selected === null) return null
+  const rawCollars = state.version === 3 ? state.unlockedCollars : []
+  const selectedCollar = state.version === 3 ? state.selectedCollar : null
+  if (
+    !Array.isArray(rawCollars) ||
+    !rawCollars.every(isCatCollarColor) ||
+    new Set(rawCollars).size !== rawCollars.length ||
+    (selectedCollar !== null && !isCatCollarColor(selectedCollar)) ||
+    (selectedCollar !== null && !rawCollars.includes(selectedCollar))
+  ) return null
+  return {
+    version: 3,
+    unlocked: unlocked as CatVariant[],
+    selected,
+    unlockedCollars: rawCollars as CatCollarColor[],
+    selectedCollar: selectedCollar as CatCollarColor | null,
+  }
+}
+
+export function loadCatCompanion(): CatCompanionState | null {
+  try {
+    const raw = window.sessionStorage.getItem(catCompanionStorageKey())
+    if (!raw) return null
+    return normalizeCatCompanionState(JSON.parse(raw))
+  } catch {
+    return null
+  }
+}
+
+export function saveCatCompanion(state: CatCompanionState): void {
+  try {
+    window.sessionStorage.setItem(
+      catCompanionStorageKey(),
+      JSON.stringify(state),
+    )
+  } catch {
+    // The companion still works in memory when browser storage is unavailable.
+  }
+}
+
+function normalizeCatFoodState(value: unknown): CatFoodState | null {
+  if (!value || typeof value !== "object") return null
+  const state = value as Record<string, unknown>
+  if (
+    state.version !== 1 ||
+    !Array.isArray(state.collected) ||
+    !Array.isArray(state.fed) ||
+    !state.collected.every(
+      (id) => typeof id === "string" && id.trim().length > 0,
+    ) ||
+    !state.fed.every((id) => typeof id === "string" && id.trim().length > 0)
+  ) {
+    return null
+  }
+  const collected = state.collected.map((id) => id.trim())
+  const fed = state.fed.map((id) => id.trim())
+  if (
+    new Set(collected).size !== collected.length ||
+    new Set(fed).size !== fed.length ||
+    !fed.every((id) => collected.includes(id))
+  ) {
+    return null
+  }
+  return { version: 1, collected, fed }
+}
+
+export function loadCatFood(): CatFoodState | null {
+  try {
+    const raw = window.sessionStorage.getItem(catFoodStorageKey())
+    if (!raw) return null
+    return normalizeCatFoodState(JSON.parse(raw))
+  } catch {
+    return null
+  }
+}
+
+export function saveCatFood(state: CatFoodState): void {
+  try {
+    window.sessionStorage.setItem(catFoodStorageKey(), JSON.stringify(state))
+  } catch {
+    // Cat food still works in memory when browser storage is unavailable.
+  }
+}
+
+function normalizeGiftState(value: unknown): GiftState | null {
+  if (!value || typeof value !== "object") return null
+  const state = value as Record<string, unknown>
+  if (
+    state.version !== 1 ||
+    !Array.isArray(state.opened) ||
+    !state.opened.every(
+      (id) => typeof id === "string" && id.trim().length > 0,
+    )
+  ) {
+    return null
+  }
+  const opened = state.opened.map((id) => id.trim())
+  if (new Set(opened).size !== opened.length) return null
+  return { version: 1, opened }
+}
+
+export function loadGifts(): GiftState | null {
+  try {
+    const raw = window.sessionStorage.getItem(giftStorageKey())
+    if (!raw) return null
+    return normalizeGiftState(JSON.parse(raw))
+  } catch {
+    return null
+  }
+}
+
+export function saveGifts(state: GiftState): void {
+  try {
+    window.sessionStorage.setItem(giftStorageKey(), JSON.stringify(state))
+  } catch {
+    // Gifts still open in memory when browser storage is unavailable.
+  }
+}
+
+function normalizeWoodCrateState(value: unknown): WoodCrateState | null {
+  if (!value || typeof value !== "object") return null
+  const state = value as Record<string, unknown>
+  if (
+    (state.version !== 1 && state.version !== 2) ||
+    !Array.isArray(state.broken) ||
+    !state.broken.every(
+      (id) => typeof id === "string" && id.trim().length > 0,
+    )
+  ) {
+    return null
+  }
+  const broken = state.broken.map((id) => id.trim())
+  if (new Set(broken).size !== broken.length) return null
+  if (state.version === 1) {
+    return { version: 2, broken, damage: {} }
+  }
+  if (
+    !state.damage ||
+    typeof state.damage !== "object" ||
+    Array.isArray(state.damage)
+  ) {
+    return null
+  }
+  const damage: Record<string, number> = {}
+  for (const [rawId, rawDamage] of Object.entries(state.damage)) {
+    const id = rawId.trim()
+    if (
+      !id ||
+      id !== rawId ||
+      broken.includes(id) ||
+      !Number.isSafeInteger(rawDamage) ||
+      Number(rawDamage) <= 0 ||
+      Number(rawDamage) >= 8
+    ) {
+      return null
+    }
+    damage[id] = Number(rawDamage)
+  }
+  return { version: 2, broken, damage }
+}
+
+export function loadWoodCrates(): WoodCrateState | null {
+  try {
+    const raw = window.sessionStorage.getItem(woodCrateStorageKey())
+    if (!raw) return null
+    return normalizeWoodCrateState(JSON.parse(raw))
+  } catch {
+    return null
+  }
+}
+
+export function saveWoodCrates(state: WoodCrateState): void {
+  try {
+    window.sessionStorage.setItem(
+      woodCrateStorageKey(),
+      JSON.stringify(state),
+    )
+  } catch {
+    // Wood crates still break in memory when browser storage is unavailable.
   }
 }
 

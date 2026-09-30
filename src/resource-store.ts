@@ -38,12 +38,27 @@ function isResourceKind(value: unknown): value is ResourceKind {
   return RESOURCE_KINDS.includes(value as ResourceKind)
 }
 
+function resourceBundle(
+  value: Partial<Record<ResourceKind, number>>,
+): ResourceCounts | null {
+  const bundle = { gold: 0, diamonds: 0, energy: 0 }
+  for (const kind of RESOURCE_KINDS) {
+    const amount = value[kind] ?? 0
+    if (!Number.isSafeInteger(amount) || amount < 0) return null
+    bundle[kind] = amount
+  }
+  return bundle
+}
+
 export class ResourceStore {
   private current: ResourceState | null
   private chestRewards: ChestRewardState
   private enabled = false
   private goldValue = 100
   private diamondValue = 250
+  private listeners = new Set<
+    (previous: ResourceState | null, current: ResourceState | null) => void
+  >()
 
   constructor() {
     this.current = loadResources()
@@ -58,6 +73,7 @@ export class ResourceStore {
     goldValue = 100,
     diamondValue = 250,
   ): ResourceState {
+    const previous = this.state()
     const gold = resourceAmount(initialGold, "Gold")
     const diamonds = resourceAmount(initialDiamonds, "Diamanten")
     const energy =
@@ -98,6 +114,7 @@ export class ResourceStore {
     this.goldValue = goldValue
     this.diamondValue = diamondValue
     this.enabled = true
+    this.notify(previous)
     return cloneState(this.current)
   }
 
@@ -111,6 +128,7 @@ export class ResourceStore {
 
   spend(kind: ResourceKind): boolean {
     if (!this.enabled || !this.current) return true
+    const previous = cloneState(this.current)
 
     if (kind === "energy") {
       if (this.current.energy === null) return true
@@ -122,6 +140,58 @@ export class ResourceStore {
     }
 
     saveResources(this.current)
+    this.notify(previous)
+    return true
+  }
+
+  canAfford(cost: Partial<Record<ResourceKind, number>>): boolean {
+    const bundle = resourceBundle(cost)
+    if (!bundle || !this.enabled || !this.current) return false
+    if (bundle.energy > 0 && this.current.energy === null) return false
+    return (
+      this.current.gold >= bundle.gold &&
+      this.current.diamonds >= bundle.diamonds &&
+      (this.current.energy === null || this.current.energy >= bundle.energy)
+    )
+  }
+
+  exchange(
+    cost: Partial<Record<ResourceKind, number>>,
+    reward: Partial<Record<ResourceKind, number>> = {},
+  ): boolean {
+    const previous = this.state()
+    const debit = resourceBundle(cost)
+    const credit = resourceBundle(reward)
+    if (!debit || !credit || !this.canAfford(debit) || !this.current) return false
+    if (
+      (debit.energy > 0 || credit.energy > 0) &&
+      this.current.energy === null
+    ) {
+      return false
+    }
+
+    const gold = this.current.gold - debit.gold + credit.gold
+    const diamonds =
+      this.current.diamonds - debit.diamonds + credit.diamonds
+    const energy =
+      this.current.energy === null
+        ? null
+        : this.current.energy - debit.energy + credit.energy
+    if (
+      !Number.isSafeInteger(gold) ||
+      gold < 0 ||
+      !Number.isSafeInteger(diamonds) ||
+      diamonds < 0 ||
+      (energy !== null && (!Number.isSafeInteger(energy) || energy < 0))
+    ) {
+      return false
+    }
+
+    this.current.gold = gold
+    this.current.diamonds = diamonds
+    this.current.energy = energy
+    saveResources(this.current)
+    this.notify(previous)
     return true
   }
 
@@ -130,6 +200,7 @@ export class ResourceStore {
     reward: ResourceKind = "gold",
     amount = 1,
   ): boolean {
+    const previous = this.state()
     const normalizedId = chestId.trim()
     if (
       !normalizedId ||
@@ -157,6 +228,7 @@ export class ResourceStore {
     this.chestRewards.collected[reward].push(normalizedId)
     saveResources(this.current)
     saveChestRewards(this.chestRewards)
+    this.notify(previous)
     return true
   }
 
@@ -195,6 +267,21 @@ export class ResourceStore {
 
   state(): ResourceState | null {
     return this.enabled && this.current ? cloneState(this.current) : null
+  }
+
+  subscribe(
+    listener: (
+      previous: ResourceState | null,
+      current: ResourceState | null,
+    ) => void,
+  ): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
+  private notify(previous: ResourceState | null): void {
+    const current = this.state()
+    for (const listener of this.listeners) listener(previous, current)
   }
 
   private reconcileChestRewards(): void {

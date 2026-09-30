@@ -66,6 +66,11 @@ export interface CourseSecretSlideDeclaration {
   section: number
 }
 
+export interface CourseReserveSlideDeclaration {
+  energy: number | null
+  section: number
+}
+
 export interface CourseChestDiscovery {
   declarations: CourseChestDeclaration[]
   catalog: CourseChestDeclaration[]
@@ -93,13 +98,15 @@ const INTERNAL_CHEST_MACRO =
 const INTERNAL_LOCK_MACRO =
   /^\s*@LootSchloss_\s*\(\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]+)\s*\)\s*$/
 const ACHIEVEMENT_ITEM_MACRO =
-  /^\s*@(Schluessel|Lupe|Schaufel|Giesskanne)(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/iu
+  /^\s*@(Schluessel|Lupe|Taschenlampe|Schaufel|Giesskanne|Axt)(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/iu
 const INTERNAL_KEY_MACRO =
   /^\s*@LootSchluessel_\s*\(\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]*)\s*\)\s*$/iu
 const INTERNAL_MAGNIFIER_MACRO =
   /^\s*@LootLupe_\s*\(\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]*)\s*\)\s*$/iu
+const INTERNAL_FLASHLIGHT_MACRO =
+  /^\s*@LootTaschenlampe_\s*\(\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]*)\s*\)\s*$/iu
 const INTERNAL_TOOL_MACRO =
-  /^\s*@LootWerkzeug_\s*\(\s*([^,()\r\n]+)\s*,\s*(shovel|watering-can)\s*,\s*([^,()\r\n]*)\s*\)\s*$/iu
+  /^\s*@LootWerkzeug_\s*\(\s*([^,()\r\n]+)\s*,\s*(shovel|watering-can|axe)\s*,\s*([^,()\r\n]*)\s*\)\s*$/iu
 const INTERNAL_REVEAL_START_MACRO =
   /^\s*@LootRevealStart_\s*\(\s*([^,()\r\n]+)\s*,\s*(erde|pflanze)\s*,\s*([^,()\r\n]*)\s*\)\s*$/iu
 const INTERNAL_REVEAL_END_MACRO =
@@ -109,6 +116,8 @@ const INTERNAL_HIDDEN_MACRO =
 const RESOURCE_MACRO =
   /^\s*@Ressourcen\s*\(\s*([^()\r\n]*)\s*\)\s*$/
 const SECRET_SLIDE_MACRO = /^\s*@Geheimfolie\s*$/
+const RESERVE_SLIDE_MACRO =
+  /^\s*@Reservefolie(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/iu
 const PUZZLE_PIECE_PREFIX = /@Puzzleteil(?![\p{L}\p{N}_])/giu
 const PUZZLE_GATE_MACRO =
   /^\s*@Puzzletor(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/iu
@@ -203,6 +212,24 @@ export interface CourseInlineRevealDeclaration {
   options: string
   section: number
   trailingSource: string
+}
+
+export interface CourseGiftDeclaration {
+  content: string
+  section: number
+  sourceOrder: number
+}
+
+export interface CourseCatFoodDeclaration {
+  content: string
+  section: number
+  sourceOrder: number
+}
+
+export interface CourseWoodCrateDeclaration {
+  content: string
+  section: number
+  sourceOrder: number
 }
 
 const REVEAL_START_MACRO =
@@ -624,6 +651,13 @@ function parseAchievementOptions(rawOptions: string): ParsedAchievementOptions {
 
 const CATALOG_NUMBER_LIKE_TOKEN =
   /^[+-]?(?:(?:\d+(?:[.,]\d*)?)|(?:[.,]\d+))(?:e[+-]?\d+)?$/iu
+const CHEST_FOG_OPTION_TOKENS = new Set([
+  "darkness",
+  "dunkel",
+  "dunkelheit",
+  "fog",
+  "nebel",
+])
 
 function chestOptionsWithoutAmount(
   rawSpecification: string,
@@ -633,6 +667,7 @@ function chestOptionsWithoutAmount(
     .map((token) => token.trim())
     .filter(Boolean)
   let valid = true
+  let fogSeen = false
 
   if (tokens[0] && CATALOG_NUMBER_LIKE_TOKEN.test(tokens[0])) {
     const token = tokens.shift()!
@@ -646,14 +681,22 @@ function chestOptionsWithoutAmount(
     }
   }
 
-  if (tokens.some((token) => CATALOG_NUMBER_LIKE_TOKEN.test(token))) {
-    valid = false
-  }
+  const options = tokens.filter((token) => {
+    if (CATALOG_NUMBER_LIKE_TOKEN.test(token)) {
+      valid = false
+      return false
+    }
+    const normalized = token
+      .normalize("NFKC")
+      .toLocaleLowerCase("de-DE")
+    if (!CHEST_FOG_OPTION_TOKENS.has(normalized)) return true
+    if (fogSeen) valid = false
+    fogSeen = true
+    return false
+  })
 
   return {
-    options: tokens
-      .filter((token) => !CATALOG_NUMBER_LIKE_TOKEN.test(token))
-      .join("; "),
+    options: options.join("; "),
     valid,
   }
 }
@@ -776,6 +819,9 @@ function internalItemAchievementCatalog(
   const magnifier = INTERNAL_MAGNIFIER_MACRO.exec(line)
   if (magnifier) return simpleItemAchievementCatalog(magnifier[2])
 
+  const flashlight = INTERNAL_FLASHLIGHT_MACRO.exec(line)
+  if (flashlight) return simpleItemAchievementCatalog(flashlight[2])
+
   const tool = INTERNAL_TOOL_MACRO.exec(line)
   if (tool) return simpleItemAchievementCatalog(tool[3])
 
@@ -895,6 +941,9 @@ const DIRECT_INLINE_REVEAL_MACROS: Readonly<
 }
 const INLINE_REVEAL_PREFIX =
   /@(Erdhaufen\.inline|Pflanze\.inline|Blume\.inline)(?![\p{L}\p{N}_.])/gu
+const GIFT_PREFIX = /@Geschenk(?![\p{L}\p{N}_.])/gu
+const CAT_FOOD_PREFIX = /@Futter(?![\p{L}\p{N}_.])/gu
+const WOOD_CRATE_PREFIX = /@Kiste(?![\p{L}\p{N}_.])/gu
 
 function macroArguments(
   line: string,
@@ -1060,6 +1109,100 @@ export function parseCourseInlineRevealDeclarations(
         ...occurrence,
         catalogEligible: line.lootIfCatalogEligible,
         section: line.section,
+      })
+    }
+  }
+  return declarations
+}
+
+function unwrapCodeArgument(value: string): string {
+  const match = /^(`+)([\s\S]*)\1$/u.exec(value.trim())
+  return match ? match[2] : value.trim()
+}
+
+function containerMacroOccurrences(
+  line: string,
+  rawLine: string,
+  prefix: RegExp,
+): string[] {
+  const occurrences: string[] = []
+  const matcher = new RegExp(prefix)
+
+  while (true) {
+    const match = matcher.exec(line)
+    if (!match) break
+    const previous = line[match.index - 1]
+    if (previous === "@" || previous?.charCodeAt(0) === 92) continue
+
+    let openingIndex = match.index + match[0].length
+    while (/\s/u.test(rawLine[openingIndex] ?? "")) openingIndex += 1
+    if (rawLine[openingIndex] !== "(") continue
+    const closingIndex = matchingParenthesis(rawLine, openingIndex)
+    if (closingIndex === null) break
+    const arguments_ = macroArguments(rawLine, openingIndex, closingIndex)
+    if (arguments_.length === 1) {
+      const content = unwrapCodeArgument(arguments_[0])
+      if (content.length > 0) occurrences.push(content)
+    }
+    matcher.lastIndex = closingIndex + 1
+  }
+  return occurrences
+}
+
+export function parseCourseGiftDeclarations(
+  markdown: string,
+): CourseGiftDeclaration[] {
+  const declarations: CourseGiftDeclaration[] = []
+  for (const line of visibleCourseLines(markdown)) {
+    for (const content of containerMacroOccurrences(
+      line.content,
+      line.rawContent,
+      GIFT_PREFIX,
+    )) {
+      declarations.push({
+        content,
+        section: line.section,
+        sourceOrder: declarations.length,
+      })
+    }
+  }
+  return declarations
+}
+
+export function parseCourseCatFoodDeclarations(
+  markdown: string,
+): CourseCatFoodDeclaration[] {
+  const declarations: CourseCatFoodDeclaration[] = []
+  for (const line of visibleCourseLines(markdown)) {
+    for (const content of containerMacroOccurrences(
+      line.content,
+      line.rawContent,
+      CAT_FOOD_PREFIX,
+    )) {
+      declarations.push({
+        content,
+        section: line.section,
+        sourceOrder: declarations.length,
+      })
+    }
+  }
+  return declarations
+}
+
+export function parseCourseWoodCrateDeclarations(
+  markdown: string,
+): CourseWoodCrateDeclaration[] {
+  const declarations: CourseWoodCrateDeclaration[] = []
+  for (const line of visibleCourseLines(markdown)) {
+    for (const content of containerMacroOccurrences(
+      line.content,
+      line.rawContent,
+      WOOD_CRATE_PREFIX,
+    )) {
+      declarations.push({
+        content,
+        section: line.section,
+        sourceOrder: declarations.length,
       })
     }
   }
@@ -1490,6 +1633,33 @@ export function parseCourseSecretSlideDeclarations(
   return declarations
 }
 
+export function parseCourseReserveSlideDeclarations(
+  markdown: string,
+): CourseReserveSlideDeclaration[] {
+  const declarations: CourseReserveSlideDeclaration[] = []
+
+  for (const line of visibleCourseLines(markdown)) {
+    if (
+      !line.lootIfCatalogEligible ||
+      line.lootIfDepth > 0 ||
+      line.section < 0
+    ) {
+      continue
+    }
+    const match = RESERVE_SLIDE_MACRO.exec(line.content)
+    if (!match) continue
+    const literal = match[1]?.trim() ?? ""
+    const energy = /^\+?\d+$/u.test(literal) ? Number(literal) : Number.NaN
+    declarations.push({
+      energy:
+        Number.isSafeInteger(energy) && energy > 0 ? energy : null,
+      section: line.section,
+    })
+  }
+
+  return declarations
+}
+
 export function parseCoursePuzzleDeclarations(
   markdown: string,
 ): CoursePuzzleDiscovery {
@@ -1557,12 +1727,27 @@ function courseSourceUrl(): string | null {
   if (configured) {
     try {
       const url = new URL(configured, window.location.href)
-      if (/^(?:https?:|blob:|data:)$/i.test(url.protocol)) return url.href
+      if (/^(?:https?:|blob:|data:)$/i.test(url.protocol)) {
+        // A lia-freeze-v2 share stores its submission token in the course URL
+        // fragment. Fragments are not part of the Markdown resource and must
+        // not create a second cache key for the source that LiaScript already
+        // loaded.
+        url.hash = ""
+        return url.href
+      }
     } catch {
       // Fall back to LiaScript's standard query URL.
     }
   }
-  return explicitSourceUrl(window.location.search.slice(1))
+  const explicit = explicitSourceUrl(window.location.search.slice(1))
+  if (!explicit) return null
+  try {
+    const url = new URL(explicit, window.location.href)
+    url.hash = ""
+    return url.href
+  } catch {
+    return explicit
+  }
 }
 
 async function fetchCourseMarkdown(): Promise<string | null> {
@@ -1576,7 +1761,10 @@ async function fetchCourseMarkdown(): Promise<string | null> {
 
   try {
     const response = await load(sourceUrl, {
-      cache: "no-cache",
+      // LiaScript has just fetched this exact course. Reuse that response so
+      // Classroom sessions, freeze links and brief network interruptions do
+      // not turn a harmless second source lookup into a blocked course.
+      cache: "force-cache",
       credentials: "same-origin",
       signal: abort.signal,
     })
@@ -1688,6 +1876,13 @@ export async function discoverCourseSecretSlideDeclarations(): Promise<
   return markdown ? parseCourseSecretSlideDeclarations(markdown) : []
 }
 
+export async function discoverCourseReserveSlideDeclarations(): Promise<
+  CourseReserveSlideDeclaration[]
+> {
+  const markdown = await loadCourseMarkdown()
+  return markdown ? parseCourseReserveSlideDeclarations(markdown) : []
+}
+
 export async function requireCoursePuzzleDeclarations(): Promise<
   CoursePuzzleDiscovery
 > {
@@ -1719,6 +1914,27 @@ export async function discoverCourseInlineRevealDeclarations(): Promise<
   return markdown ? parseCourseInlineRevealDeclarations(markdown) : []
 }
 
+export async function discoverCourseGiftDeclarations(): Promise<
+  CourseGiftDeclaration[]
+> {
+  const markdown = await loadCourseMarkdown()
+  return markdown ? parseCourseGiftDeclarations(markdown) : []
+}
+
+export async function discoverCourseCatFoodDeclarations(): Promise<
+  CourseCatFoodDeclaration[]
+> {
+  const markdown = await loadCourseMarkdown()
+  return markdown ? parseCourseCatFoodDeclarations(markdown) : []
+}
+
+export async function discoverCourseWoodCrateDeclarations(): Promise<
+  CourseWoodCrateDeclaration[]
+> {
+  const markdown = await loadCourseMarkdown()
+  return markdown ? parseCourseWoodCrateDeclarations(markdown) : []
+}
+
 export async function requireCourseSecretSlideDeclarations(): Promise<
   CourseSecretSlideDeclaration[]
 > {
@@ -1727,4 +1943,14 @@ export async function requireCourseSecretSlideDeclarations(): Promise<
     throw new Error("Die LiaScript-Kursquelle konnte nicht geladen werden.")
   }
   return parseCourseSecretSlideDeclarations(markdown)
+}
+
+export async function requireCourseReserveSlideDeclarations(): Promise<
+  CourseReserveSlideDeclaration[]
+> {
+  const markdown = await loadCourseMarkdown()
+  if (markdown === null) {
+    throw new Error("Die LiaScript-Kursquelle konnte nicht geladen werden.")
+  }
+  return parseCourseReserveSlideDeclarations(markdown)
 }

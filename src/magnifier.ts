@@ -53,6 +53,7 @@ interface MagnifierController {
   collected(): boolean
   collect(): boolean
   find(concealmentId: string, mode: ConcealmentMode): void
+  radius?(): number
 }
 
 interface MagnifierRequest {
@@ -96,6 +97,11 @@ const boundMagnifierButtons = new WeakSet<HTMLButtonElement>()
 const boundMagnifierPanHandles = new WeakSet<HTMLButtonElement>()
 const warnedInvalidSpecs = new Set<string>()
 const visibilityGate = new CollectibleVisibilityGate()
+
+function currentMagnifierRadius(): number {
+  const radius = controller?.radius?.() ?? MAGNIFIER_RADIUS
+  return Number.isFinite(radius) && radius > 0 ? radius : MAGNIFIER_RADIUS
+}
 
 function resolveMagnifierId(host: HTMLElement): string {
   const authoredId = host.getAttribute("data-magnifier-id")?.trim()
@@ -293,12 +299,13 @@ function syncAllMagnifiers(): void {
 }
 
 function clampTouchLensPosition(position: PointerPosition): PointerPosition {
+  const radius = currentMagnifierRadius()
   const horizontalMargin = Math.min(
-    MAGNIFIER_RADIUS + TOUCH_LENS_MARGIN,
+    radius + TOUCH_LENS_MARGIN,
     window.innerWidth / 2,
   )
   const verticalMargin = Math.min(
-    MAGNIFIER_RADIUS + TOUCH_LENS_MARGIN,
+    radius + TOUCH_LENS_MARGIN,
     window.innerHeight / 2,
   )
   return {
@@ -436,6 +443,10 @@ function ensureLens(): HTMLDivElement {
     lens.setAttribute("aria-hidden", "true")
     document.body.appendChild(lens)
   }
+  lens.style.setProperty(
+    "--loot-magnifier-radius",
+    `${currentMagnifierRadius()}px`,
+  )
   ensureMagnifierPanHandle(lens)
   return lens
 }
@@ -475,6 +486,10 @@ function updateSecretTarget(
   target: HTMLElement,
   position: PointerPosition | null,
 ): void {
+  target.style.setProperty(
+    "--loot-magnifier-radius",
+    `${currentMagnifierRadius()}px`,
+  )
   normalizeHiddenMacroArguments(target)
   const mode = prepareConcealedHost(target)
   if (!mode) return
@@ -510,7 +525,12 @@ function updateSecretTarget(
   )
   const revealed =
     concealedTargetIsRendered(target, content) &&
-    magnifierIntersectsRect(position.x, position.y, contentRect)
+    magnifierIntersectsRect(
+      position.x,
+      position.y,
+      contentRect,
+      currentMagnifierRadius(),
+    )
   setSecretRevealed(target, revealed)
   if (!revealed || wasRevealed) return
 
@@ -823,6 +843,12 @@ export function installMagnifier(nextController: MagnifierController): void {
   renderMagnifierTool()
   syncAllMagnifiers()
   updateSecretTargets(null)
+}
+
+export function refreshMagnifier(): void {
+  renderMagnifierTool()
+  ensureLens()
+  syncMagnifierRuntime()
 }
 
 export { MAGNIFIER_RADIUS }

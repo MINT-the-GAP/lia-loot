@@ -56,6 +56,7 @@ export interface PuzzleRuntimeController {
   catalogReady(total: number, solved: number): void
   changed(): void
   gateSolved(solved: number, color: KeyColor): void
+  pieceCollected?(): void
 }
 
 interface RenderedFallbackGate {
@@ -793,6 +794,7 @@ function handleClick(event: MouseEvent): void {
         ", gefunden.",
     )
     controller?.changed()
+    controller?.pieceCollected?.()
     window.setTimeout(() => {
       collectingPieces.delete(pickupId)
       scheduleSync()
@@ -1019,5 +1021,9 @@ export function installPuzzles(
   void requireCoursePuzzleDeclarations()
     .then((discovery) => completeDiscovery(buildPuzzleCatalog(discovery)))
     .catch(failDiscovery)
+  scheduleSync()
+}
+
+export function refreshPuzzles(): void {
   scheduleSync()
 }

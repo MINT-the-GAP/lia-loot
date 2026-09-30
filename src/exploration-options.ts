@@ -1,6 +1,6 @@
 import type { ConcealmentMode } from "./concealment.ts"
 
-export const TOOL_KINDS = ["shovel", "watering-can"] as const
+export const TOOL_KINDS = ["shovel", "watering-can", "axe"] as const
 export type ToolKind = (typeof TOOL_KINDS)[number]
 
 export const REVEAL_KINDS = ["soil", "plant"] as const
