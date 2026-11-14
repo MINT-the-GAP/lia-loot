@@ -61,9 +61,11 @@ import { installObjectLocks } from "./object-lock"
 import {
   discoverCourseAchievementCatalog,
   discoverCourseAchievementsDeclaration,
+  discoverCourseMarkdown,
   discoverCourseIdentity,
   discoverCourseResourceDeclaration,
   installCourseMarkdownCapture,
+  parseCoursePuzzleDeclarations,
 } from "./course-chests"
 import { prepareLiaCourseIdentity } from "./course-identity"
 import { hideHighscore, showHighscore } from "./popup"
@@ -92,6 +94,10 @@ import { calculateScore, createConfig } from "./score"
 import { installSecretSlides } from "./secret-slides"
 import { installSlidePortals } from "./slide-portal"
 import { installPuzzles, refreshPuzzles } from "./puzzle-runtime"
+import {
+  buildPuzzleCatalog,
+  validPuzzleGateConfigurations,
+} from "./puzzle-catalog"
 import { PuzzleStore } from "./puzzle-store"
 import {
   installShops,
@@ -107,6 +113,10 @@ import {
 } from "./shop-store"
 import { injectStyles } from "./style"
 import { HighscoreStore } from "./store"
+import {
+  parseCourseStartInventory,
+  seedStartInventory,
+} from "./start-inventory"
 import { installTimerEventTracking } from "./timer-events"
 import {
   installTreasureChests,
@@ -116,7 +126,7 @@ import type { HighscoreApi, LootRuntimeState, ResourceKind } from "./types"
 
 const VERSION = "0.0.1"
 
-function boot(): void {
+function boot(courseMarkdown: string | null): void {
   const resourceStore = new ResourceStore()
   const store = new HighscoreStore(() => resourceStore.scoreBonus())
   const keyInventoryStore = new KeyInventoryStore()
@@ -131,6 +141,39 @@ function boot(): void {
   const shopStore = new ShopStore()
   const catStore = new CatCompanionStore()
   const catFoodStore = new CatFoodStore()
+
+  if (courseMarkdown) {
+    const startInventory = parseCourseStartInventory(courseMarkdown)
+    if (
+      startInventory.declarations.some(
+        ({ grant }) => grant.kind === "puzzle-piece",
+      )
+    ) {
+      const puzzleCatalog = buildPuzzleCatalog(
+        parseCoursePuzzleDeclarations(courseMarkdown),
+      )
+      puzzleStore.configure(
+        puzzleCatalog.signature,
+        validPuzzleGateConfigurations(puzzleCatalog),
+      )
+    }
+    for (const diagnostic of startInventory.diagnostics) {
+      console.warn(
+        `Loot: Startinventar auf Folie ${diagnostic.section + 1}: ${diagnostic.message}`,
+      )
+    }
+    for (const diagnostic of seedStartInventory(startInventory.declarations, {
+      cat: catStore,
+      exploration: explorationStore,
+      flashlight: flashlightStore,
+      keys: keyInventoryStore,
+      magnifier: magnifierStore,
+      puzzle: puzzleStore,
+      shop: shopStore,
+    })) {
+      console.warn(`Loot: Startinventar: ${diagnostic}`)
+    }
+  }
   const achievements = new AchievementManager(
     achievementStore,
     showAchievement,
@@ -893,7 +936,7 @@ async function start(runtime: LootRuntimeState): Promise<void> {
     installCourseMarkdownCapture()
     installInlineRevealRendering()
     await prepareLiaCourseIdentity(discoverCourseIdentity)
-    boot()
+    boot(await discoverCourseMarkdown())
     if (window.__LIA_LOOT_RUNTIME__ === runtime) runtime.status = "ready"
   } catch (error) {
     if (window.__LIA_LOOT_RUNTIME__ === runtime) runtime.status = "failed"

@@ -141,6 +141,36 @@ test("lässt alte Platzierungs-, Farb- und Sichtbarkeitswerte unverändert", () 
   )
 })
 
+test("parst Startinventar-Aliasse NFKC- und großschreibungsunabhängig", () => {
+  for (const token of [
+    "startinventar",
+    "START",
+    "von-anfang-an",
+    "ＳＴＡＲＴＩＮＶＥＮＴＡＲ",
+  ]) {
+    const parsed = parseCollectibleOptions(token)
+    assert.equal(parsed.valid, true, token)
+    assert.equal(parsed.initiallyOwned, true, token)
+    assert.deepEqual(parsed.values, [], token)
+  }
+})
+
+test("weist doppeltes oder erwerbsgesteuertes Startinventar fail-closed zurück", () => {
+  for (const specification of [
+    "start; startinventar",
+    "startinventar; anker",
+    "startinventar; 0s",
+    "startinventar; theme=blau",
+    "startinventar; farbmodus=dunkel",
+    "startinventar; annotationen=aus",
+  ]) {
+    const parsed = parseCollectibleOptions(specification)
+    assert.equal(parsed.initiallyOwned, true, specification)
+    assert.equal(parsed.valid, false, specification)
+    assert.ok(parsed.errors.length > 0, specification)
+  }
+})
+
 test("parst Theme, Darstellungsvariante und ausgeblendete Annotationen gemeinsam", () => {
   assert.deepEqual(
     parseCollectibleOptions(

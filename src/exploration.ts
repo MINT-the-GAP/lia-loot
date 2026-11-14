@@ -20,6 +20,7 @@ import {
   AXE_TIER_DETAILS,
   type AxeTier,
 } from "./axe.ts"
+import { parseSimplePickupOptions } from "./simple-pickup-options.ts"
 import {
   createExplorationToolGraphic,
   createRevealCoverGraphic,
@@ -905,23 +906,17 @@ function parseToolRequest(host: HTMLElement, toolId: string): ToolRequest {
   const rawOptions = normalizePlaceholders(
     host.getAttribute("data-options")?.trim() ?? "",
   )
-  const visibility = parseCollectibleOptions(rawOptions)
-  const exploration = parseExplorationOptions(visibility.values)
-  const concealment = extractConcealmentOptions(exploration.values)
-  const errors = [
-    ...visibility.errors,
-    ...concealment.errors,
-  ]
-  if (concealment.values.length > 0) {
-    errors.push(`Unbekannte Werkzeugoption: ${concealment.values.join("; ")}`)
-  }
+  const parsed = parseSimplePickupOptions(
+    rawOptions,
+    "Unbekannte Werkzeugoption",
+  )
   return {
-    concealment: concealment.mode,
-    errors,
-    layers: exploration.layers,
+    concealment: parsed.concealment,
+    errors: parsed.errors,
+    layers: parsed.layers,
     sourceSection: sectionFromLootId(toolId),
-    valid: errors.length === 0,
-    visibility: visibility.rule,
+    valid: parsed.valid,
+    visibility: parsed.visibility,
   }
 }
 

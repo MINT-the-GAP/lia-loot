@@ -33,6 +33,7 @@ export interface CollectibleVisibilityRule {
 export interface ParsedCollectibleOptions {
   errors: string[]
   hasOptions: boolean
+  initiallyOwned?: true
   rule: CollectibleVisibilityRule
   valid: boolean
   values: string[]
@@ -58,6 +59,12 @@ const ONLY_ON_SLIDE_TOKENS = new Set([
   "only-on-slide",
   "slide only",
   "slide-only",
+])
+
+const START_INVENTORY_TOKENS = new Set([
+  "startinventar",
+  "start",
+  "von-anfang-an",
 ])
 
 const DARK_MODE_TOKENS = new Set([
@@ -205,6 +212,7 @@ export function parseCollectibleOptions(
   let delayMs = 0
   let delaySeen = false
   let hasOptions = false
+  let initiallyOwned = false
   let onlyOnSlide = false
   let onlyWithoutAnnotations = false
   const themes = new Set<CollectibleTheme>()
@@ -214,6 +222,15 @@ export function parseCollectibleOptions(
     const token = rawToken.trim()
     if (!token) continue
     const normalized = normalizeToken(token)
+
+    if (START_INVENTORY_TOKENS.has(normalized)) {
+      hasOptions = true
+      if (initiallyOwned) {
+        errors.push("startinventar darf nur einmal angegeben werden.")
+      }
+      initiallyOwned = true
+      continue
+    }
 
     if (ONLY_ON_SLIDE_TOKENS.has(normalized)) {
       onlyOnSlide = true
@@ -286,9 +303,20 @@ export function parseCollectibleOptions(
     values.push(token)
   }
 
+  if (initiallyOwned) {
+    const conflicts: string[] = []
+    if (onlyOnSlide) conflicts.push("anker")
+    if (delaySeen) conflicts.push("Verzögerung")
+    if (themes.size > 0) conflicts.push("Theme")
+    if (variants.size > 0) conflicts.push("Farbmodus")
+    if (onlyWithoutAnnotations) conflicts.push("Annotationsbedingung")
+    errors.push(...startInventoryConflictErrors(true, conflicts))
+  }
+
   return {
     errors,
     hasOptions,
+    ...(initiallyOwned ? { initiallyOwned: true as const } : {}),
     rule: {
       delayMs,
       onlyOnSlide,
@@ -301,6 +329,21 @@ export function parseCollectibleOptions(
     valid: errors.length === 0,
     values,
   }
+}
+
+export function startInventoryConflictErrors(
+  initiallyOwned: boolean | undefined,
+  conflicts: readonly string[],
+): string[] {
+  if (!initiallyOwned) return []
+  const unique = [...new Set(conflicts.filter(Boolean))]
+  return unique.length === 0
+    ? []
+    : [
+        "startinventar darf nicht mit erwerbssteuernden Optionen kombiniert werden: " +
+          unique.join(", ") +
+          ".",
+      ]
 }
 
 function configuredThemes(

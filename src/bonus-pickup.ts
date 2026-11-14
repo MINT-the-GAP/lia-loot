@@ -351,6 +351,13 @@ function syncBonusPickup(host: HTMLElement): void {
     clearBonusHost(host)
     return
   }
+  if (request.initiallyOwned) {
+    eligibleIds.delete(id)
+    grantsById.delete(id)
+    visibilityGate.forget(id)
+    clearBonusHost(host)
+    return
+  }
   const grant = request.grant
   grantsById.set(id, grant)
   if (controller.collected(id, grant) && !collectingIds.has(id)) {

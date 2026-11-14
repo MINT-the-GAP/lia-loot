@@ -1,5 +1,4 @@
 import {
-  isKeyColorRequest,
   KEY_COLOR_DETAILS,
   requestedKeyColor,
   resolveKeyAppearance,
@@ -13,18 +12,19 @@ import type { KeyColor } from "./key-colors.ts"
 import {
   CollectibleVisibilityGate,
   collectibleVisibilitySignature,
-  parseCollectibleOptions,
   type CollectibleVisibilityRule,
 } from "./collectible-visibility.ts"
 import {
-  extractConcealmentOptions,
   setHostConcealment,
   type ConcealmentMode,
 } from "./concealment.ts"
 import {
-  parseExplorationOptions,
   type RevealLayerOption,
 } from "./exploration-options.ts"
+import {
+  parseKeyPickupOptions,
+} from "./key-options.ts"
+export { parseKeyPickupOptions } from "./key-options.ts"
 import {
   clearHostRevealLayers,
   hostIsRevealBlocked,
@@ -38,7 +38,6 @@ import {
   sourceSlideIsActive,
 } from "./slide-activity.ts"
 import {
-  resolveSurfaceTarget,
   surfaceTargetElement,
   surfaceTargetIsGrouped,
   type SurfaceTarget,
@@ -60,6 +59,7 @@ interface KeyRequest {
   concealment: ConcealmentMode | null
   errors: string[]
   inline: boolean
+  initiallyOwned?: true
   layers: RevealLayerOption[]
   placement: SurfaceTarget | null
   requestedColor: string | null
@@ -77,17 +77,6 @@ interface SurfaceKeyRequest {
   requestedColor: string | null
   sourceHost?: HTMLElement
   sourceSection: number | null
-  visibility: CollectibleVisibilityRule
-}
-
-export interface ParsedKeyPickupOptions {
-  concealment: ConcealmentMode | null
-  errors: string[]
-  inline: boolean
-  layers: RevealLayerOption[]
-  placement: SurfaceTarget | null
-  requestedColor: string | null
-  valid: boolean
   visibility: CollectibleVisibilityRule
 }
 
@@ -215,53 +204,6 @@ function bindKeyButton(button: HTMLButtonElement): void {
   if (boundKeyButtons.has(button)) return
   boundKeyButtons.add(button)
   button.addEventListener("click", handleKeyButtonClick)
-}
-
-export function parseKeyPickupOptions(
-  rawSpecification: string,
-): ParsedKeyPickupOptions {
-  const parsed = parseCollectibleOptions(
-    rawSpecification.trim() === "@0" ? "" : rawSpecification,
-  )
-  const exploration = parseExplorationOptions(parsed.values)
-  const concealment = extractConcealmentOptions(exploration.values)
-  const errors = [...parsed.errors, ...concealment.errors]
-  let placement: SurfaceTarget | null = null
-  let requestedColor: string | null = null
-
-  for (const value of concealment.values) {
-    const target = resolveSurfaceTarget(value)
-    if (target) {
-      if (placement) {
-        errors.push("Für einen Schlüssel darf höchstens ein Oberflächenziel angegeben werden.")
-      } else {
-        placement = target
-      }
-      continue
-    }
-
-    if (isKeyColorRequest(value)) {
-      if (requestedColor !== null) {
-        errors.push("Für einen Schlüssel darf höchstens eine Farbe angegeben werden.")
-      } else {
-        requestedColor = value
-      }
-      continue
-    }
-
-    errors.push(`Unbekannte Schlüsselfarbe, Zielangabe oder Option: ${value}`)
-  }
-
-  return {
-    concealment: concealment.mode,
-    errors,
-    inline: placement === null,
-    layers: exploration.layers,
-    placement,
-    requestedColor,
-    valid: errors.length === 0,
-    visibility: parsed.rule,
-  }
 }
 
 function readKeyRequest(host: HTMLElement): KeyRequest {
@@ -634,6 +576,12 @@ function syncInlineKey(
   request: KeyRequest,
 ): void {
   if (!controller) return
+  if (request.initiallyOwned) {
+    eligibleKeyIds.delete(keyId)
+    visibilityGate.forget(`pickup:${keyId}`)
+    clearKeyHost(host)
+    return
+  }
   if (controller.collected(keyId) && !collectingIds.has(keyId)) {
     eligibleKeyIds.delete(keyId)
     visibilityGate.forget(`pickup:${keyId}`)

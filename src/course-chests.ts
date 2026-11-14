@@ -190,7 +190,7 @@ interface LiaRuntime {
 
 type CourseMarkdownListener = (markdown: string) => void
 
-interface VisibleCourseLine {
+export interface VisibleCourseLine {
   content: string
   rawContent: string
   lootIfCatalogEligible: boolean
@@ -488,7 +488,7 @@ export function parseCourseVersion(markdown: string): string {
   return version || DEFAULT_COURSE_VERSION
 }
 
-function visibleCourseLines(markdown: string): VisibleCourseLine[] {
+export function visibleCourseLines(markdown: string): VisibleCourseLine[] {
   const lines: PendingVisibleCourseLine[] = []
   let fence: Fence | null = null
   let inHtmlComment = false
@@ -900,12 +900,12 @@ function matchingParenthesis(
   return null
 }
 
-interface PuzzlePieceMacroOccurrence {
+export interface PuzzlePieceMacroOccurrence {
   options: string
   start: number
 }
 
-function puzzlePieceMacroOccurrences(
+export function puzzlePieceMacroOccurrences(
   line: string,
 ): PuzzlePieceMacroOccurrence[] {
   const occurrences: PuzzlePieceMacroOccurrence[] = []

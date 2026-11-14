@@ -649,6 +649,63 @@ Direkte Live-Beispiele:
 @Perk(katzenhalsband-rot)
 @Perk(katzenhalsband-blau)
 
+**Items direkt im Startinventar**
+
+          --{{0}}--
+Alle echten, dauerhaft besitzbaren Items können bereits beim Parsen des Kurses
+still ins Inventar gelegt werden. Dafür ergänzt du den jeweiligen Fundaufruf um
+die gemeinsame Option `startinventar`. Die gleichwertigen Aliasse `start` und
+`von-anfang-an` werden NFKC- und groß-/kleinschreibungsunabhängig erkannt:
+
+```markdown
+@HighscoreInfo(startinventar)
+@Atlaskarte(startinventar)
+@Lupe(startinventar)
+@Taschenlampe(startinventar)
+@Schaufel(startinventar)
+@Giesskanne(startinventar)
+@Axt(startinventar)
+@Katze(orange; startinventar)
+@Schluessel(rot; startinventar)
+@Puzzleteil(blau; 2; startinventar)
+@Perk(HighscoreWert; startinventar)
+@Perk(lupenradius-15; startinventar)
+@Perk(katzenhalsband-rot; startinventar)
+```
+
+Eigene Stammdaten des Items bleiben erlaubt: Bei Katze und Schlüssel ist das
+beispielsweise die Farbe, beim Puzzleteil sind es Farbe und Nummer und beim Perk
+der Produktname beziehungsweise Prozentwert. Loot erkennt diese Deklarationen aus
+der vollständigen Kursquelle, nachdem URL, Kursversion und Quellstand bestimmt
+wurden. Anschließend werden sie vor dem ersten Rendern der Funditems über dieselben
+kursgebundenen Stores wie normal gefundene oder gekaufte Items vergeben. Dadurch
+stehen Schild, Begleiter, Inventareinträge und Werkzeugbuttons schon auf der ersten
+Folie bereit, selbst wenn ihr Makro erst auf einer späteren Folie steht. Am Ort des
+Makros erscheint kein Pickup. Es gibt dabei keine Fundanimation, Meldung oder
+Soundausgabe.
+
+Die Initialisierung ist idempotent: Wiederholtes Parsen, Remounts und Neuladen im
+selben Tab vervielfachen weder Schlüssel und Puzzleteile noch Prozent-Perks. Wie der
+übrige Loot-Zustand ist auch die Startausstattung an Kurs-URL, deklarierte Version
+und den Fingerabdruck der geladenen Markdownquelle gebunden. Bereits auf anderem
+Weg vorhandene einmalige Items werden nicht dupliziert. Ein
+`@Perk(HighscoreWert; startinventar)` zeigt zunächst `0`, wenn die zugehörige
+`@Highscore(...)`-Konfiguration erst auf einer späteren Folie ausgeführt wird, und
+aktualisiert sich danach automatisch.
+
+`startinventar` beschreibt Besitz ab Kursstart und darf deshalb nicht mit Optionen
+kombiniert werden, die den Erwerb an eine Fundstelle binden: `anker`, Verzögerungen,
+Theme-, Farbmodus- oder Annotationsbedingungen, Oberflächenziele, `unsichtbar`,
+`zauberstaub`, `nebel` sowie direkte `erde`-/`pflanze`-Schichten. Doppelte
+Startoptionen und solche Widersprüche werden fail-closed abgelehnt und in der
+Browserkonsole erklärt. Deklarationen innerhalb von `@lootif`, Erd-/Pflanzenbereichen,
+Geschenken, Futter oder Holzkisten werden nicht als Startausstattung ausgewertet.
+
+Nicht zum Startinventar gehören Truhen und andere Ressourcenbehälter, Geschenke,
+Futter, Holzkisten, Schlösser und Tore, Freigabecontainer, Shops oder Ressourcen-
+Konfigurationen. Sie besitzen keinen dauerhaften Inventarstatus, der beim Start
+vorweggenommen werden könnte.
+
 ## `@Schatztruhe`
 
           --{{0}}--

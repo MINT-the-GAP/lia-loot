@@ -1,6 +1,5 @@
 import {
   CollectibleVisibilityGate,
-  parseCollectibleOptions,
   type CollectibleVisibilityRule,
 } from "./collectible-visibility.ts"
 import {
@@ -8,15 +7,12 @@ import {
   concealedContentOf,
   CONCEALMENT_CHANGED_EVENT,
   CONCEALMENT_SELECTOR,
-  extractConcealmentOptions,
   prepareConcealedHost,
   setHostConcealment,
   type ConcealmentMode,
 } from "./concealment.ts"
-import {
-  parseExplorationOptions,
-  type RevealLayerOption,
-} from "./exploration-options.ts"
+import type { RevealLayerOption } from "./exploration-options.ts"
+import { parseSimplePickupOptions } from "./simple-pickup-options.ts"
 import { normalizeHiddenMacroArgumentText } from "./hidden-arguments.ts"
 import {
   clearHostRevealLayers,
@@ -129,20 +125,14 @@ function readMagnifierRequest(
   const authored = normalizeMacroPlaceholder(
     host.getAttribute("data-options")?.trim() ?? "",
   )
-  const parsed = parseCollectibleOptions(authored)
-  const exploration = parseExplorationOptions(parsed.values)
-  const concealment = extractConcealmentOptions(exploration.values)
-  const errors = [...parsed.errors, ...concealment.errors]
-  if (concealment.values.length > 0) {
-    errors.push(`Unbekannte Lupenoption: ${concealment.values.join("; ")}`)
-  }
+  const parsed = parseSimplePickupOptions(authored, "Unbekannte Lupenoption")
   return {
-    concealment: concealment.mode,
-    errors,
-    layers: exploration.layers,
+    concealment: parsed.concealment,
+    errors: parsed.errors,
+    layers: parsed.layers,
     sourceSection: sectionFromLootId(magnifierId),
-    valid: errors.length === 0,
-    visibility: parsed.rule,
+    valid: parsed.valid,
+    visibility: parsed.visibility,
   }
 }
 

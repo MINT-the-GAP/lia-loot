@@ -104,3 +104,27 @@ test("liest HighscoreInfo mit gemeinsamen Fundschichten", () => {
   assert.deepEqual(parsed.layers, [{ concealment: "solid", kind: "soil" }])
   assert.equal(parsed.visibility.onlyOnSlide, true)
 })
+
+test("liest Startinventar für Schild, Atlas und Perks ohne Fundschichten", () => {
+  for (const [kind, options] of [
+    ["highscore-info", "startinventar"],
+    ["atlas", "von-anfang-an"],
+    ["perk", "HighscoreWert; START"],
+    ["perk", "energiekistenbonus-10; startinventar"],
+    ["perk", "katzenhalsband-rot; startinventar"],
+  ]) {
+    const parsed = parseBonusPickupOptions(kind, options)
+    assert.equal(parsed.valid, true, `${kind}: ${options}`)
+    assert.equal(parsed.initiallyOwned, true, `${kind}: ${options}`)
+  }
+
+  for (const options of [
+    "startinventar; nebel",
+    "startinventar; unsichtbar",
+    "startinventar; erde",
+  ]) {
+    const parsed = parseBonusPickupOptions("highscore-info", options)
+    assert.equal(parsed.valid, false, options)
+    assert.equal(parsed.grant, null, options)
+  }
+})

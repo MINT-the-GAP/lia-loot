@@ -1,10 +1,8 @@
 import {
   CollectibleVisibilityGate,
-  parseCollectibleOptions,
   type CollectibleVisibilityRule,
 } from "./collectible-visibility.ts"
 import {
-  extractConcealmentOptions,
   setHostConcealment,
   type ConcealmentMode,
 } from "./concealment.ts"
@@ -12,7 +10,6 @@ import {
   catVariantLabel,
   catVariantPickupLabel,
   DEFAULT_CAT_VARIANT,
-  extractCatVariantOptions,
   isCatVariant,
   type CatVariant,
 } from "./cat-catalog.ts"
@@ -28,9 +25,9 @@ import {
   type ResourceVisualKind,
 } from "./resource-visual.ts"
 import {
-  parseExplorationOptions,
   type RevealLayerOption,
 } from "./exploration-options.ts"
+import { parseCatPickupOptions } from "./cat-options.ts"
 import {
   clearHostRevealLayers,
   hostIsRevealBlocked,
@@ -153,26 +150,15 @@ function readCatRequest(host: HTMLElement, catId: string): CatRequest {
   const authored = normalizePlaceholder(
     host.getAttribute("data-options")?.trim() ?? "",
   )
-  const visibility = parseCollectibleOptions(authored)
-  const exploration = parseExplorationOptions(visibility.values)
-  const concealment = extractConcealmentOptions(exploration.values)
-  const color = extractCatVariantOptions(concealment.values)
-  const errors = [
-    ...visibility.errors,
-    ...concealment.errors,
-    ...color.errors,
-  ]
-  if (color.values.length > 0) {
-    errors.push(`Unbekannte Katzenoption: ${color.values.join("; ")}`)
-  }
+  const parsed = parseCatPickupOptions(authored)
   return {
-    concealment: concealment.mode,
-    errors,
-    layers: exploration.layers,
+    concealment: parsed.concealment,
+    errors: parsed.errors,
+    layers: parsed.layers,
     sourceSection: sectionFromLootId(catId),
-    valid: errors.length === 0,
-    variant: color.variant,
-    visibility: visibility.rule,
+    valid: parsed.valid,
+    variant: parsed.variant,
+    visibility: parsed.visibility,
   }
 }
 

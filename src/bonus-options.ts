@@ -1,5 +1,6 @@
 import {
   parseCollectibleOptions,
+  startInventoryConflictErrors,
   type CollectibleVisibilityRule,
 } from "./collectible-visibility.ts"
 import {
@@ -20,6 +21,7 @@ export interface ParsedBonusPickupOptions {
   errors: string[]
   fog: boolean
   grant: ShopGrant | null
+  initiallyOwned?: true
   layers: RevealLayerOption[]
   valid: boolean
   visibility: CollectibleVisibilityRule
@@ -179,12 +181,23 @@ export function parseBonusPickupOptions(
     ...visibility.errors,
     ...concealment.errors,
     ...parsedGrant.errors,
+    ...startInventoryConflictErrors(
+      visibility.initiallyOwned,
+      [
+        ...(fog.enabled ? ["nebel"] : []),
+        ...(concealment.mode ? ["unsichtbar/zauberstaub"] : []),
+        ...(exploration.layers.length > 0
+          ? ["erde-/pflanze-Schichten"]
+          : []),
+      ],
+    ),
   ]
   return {
     concealment: concealment.mode,
     errors,
     fog: fog.enabled,
     grant: errors.length === 0 ? parsedGrant.grant : null,
+    ...(visibility.initiallyOwned ? { initiallyOwned: true as const } : {}),
     layers: exploration.layers,
     valid: errors.length === 0 && parsedGrant.grant !== null,
     visibility: visibility.rule,

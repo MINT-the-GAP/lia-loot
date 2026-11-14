@@ -1,6 +1,7 @@
 import {
   isOnlyOnSlideOption,
   parseCollectibleOptions,
+  startInventoryConflictErrors,
   type CollectibleVisibilityRule,
 } from "./collectible-visibility.ts"
 import {
@@ -67,6 +68,7 @@ export interface ParsedPuzzlePieceOptions {
   color: KeyColor | null
   concealment: ConcealmentMode | null
   errors: string[]
+  initiallyOwned?: true
   layers: RevealLayerOption[]
   number: number | null
   valid: boolean
@@ -396,12 +398,22 @@ export function parsePuzzlePieceOptions(
     ...duplicateVisibilityErrors(optionTokens),
     ...concealment.errors,
     ...invalidPieceOptionErrors(concealment.values),
+    ...startInventoryConflictErrors(
+      visibility.initiallyOwned,
+      [
+        ...(concealment.mode ? ["unsichtbar/zauberstaub"] : []),
+        ...(exploration.layers.length > 0
+          ? ["erde-/pflanze-Schichten"]
+          : []),
+      ],
+    ),
   )
 
   return {
     color,
     concealment: concealment.mode,
     errors,
+    ...(visibility.initiallyOwned ? { initiallyOwned: true as const } : {}),
     layers: exploration.layers,
     number,
     valid: errors.length === 0 && color !== null && number !== null,
