@@ -98,6 +98,7 @@ script:   ./dist/index.js
 @Axt: @LootWerkzeug_(@uid,axe,@0)
 @Shop: @LootShop_(@uid,@0)
 @Atlaskarte: @LootBonus_(@uid,atlas,@0)
+@HighscoreInfo: @LootBonus_(@uid,highscore-info,@0)
 @Perk: @LootBonus_(@uid,perk,@0)
 @Katze: @LootKatze_(@uid,@0)
 @Futter: @LootFutter_(@uid)
@@ -490,6 +491,8 @@ Menge geschrieben. Folgende Artikelbezeichner sind verfügbar:
 | `goldaxt` | verbessert die Axt auf zwei Hiebe pro Frachtkiste |
 | `diamantaxt` | verbessert die Axt auf einen Hieb pro Frachtkiste |
 | `atlaskarte` | legt eine alte Atlaskarte ins Inventar; ein Klick öffnet die Achievement-Übersicht |
+| `highscoreinfo` | legt das kleine Highscore-Schild als Item mit Quizfortschritt ab |
+| `highscorewert` | zeigt auf einem vorhandenen Highscore-Schild den gerundeten Punktestand als natürliche Zahl |
 | `energie-N` | schreibt `N` Energiepunkte gut |
 | `gold-N` | schreibt `N` Goldmünzen gut |
 | `diamanten-N` | schreibt `N` Diamanten gut |
@@ -550,12 +553,12 @@ Die Axtstufen addieren sich nicht: Es gilt immer die beste gefundene oder
 gekaufte Stufe. Eine bessere Axt kann schon vor der eigentlichen `@Axt`
 freigeschaltet werden.
 
-**Findbare Atlaskarte und Perks**
+**Findbare Atlaskarte, Highscore-Schild und Perks**
 
           --{{0}}--
-Atlaskarte und Verbesserungen müssen nicht im Shop gekauft werden. Mit
-`@Atlaskarte` setzt du die Schriftrolle als einmalig findbares Item direkt an die
-Aufrufstelle:
+Atlaskarte, Highscore-Schild und Verbesserungen müssen nicht im Shop gekauft
+werden. Mit `@Atlaskarte` setzt du die Schriftrolle als einmalig findbares Item
+direkt an die Aufrufstelle:
 
 ```markdown
 @Atlaskarte
@@ -564,6 +567,16 @@ Aufrufstelle:
 Nach dem Einsammeln erscheint derselbe Atlas-Button in der Ressourcenleiste wie
 nach einem Kauf. Die Karte und ihr Zustand bleiben kurs-, versions- und
 quellstandgebunden im aktuellen Browser-Tab erhalten.
+
+`@HighscoreInfo` setzt eine kleine Holztafel als einmalig findbares Item. Nach
+dem Einsammeln steht sie dauerhaft unten rechts an der Position der Pixelkatze.
+Ihr Balken zeigt den Anteil aller bewertbaren LiaScript-Quizze, die bereits
+`solved` oder `resolved` sind. Befindet sich auch eine gefundene Katze im Kurs,
+steht beziehungsweise liegt sie auf der oberen Schildkante. Die Tafel ist so
+breit wie die Katzengrafik. `@HighscoreInfo` ist dabei ein Item und kein Perk.
+Erst `@Perk(HighscoreWert)` ergänzt oberhalb des Balkens den aktuellen
+Highscorewert, kaufmännisch gerundet als natürliche Zahl ohne Beschriftung oder
+Maximalwert.
 
 `@Perk(...)` setzt eine einzelne Verbesserung als sichtbares Funditem. Die
 Artikelbezeichnungen entsprechen den gleichnamigen Shopangeboten. Der
@@ -577,6 +590,7 @@ Bedingungen:
 | `@Perk(taschenlampenradius-N)` | vergrößert Lichtkegel und Trefferfläche um `N %` |
 | `@Perk(atlas-kurszahlen)` | schaltet genaue Kurs- und Fortschrittszahlen im Atlas frei |
 | `@Perk(atlas-folieninfo)` | schaltet die offenen Funde der aktuellen Folie im Atlas frei |
+| `@Perk(HighscoreWert)` | zeigt den gerundeten aktuellen Highscorewert als natürliche Zahl oberhalb des Fortschrittsbalkens auf `@HighscoreInfo` |
 | `@Perk(eisenaxt)` | Eisenaxt: vier Hiebe pro Frachtkiste |
 | `@Perk(goldaxt)` | Goldaxt: zwei Hiebe pro Frachtkiste |
 | `@Perk(diamantaxt)` | Diamantaxt: ein Hieb pro Frachtkiste |
@@ -585,7 +599,9 @@ Bedingungen:
 Der Prozentwert `N` ist wie im Shop eine positive ganze Zahl von 1 bis 500.
 Mehrere gefundene oder gekaufte Prozent-Perks addieren sich. Atlas-Perks dürfen
 bereits vor der Atlaskarte gefunden werden; sie werden gespeichert und erscheinen
-automatisch, sobald die Karte später gefunden oder gekauft wird.
+automatisch, sobald die Karte später gefunden oder gekauft wird. Ebenso darf
+`@Perk(HighscoreWert)` bereits vor `@HighscoreInfo` gefunden werden; sichtbar
+wird der Zahlenwert, sobald auch das Schild freigeschaltet ist.
 
 Halsbänder verwenden dieselben zwölf Farbnamen wie Schlüssel und Puzzleteile:
 `rot`, `blau`, `gruen`, `gelb`, `lila`, `orange`, `magenta`, `weiss`,
@@ -594,17 +610,19 @@ vor der Katze eingesammelt werden. Nach dem Katzenfund erscheint es zusammen mit
 „Ohne Halsband“ in der Begleiter-Subbar. Neue Farben werden zunächst automatisch
 angelegt; die spätere Auswahl bleibt beim Neuladen erhalten.
 
-Beide Fundmakros akzeptieren dieselben Bedingungen und Schichten wie andere
+Alle drei Fundmakros akzeptieren dieselben Bedingungen und Schichten wie andere
 Funditems: `anker`, Verzögerungen, Theme-, Farbmodus- und
 Annotationsbedingungen, `unsichtbar`, `zauberstaub`, `nebel` sowie direkte
 `erde`-/`pflanze`-Schichten. Alle Angaben werden mit Semikolons kombiniert:
 
 ```markdown
 @Atlaskarte(anker; erde-unsichtbar)
+@HighscoreInfo(anker; pflanze)
 @Perk(lupenradius-15; zauberstaub; 12s)
 @Perk(taschenlampenradius-20; nebel; pflanze)
 @Perk(atlas-kurszahlen; theme=blau; farbmodus=dunkel)
 @Perk(atlas-folieninfo; annotationen=aus)
+@Perk(HighscoreWert; zauberstaub)
 @Perk(eisenaxt; anker)
 @Perk(goldaxt; zauberstaub)
 @Perk(diamantaxt; 12s)
@@ -618,11 +636,13 @@ Funditem verschwinden; Prozent-Perks bleiben dagegen absichtlich stapelbar.
 Direkte Live-Beispiele:
 
 @Atlaskarte
+@HighscoreInfo
 @Perk(energiekistenbonus-10)
 @Perk(lupenradius-10)
 @Perk(taschenlampenradius-10)
 @Perk(atlas-kurszahlen)
 @Perk(atlas-folieninfo)
+@Perk(HighscoreWert)
 @Perk(eisenaxt)
 @Perk(goldaxt)
 @Perk(diamantaxt)
@@ -791,7 +811,7 @@ Die Sichtbarkeitsbedingungen gelten für alle echten Fund- und Freigabeobjekte:
 | Schlüssel | `@Schluessel` |
 | alle drei Truhenarten | `@Schatztruhe`, `@Diamanttruhe`, `@Energiekiste` |
 | Such- und Aktionswerkzeuge | `@Lupe`, `@Taschenlampe`, `@Schaufel`, `@Giesskanne` |
-| Atlas und Verbesserungen | `@Atlaskarte`, `@Perk` |
+| Atlas, Highscore-Schild und Verbesserungen | `@Atlaskarte`, `@HighscoreInfo`, `@Perk` |
 | Begleiter | `@Katze` |
 | Puzzleteile | `@Puzzleteil` |
 | freizugebende Bereiche | `@Erdhaufen`, `@Pflanze` und der Alias `@Blume` |
@@ -1264,8 +1284,9 @@ Dieser ganze Absatz liegt im Nebel.
 @NebelEnd
 ```
 
-Einzelne Münz-, Diamant- und Energiekisten sowie `@Atlaskarte` und `@Perk`
-akzeptieren Dunkelheit außerdem direkt als Option `nebel`. Bei Truhen funktioniert
+Einzelne Münz-, Diamant- und Energiekisten sowie `@Atlaskarte`,
+`@HighscoreInfo` und `@Perk` akzeptieren Dunkelheit außerdem direkt als Option
+`nebel`. Bei Truhen funktioniert
 das sowohl inline als auch an allen Zieloberflächen,
 also beispielsweise in `menu`, `toc`, `classroom` oder einem Template-Menü. Die
 Aliasse `dunkel`, `dunkelheit`, `fog` und `darkness` sind gleichwertig. Die explizite
@@ -1455,7 +1476,8 @@ aktiviert diese Portion direkt. Aktives Futter wird als Mauszeiger dargestellt.
 Pro Fütterung wird genau eine Portion verbraucht. Eingesammeltes und verfüttertes
 Futter sowie das automatisch eingesammelte Item bleiben im aktuellen Browser-Tab
 für diesen Kurs gespeichert. `@Futter(...)` ist für echte Funditems wie Truhen,
-Schlüssel, Werkzeuge, Puzzleteile, Atlaskarten, Perks oder Katzen vorgesehen;
+Schlüssel, Werkzeuge, Puzzleteile, Atlaskarten, Highscore-Schilder, Perks oder
+Katzen vorgesehen;
 interaktive Bereiche wie Shops und Puzzletore sind kein Futterinhalt.
 
 ## `@Schaufel`, `@Giesskanne`, `@Erdhaufen` und `@Pflanze`
@@ -1577,7 +1599,7 @@ und Zeitoptionen bleiben dabei erhalten:
 | Suchwerkzeuge | `@Lupe`, `@Taschenlampe` |
 | Aktionswerkzeuge | `@Schaufel`, `@Giesskanne` |
 | Puzzleteile | `@Puzzleteil` |
-| Atlas und Verbesserungen | `@Atlaskarte`, `@Perk` |
+| Atlas, Highscore-Schild und Verbesserungen | `@Atlaskarte`, `@HighscoreInfo`, `@Perk` |
 | Begleiter | `@Katze` |
 
 ```markdown

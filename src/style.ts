@@ -811,6 +811,100 @@ lia-loot-cat[hidden] {
   animation: loot-cat-reward 580ms steps(5, end) forwards;
 }
 
+.loot-highscore-info {
+  position: fixed;
+  z-index: 2147482500;
+  right: max(0.8rem, env(safe-area-inset-right));
+  bottom: calc(max(0.65rem, env(safe-area-inset-bottom)) + 3.25rem);
+  width: clamp(8.25rem, 10.5vw, 11.5rem);
+  height: 4.5rem;
+  min-width: 82px;
+  margin: 0;
+  padding: 0.5rem 0.55rem 0.55rem;
+  color: #fff1bb;
+  background:
+    linear-gradient(180deg, transparent 46%, #5e371d 47% 53%, transparent 54%),
+    repeating-linear-gradient(100deg, #9b6130 0 1.2rem, #8a5329 1.2rem 2.35rem);
+  border: 4px solid #3b2416;
+  border-radius: 0.22rem;
+  box-shadow:
+    inset 0 0 0 2px #c48648,
+    5px 6px 0 rgba(8, 15, 28, 0.34);
+  box-sizing: border-box;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.loot-highscore-info::before,
+.loot-highscore-info::after {
+  content: "";
+  position: absolute;
+  top: 0.34rem;
+  width: 0.33rem;
+  height: 0.33rem;
+  background: #e1bc65;
+  border: 1px solid #5b391d;
+  box-shadow: 0 2.9rem 0 #e1bc65, 0 2.9rem 0 1px #5b391d;
+}
+
+.loot-highscore-info::before { left: 0.36rem; }
+.loot-highscore-info::after { right: 0.36rem; }
+
+.loot-highscore-info__score {
+  margin: 0 0 0.38rem;
+  overflow: hidden;
+  color: #fff0bd;
+  font: 900 clamp(1.08rem, 1.75vw, 1.3rem)/1 ui-monospace, "Cascadia Mono", monospace;
+  text-align: center;
+  text-overflow: ellipsis;
+  text-shadow: 2px 2px 0 #4b2b17;
+  white-space: nowrap;
+}
+
+.loot-highscore-info__score[hidden] {
+  display: none;
+}
+
+.loot-highscore-info__progress {
+  position: relative;
+  height: 1.4rem;
+  overflow: hidden;
+  background: #281c15;
+  border: 3px solid #3b2416;
+  box-shadow: inset 0 0 0 1px #130d09;
+  box-sizing: border-box;
+}
+
+.loot-highscore-info[data-loot-highscore-value="false"]
+  .loot-highscore-info__progress {
+  margin-top: 0.82rem;
+}
+
+.loot-highscore-info__progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background:
+    repeating-linear-gradient(90deg, #56b85f 0 0.55rem, #459d50 0.55rem 1.1rem);
+  box-shadow: inset 0 2px 0 rgba(218, 255, 192, 0.35);
+  transition: width 220ms steps(5, end);
+}
+
+.loot-highscore-info__progress-value {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff8d5;
+  font: 900 0.78rem/1 ui-monospace, "Cascadia Mono", monospace;
+  letter-spacing: 0.02em;
+  text-shadow: 1px 1px 0 #172033;
+}
+
+body.loot-highscore-info-owned.loot-cat-owned .loot-cat-companion {
+  bottom: calc(max(0.65rem, env(safe-area-inset-bottom)) + 6.85rem);
+}
+
 .loot-cat-companion {
   appearance: none;
   position: fixed;
@@ -1394,11 +1488,21 @@ body.loot-cat-owned .loot-achievement {
 }
 
 @media (max-width: 36rem) {
+  .loot-highscore-info {
+    right: max(0.35rem, env(safe-area-inset-right));
+    bottom: calc(max(0.35rem, env(safe-area-inset-bottom)) + 3.25rem);
+    width: 7.8rem;
+  }
+
   .loot-cat-companion {
     right: max(0.35rem, env(safe-area-inset-right));
     bottom: calc(max(0.35rem, env(safe-area-inset-bottom)) + 3.25rem);
     width: 7.8rem;
     height: 7.2rem;
+  }
+
+  body.loot-highscore-info-owned.loot-cat-owned .loot-cat-companion {
+    bottom: calc(max(0.35rem, env(safe-area-inset-bottom)) + 6.85rem);
   }
 
   body.loot-cat-owned .loot-achievement {
@@ -1960,6 +2064,19 @@ lia-loot-bonus[hidden] {
   cursor: default;
 }
 
+.loot-bonus-pickup[data-loot-bonus-kind="highscore-info"] {
+  background: transparent;
+  border-radius: 0.25rem;
+  filter: drop-shadow(0.3rem 0.38rem 0 rgba(4, 10, 20, 0.34));
+}
+
+.loot-bonus-pickup[data-loot-bonus-kind="highscore-info"]:is(
+  :hover,
+  :focus-visible
+) {
+  background: rgba(45, 212, 191, 0.09);
+}
+
 .loot-bonus-pickup__visual {
   position: relative;
   width: 4.45rem;
@@ -1975,6 +2092,18 @@ lia-loot-bonus[hidden] {
   max-height: 100%;
   overflow: visible;
   image-rendering: pixelated;
+}
+
+.loot-bonus-pickup[data-loot-bonus-kind="highscore-info"]
+  .loot-bonus-pickup__visual {
+  width: 5.15rem;
+  height: 3.8rem;
+}
+
+.loot-bonus-pickup[data-loot-bonus-kind="highscore-info"]
+  .loot-highscore-info-graphic {
+  width: 5rem;
+  height: 3.25rem;
 }
 
 .loot-bonus-pickup__visual > .loot-atlas-graphic {

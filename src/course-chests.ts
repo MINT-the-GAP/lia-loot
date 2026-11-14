@@ -1,5 +1,9 @@
 import { parseCollectibleOptions } from "./collectible-visibility.ts"
 import {
+  parseBonusPickupOptions,
+  type BonusPickupKind,
+} from "./bonus-options.ts"
+import {
   extractConcealmentOptions,
   type ConcealmentMode,
 } from "./concealment.ts"
@@ -99,6 +103,8 @@ const INTERNAL_LOCK_MACRO =
   /^\s*@LootSchloss_\s*\(\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]+)\s*\)\s*$/
 const ACHIEVEMENT_ITEM_MACRO =
   /^\s*@(Schluessel|Lupe|Taschenlampe|Schaufel|Giesskanne|Axt)(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/iu
+const BONUS_ITEM_MACRO =
+  /^\s*@(Atlaskarte|HighscoreInfo|Perk)(?:\s*\(\s*([^()\r\n]*)\s*\))?\s*$/iu
 const INTERNAL_KEY_MACRO =
   /^\s*@LootSchluessel_\s*\(\s*([^,()\r\n]+)\s*,\s*([^,()\r\n]*)\s*\)\s*$/iu
 const INTERNAL_MAGNIFIER_MACRO =
@@ -788,6 +794,21 @@ function publicItemAchievementCatalog(
       if (item) addAchievementCatalog(catalog, item)
     }
     return catalog
+  }
+
+  const bonus = BONUS_ITEM_MACRO.exec(line)
+  if (bonus) {
+    const name = bonus[1].toLocaleLowerCase("de-DE")
+    const kind: BonusPickupKind =
+      name === "atlaskarte"
+        ? "atlas"
+        : name === "highscoreinfo"
+          ? "highscore-info"
+          : "perk"
+    const parsed = parseBonusPickupOptions(kind, bonus[2] ?? "")
+    return parsed.valid
+      ? achievementCatalogForOptions(parsed.concealment, parsed.layers)
+      : null
   }
 
   const match = ACHIEVEMENT_ITEM_MACRO.exec(line)
@@ -1802,6 +1823,10 @@ async function loadCourseMarkdown(): Promise<string | null> {
   } finally {
     courseMarkdownPromise = null
   }
+}
+
+export async function discoverCourseMarkdown(): Promise<string | null> {
+  return loadCourseMarkdown()
 }
 
 export async function discoverCourseChestDeclarations(): Promise<

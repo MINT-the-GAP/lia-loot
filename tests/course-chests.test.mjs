@@ -756,6 +756,22 @@ test("katalogisiert alle verdeckten Itemfamilien und multipliziert Portaltruhen"
   })
 })
 
+test("katalogisiert Atlas, Highscore-Schild und Perks mit Fundschichten", () => {
+  const markdown = [
+    "# Bonusfunde",
+    "@Atlaskarte(erde-unsichtbar)",
+    "@HighscoreInfo(pflanze; zauberstaub)",
+    "@Perk(HighscoreWert; unsichtbar)",
+  ].join("\n")
+
+  assert.deepEqual(parseCourseAchievementCatalog(markdown), {
+    dust: 1,
+    plant: 1,
+    soil: 1,
+    solid: 2,
+  })
+})
+
 test("katalogisiert Inline-Erde und -Pflanzen im Fliesstext", () => {
   const markdown = [
     "# Inline",

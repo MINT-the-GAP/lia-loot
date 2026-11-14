@@ -178,10 +178,19 @@ function autoRewardDescriptor(
       hostSelector: `lia-loot-tool[data-tool-id="${scopedId}"]`,
     }
   }
-  if (name === "atlaskarte" || name === "perk") {
+  if (
+    name === "atlaskarte" ||
+    name === "highscoreinfo" ||
+    name === "perk"
+  ) {
     return {
       buttonSelector: "[data-loot-bonus-pickup]",
-      fallbackLabel: name === "atlaskarte" ? "Atlaskarte" : "Verbesserung",
+      fallbackLabel:
+        name === "atlaskarte"
+          ? "Atlaskarte"
+          : name === "highscoreinfo"
+            ? "Highscore-Schild"
+            : "Verbesserung",
       hostSelector: `lia-loot-bonus[data-bonus-id="${scopedId}"]`,
     }
   }

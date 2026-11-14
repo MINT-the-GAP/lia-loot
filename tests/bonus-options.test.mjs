@@ -41,6 +41,10 @@ test("liest alle findbaren Prozent-, Atlas- und Axt-Perks", () => {
       "atlas-folieninfo",
       { kind: "unlock", unlock: "atlas-slide-info" },
     ],
+    [
+      "HighscoreWert",
+      { kind: "unlock", unlock: "highscore-value" },
+    ],
     ["eisenaxt", { kind: "unlock", unlock: "axe-iron" }],
     ["goldaxt", { kind: "unlock", unlock: "axe-gold" }],
     ["diamantaxt", { kind: "unlock", unlock: "axe-diamond" }],
@@ -83,4 +87,20 @@ test("weist Produktnamen am Atlaskartenmakro geschlossen zurück", () => {
   const parsed = parseBonusPickupOptions("atlas", "lupenradius-10")
   assert.equal(parsed.valid, false)
   assert.equal(parsed.grant, null)
+})
+
+test("liest HighscoreInfo mit gemeinsamen Fundschichten", () => {
+  const parsed = parseBonusPickupOptions(
+    "highscore-info",
+    "anker; 3s; erde-unsichtbar; zauberstaub",
+  )
+
+  assert.equal(parsed.valid, true)
+  assert.deepEqual(parsed.grant, {
+    kind: "unlock",
+    unlock: "highscore-info",
+  })
+  assert.equal(parsed.concealment, "dust")
+  assert.deepEqual(parsed.layers, [{ concealment: "solid", kind: "soil" }])
+  assert.equal(parsed.visibility.onlyOnSlide, true)
 })

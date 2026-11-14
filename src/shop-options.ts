@@ -19,6 +19,8 @@ export type ShopUnlockKind =
   | "atlas"
   | "atlas-course-counts"
   | "atlas-slide-info"
+  | "highscore-info"
+  | "highscore-value"
   | AxeUpgradeUnlock
 
 export type ShopProduct =
@@ -154,6 +156,33 @@ function parseProduct(raw: string): { error: string | null; product: ShopProduct
     return {
       error: null,
       product: { kind: "unlock", unlock: "atlas-slide-info" },
+    }
+  }
+
+  if (
+    [
+      "highscoreinfo",
+      "highscore-info",
+      "highscoreschild",
+      "highscore-schild",
+    ].includes(token)
+  ) {
+    return {
+      error: null,
+      product: { kind: "unlock", unlock: "highscore-info" },
+    }
+  }
+  if (
+    [
+      "highscorewert",
+      "highscore-wert",
+      "highscorevalue",
+      "highscore-value",
+    ].includes(token)
+  ) {
+    return {
+      error: null,
+      product: { kind: "unlock", unlock: "highscore-value" },
     }
   }
 

@@ -1,5 +1,6 @@
 import { createExplorationToolGraphic } from "./exploration-visual.ts"
 import { createFlashlightGraphic } from "./flashlight-visual.ts"
+import { createHighscoreInfoGraphic } from "./highscore-info.ts"
 import { KEY_COLOR_DETAILS } from "./key-colors.ts"
 import { createMagnifierGraphic } from "./magnifier-visual.ts"
 import { createPuzzlePieceGraphic } from "./puzzle-visual.ts"
@@ -148,6 +149,12 @@ function productGraphic(offer: ShopOffer, ownerDocument: Document): SVGElement {
     if (axeTier) {
       return createExplorationToolGraphic("axe", ownerDocument, axeTier)
     }
+    if (
+      product.unlock === "highscore-info" ||
+      product.unlock === "highscore-value"
+    ) {
+      return createHighscoreInfoGraphic(ownerDocument)
+    }
   }
   return createAtlasGraphic(ownerDocument)
 }
@@ -200,6 +207,18 @@ function productText(offer: ShopOffer): { description: string; title: string } {
       return {
         description: `Zerstört eine Holzkiste mit ${details.hits} ${details.hits === 1 ? "Hieb" : "Hieben"}.`,
         title: `Axt-Perk: ${details.label}`,
+      }
+    }
+    if (product.unlock === "highscore-info") {
+      return {
+        description: "Zeigt den Anteil gelöster oder aufgelöster Quizze.",
+        title: "Item: Highscore-Schild",
+      }
+    }
+    if (product.unlock === "highscore-value") {
+      return {
+        description: "Blendet den aktuellen Highscorewert auf dem Schild ein.",
+        title: "Perk: Highscorewert",
       }
     }
     return product.unlock === "atlas-course-counts"

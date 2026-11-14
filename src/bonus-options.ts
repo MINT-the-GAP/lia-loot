@@ -13,7 +13,7 @@ import {
 import { parseShopProduct } from "./shop-options.ts"
 import type { ShopGrant } from "./shop-store.ts"
 
-export type BonusPickupKind = "atlas" | "perk"
+export type BonusPickupKind = "atlas" | "highscore-info" | "perk"
 
 export interface ParsedBonusPickupOptions {
   concealment: ConcealmentMode | null
@@ -152,7 +152,23 @@ export function parseBonusPickupOptions(
             ],
             grant: null,
           }
-      : perkGrant(authored.product ? [authored.product] : [])
+      : kind === "highscore-info"
+        ? exploration.values.length === 0
+          ? {
+              errors: [] as string[],
+              grant: {
+                kind: "unlock",
+                unlock: "highscore-info",
+              } as ShopGrant,
+            }
+          : {
+              errors: [
+                "Unbekannte HighscoreInfo-Optionen: " +
+                  exploration.values.join("; "),
+              ],
+              grant: null,
+            }
+        : perkGrant(authored.product ? [authored.product] : [])
   if (kind === "perk" && exploration.values.length > 0) {
     parsedGrant.errors.push(
       `Unbekannte Perkoptionen: ${exploration.values.join(", ")}.`,

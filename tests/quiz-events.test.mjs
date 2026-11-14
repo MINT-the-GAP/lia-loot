@@ -147,6 +147,29 @@ test("unterscheidet vollständig gelöst von gelöst oder aufgelöst", () => {
   assert.equal(progress.allSolved(), true)
 })
 
+test("meldet Prozentfortschritt gegen den vollständigen Quellkatalog", () => {
+  const progress = new CourseQuizProgress()
+  progress.expectSections([0, 1, 2])
+  progress.expectQuizTotal(4)
+
+  progress.catalogSection(0, [{ id: "first", state: "solved" }])
+  assert.deepEqual(progress.progress(), {
+    completed: 1,
+    percent: 25,
+    total: 4,
+  })
+
+  progress.catalogSection(1, [
+    { id: "second", state: "resolved" },
+    { id: "third", state: "open" },
+  ])
+  assert.deepEqual(progress.progress(), {
+    completed: 2,
+    percent: 50,
+    total: 4,
+  })
+})
+
 function checkClick({
   open = true,
   disabled = false,

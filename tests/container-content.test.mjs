@@ -24,6 +24,10 @@ test("erzeugt entpackte Items direkt mit containergebundener ID", () => {
     scopeContainerContent("@Lupe", "gift:7"),
     '<lia-keep>\n<lia-loot-magnifier data-magnifier-id="gift_7_content" data-options=""></lia-loot-magnifier>\n</lia-keep>',
   )
+  assert.equal(
+    scopeContainerContent("@HighscoreInfo(anker)", "gift:8"),
+    '<lia-keep>\n<lia-loot-bonus data-bonus-id="gift_8_content" data-bonus-kind="highscore-info" data-options="anker"></lia-loot-bonus>\n</lia-keep>',
+  )
 })
 
 test("escaped Optionen koennen keine Elementattribute verlassen", () => {

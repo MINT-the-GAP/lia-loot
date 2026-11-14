@@ -83,6 +83,29 @@ test("speichert Atlaskarte und beide Atlas-Perks kursgebunden", () => {
   assert.equal(restored.hasUnlock("atlas-slide-info"), true)
 })
 
+test("speichert Highscore-Schild und Highscorewert kursgebunden", () => {
+  browserSession()
+  const first = new ShopStore()
+  assert.equal(
+    first.recordPurchase("pickup:highscore-info", {
+      kind: "unlock",
+      unlock: "highscore-info",
+    }),
+    true,
+  )
+  assert.equal(
+    first.recordPurchase("pickup:highscore-value", {
+      kind: "unlock",
+      unlock: "highscore-value",
+    }),
+    true,
+  )
+
+  const restored = new ShopStore()
+  assert.equal(restored.hasUnlock("highscore-info"), true)
+  assert.equal(restored.hasUnlock("highscore-value"), true)
+})
+
 test("wendet stets den stärksten freigeschalteten Axt-Perk an", () => {
   browserSession()
   const store = new ShopStore()

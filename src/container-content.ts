@@ -195,6 +195,12 @@ export function scopeContainerContent(
         ["data-bonus-kind", "atlas"],
         ["data-options", options],
       ])
+    case "highscoreinfo":
+      return lootElement("lia-loot-bonus", [
+        ["data-bonus-id", scopedId],
+        ["data-bonus-kind", "highscore-info"],
+        ["data-options", options],
+      ])
     case "perk":
       return lootElement("lia-loot-bonus", [
         ["data-bonus-id", scopedId],

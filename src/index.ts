@@ -67,6 +67,11 @@ import {
 } from "./course-chests"
 import { prepareLiaCourseIdentity } from "./course-identity"
 import { hideHighscore, showHighscore } from "./popup"
+import {
+  installHighscoreInfo,
+  refreshHighscoreInfo,
+  updateHighscoreInfoProgress,
+} from "./highscore-info"
 import { installQuizEventTracking } from "./quiz-events"
 import {
   announceResource,
@@ -155,6 +160,7 @@ function boot(): void {
     }
     refreshLootIf()
     refreshShops()
+    refreshHighscoreInfo()
     return allowed
   }
 
@@ -188,6 +194,7 @@ function boot(): void {
     refreshLootIf()
     refreshShops()
     notifyCatItemFound()
+    refreshHighscoreInfo()
     return true
   }
 
@@ -210,6 +217,7 @@ function boot(): void {
     refreshTreasureChests()
     refreshLootIf()
     refreshShops()
+    refreshHighscoreInfo()
   }
 
   const api: HighscoreApi = {
@@ -225,14 +233,17 @@ function boot(): void {
       )
       store.configure(config)
       achievements.highscoreFinished(null, config.maxPoints)
+      refreshHighscoreInfo()
     },
 
     fail(count = 1) {
       store.fail(count)
+      refreshHighscoreInfo()
     },
 
     hint(count = 1) {
       store.hint(count)
+      refreshHighscoreInfo()
     },
 
     finish() {
@@ -245,6 +256,7 @@ function boot(): void {
         )
         showHighscore(score, state.config.maxPoints)
       }
+      refreshHighscoreInfo()
       return score
     },
 
@@ -256,6 +268,7 @@ function boot(): void {
         null,
         state?.config.maxPoints ?? Number.NaN,
       )
+      refreshHighscoreInfo()
     },
 
     score(at) {
@@ -290,6 +303,11 @@ function boot(): void {
   }
 
   injectStyles()
+  installHighscoreInfo({
+    owned: () => shopStore.hasUnlock("highscore-info"),
+    score: () => store.score(),
+    scoreVisible: () => shopStore.hasUnlock("highscore-value"),
+  })
   installGifts({
     isOpened: (giftId) => giftStore.isOpened(giftId),
     open: (giftId) => giftStore.open(giftId),
@@ -532,17 +550,32 @@ function boot(): void {
       return {
         message: axeTier
           ? "Diese oder eine bessere Axtstufe ist bereits freigeschaltet."
-          : "Dieser Atlas-Perk ist bereits freigeschaltet.",
+          : offer.product.unlock === "highscore-info"
+            ? "Das Highscore-Schild ist bereits freigeschaltet."
+            : offer.product.unlock === "highscore-value"
+              ? "Der Highscorewert ist bereits freigeschaltet."
+              : "Dieser Atlas-Perk ist bereits freigeschaltet.",
         state: "owned",
       }
     }
     if (
       offer.product.kind === "unlock" &&
-      !axeTierForUnlock(offer.product.unlock) &&
+      (offer.product.unlock === "atlas-course-counts" ||
+        offer.product.unlock === "atlas-slide-info") &&
       !shopStore.hasUnlock("atlas")
     ) {
       return {
         message: "Kaufe zuerst die Atlaskarte.",
+        state: "unavailable",
+      }
+    }
+    if (
+      offer.product.kind === "unlock" &&
+      offer.product.unlock === "highscore-value" &&
+      !shopStore.hasUnlock("highscore-info")
+    ) {
+      return {
+        message: "Finde oder kaufe zuerst das Highscore-Schild.",
         state: "unavailable",
       }
     }
@@ -674,6 +707,7 @@ function boot(): void {
     refreshPuzzles()
     refreshAtlas()
     refreshCatCompanion()
+    refreshHighscoreInfo()
     refreshBonusPickups()
     refreshLootIf()
     refreshShops()
@@ -685,7 +719,11 @@ function boot(): void {
         : product.kind === "unlock"
           ? axeTierForUnlock(product.unlock)
             ? `${AXE_TIER_DETAILS[axeTierForUnlock(product.unlock)!].label} gekauft und freigeschaltet.`
-            : "Atlas-Perk gekauft und freigeschaltet."
+            : product.unlock === "highscore-info"
+              ? "Highscore-Schild gekauft und freigeschaltet."
+              : product.unlock === "highscore-value"
+                ? "Highscorewert gekauft und freigeschaltet."
+                : "Atlas-Perk gekauft und freigeschaltet."
           : product.kind === "perk"
         ? `Perk gekauft: +${product.percent} %.`
         : "Gekauft und sofort ins Inventar übernommen."
@@ -719,6 +757,7 @@ function boot(): void {
       refreshWoodCrates()
       refreshAtlas()
       refreshCatCompanion()
+      refreshHighscoreInfo()
       refreshLootIf()
       refreshShops()
       refreshBonusPickups()
@@ -809,6 +848,7 @@ function boot(): void {
     failed: () => store.fail(),
     hint: (count) => store.hint(count),
     includeSection: reserveSlideCountsForCourseProgress,
+    progress: updateHighscoreInfoProgress,
     solved: (quiz) => {
       rewardReserveQuiz(quiz)
       recordLootIfQuizSolved(quiz)

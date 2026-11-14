@@ -20,6 +20,7 @@ import {
 } from "./exploration.ts"
 import { clearHostFog, setHostFog } from "./flashlight.ts"
 import { createFlashlightGraphic } from "./flashlight-visual.ts"
+import { createHighscoreInfoGraphic } from "./highscore-info.ts"
 import { createMagnifierGraphic } from "./magnifier-visual.ts"
 import { announceResource } from "./resource-bar.ts"
 import { createResourceGraphic } from "./resource-visual.ts"
@@ -61,7 +62,9 @@ const warnedIds = new Set<string>()
 
 function bonusKind(host: HTMLElement): BonusPickupKind | null {
   const kind = host.getAttribute("data-bonus-kind")?.trim()
-  return kind === "atlas" || kind === "perk" ? kind : null
+  return kind === "atlas" || kind === "highscore-info" || kind === "perk"
+    ? kind
+    : null
 }
 
 function resolveBonusId(host: HTMLElement, kind: BonusPickupKind): string {
@@ -108,6 +111,10 @@ function grantName(grant: ShopGrant): string {
   if (grant.kind === "unlock") {
     const axeTier = axeTierForUnlock(grant.unlock)
     if (axeTier) return `Axt-Perk „${AXE_TIER_DETAILS[axeTier].label}“`
+    if (grant.unlock === "highscore-info") return "Highscore-Schild"
+    if (grant.unlock === "highscore-value") {
+      return "Perk „Highscorewert“"
+    }
     return grant.unlock === "atlas"
       ? "Atlaskarte"
       : grant.unlock === "atlas-course-counts"
@@ -131,6 +138,12 @@ function grantMessage(grant: ShopGrant): string {
       const details = AXE_TIER_DETAILS[axeTier]
       return `Axt-Perk gefunden: ${details.label} benötigt nur noch ${details.hits} ${details.hits === 1 ? "Hieb" : "Hiebe"} pro Holzkiste.`
     }
+    if (grant.unlock === "highscore-info") {
+      return "Highscore-Schild gefunden. Dein Quizfortschritt wird jetzt angezeigt."
+    }
+    if (grant.unlock === "highscore-value") {
+      return "Perk gefunden: aktueller Highscorewert freigeschaltet."
+    }
     return grant.unlock === "atlas"
       ? "Atlaskarte gefunden. Du kannst sie jetzt in der Leiste öffnen."
       : grant.unlock === "atlas-course-counts"
@@ -144,11 +157,13 @@ function grantMessage(grant: ShopGrant): string {
       : "Perk gefunden: +" + grant.percent + " % Taschenlampenradius."
 }
 
-function grantChip(grant: ShopGrant): string {
+function grantChip(grant: ShopGrant): string | null {
   if (grant.kind === "collar") return "HALSBAND"
   if (grant.kind === "perk") return "+" + grant.percent + " %"
   const axeTier = axeTierForUnlock(grant.unlock)
   if (axeTier) return AXE_TIER_DETAILS[axeTier].hits + "×"
+  if (grant.unlock === "highscore-info") return null
+  if (grant.unlock === "highscore-value") return "WERT"
   return grant.unlock === "atlas"
     ? "ATLAS"
     : grant.unlock === "atlas-course-counts"
@@ -169,6 +184,12 @@ function grantGraphic(
     graphic = createCatCollarGraphic(ownerDocument, grant.color)
   } else if (axeTier) {
     graphic = createExplorationToolGraphic("axe", ownerDocument, axeTier)
+  } else if (
+    grant.kind === "unlock" &&
+    (grant.unlock === "highscore-info" ||
+      grant.unlock === "highscore-value")
+  ) {
+    graphic = createHighscoreInfoGraphic(ownerDocument)
   } else if (grant.kind === "unlock") {
     graphic = createAtlasGraphic(ownerDocument)
   } else if (grant.perk === "energy-chest") {
@@ -179,10 +200,14 @@ function grantGraphic(
     graphic = createFlashlightGraphic(ownerDocument)
   }
   graphic.classList.add("loot-bonus-pickup__graphic")
-  const chip = ownerDocument.createElement("span")
-  chip.className = "loot-bonus-pickup__chip"
-  chip.textContent = grantChip(grant)
-  visual.append(graphic, chip)
+  visual.append(graphic)
+  const chipText = grantChip(grant)
+  if (chipText !== null) {
+    const chip = ownerDocument.createElement("span")
+    chip.className = "loot-bonus-pickup__chip"
+    chip.textContent = chipText
+    visual.append(chip)
+  }
   return visual
 }
 
@@ -196,6 +221,7 @@ function foundBadge(ownerDocument: Document): HTMLSpanElement {
 
 function createBonusButton(
   id: string,
+  kind: BonusPickupKind,
   grant: ShopGrant,
   ownerDocument: Document,
 ): HTMLButtonElement {
@@ -203,6 +229,7 @@ function createBonusButton(
   button.type = "button"
   button.className = "loot-bonus-pickup"
   button.dataset.lootBonusPickup = id
+  button.dataset.lootBonusKind = kind
   button.setAttribute("aria-label", grantName(grant) + " einsammeln")
   button.append(grantGraphic(grant, ownerDocument), foundBadge(ownerDocument))
   button.addEventListener("click", handlePickup)
@@ -247,7 +274,10 @@ function focusGrantedControl(grant: ShopGrant): void {
       : grant.kind === "unlock" && axeTierForUnlock(grant.unlock)
       ? "#lia-loot-axe-tool"
       : grant.kind === "unlock"
-      ? "#lia-loot-atlas-tool"
+      ? grant.unlock === "highscore-info" ||
+        grant.unlock === "highscore-value"
+        ? "#lia-loot-highscore-info"
+        : "#lia-loot-atlas-tool"
       : grant.perk === "magnifier-radius"
         ? "#lia-loot-magnifier-tool"
         : grant.perk === "flashlight-radius"
@@ -357,7 +387,7 @@ function syncBonusPickup(host: HTMLElement): void {
     setHostConcealment(contentHost, null)
     clearHostFog(contentHost)
     contentHost.replaceChildren(
-      createBonusButton(id, grant, host.ownerDocument),
+      createBonusButton(id, kind, grant, host.ownerDocument),
     )
     button = contentHost.querySelector("[data-loot-bonus-pickup]")
   }

@@ -77,6 +77,18 @@ test("liest Katzenhalsbänder in der gemeinsamen Loot-Farbpalette", () => {
   )
 })
 
+test("liest Highscore-Schild und Highscorewert als Unlocks", () => {
+  const parsed = parseShopOptions(
+    "highscoreinfo=2gold; HighscoreWert=1diamant",
+  )
+
+  assert.deepEqual(parsed.errors, [])
+  assert.deepEqual(parsed.offers.map((offer) => offer.product), [
+    { kind: "unlock", unlock: "highscore-info" },
+    { kind: "unlock", unlock: "highscore-value" },
+  ])
+})
+
 test("begrenzt Angebotszahl, Mengen, Prozentwerte und leere Shops", () => {
   assert.equal(parseShopOptions("").offers.length, 0)
   assert.match(parseShopOptions("").errors[0], /keine Angebote/u)

@@ -1,4 +1,8 @@
-import { onCourseMarkdownChange } from "./course-chests.ts"
+import {
+  discoverCourseMarkdown,
+  onCourseMarkdownChange,
+} from "./course-chests.ts"
+import { parseCourseQuizCounts } from "./quiz-catalog.ts"
 import { observeLiaSlideActivity } from "./slide-activity.ts"
 
 const CHECK_SELECTOR = ".lia-quiz__check"
@@ -12,6 +16,7 @@ export interface QuizEventHandlers {
   failed(): void
   hint(count: number): void
   includeSection?(section: number): boolean
+  progress?(snapshot: CourseQuizProgressSnapshot): void
   solved(quiz: Element): void
   allSolved?(): void
   courseCompleted(): boolean
@@ -85,7 +90,14 @@ export interface CourseQuizRecord {
   state: CourseQuizState
 }
 
+export interface CourseQuizProgressSnapshot {
+  completed: number
+  percent: number
+  total: number
+}
+
 export class CourseQuizProgress {
+  private expectedQuizTotal: number | null = null
   private expectedSections = new Set<number>()
   private visitedSections = new Set<number>()
   private quizIds = new Map<number, Set<string>>()
@@ -93,6 +105,7 @@ export class CourseQuizProgress {
   private solvedQuizzes = new Set<string>()
 
   reset(): void {
+    this.expectedQuizTotal = null
     this.expectedSections.clear()
     this.visitedSections.clear()
     this.quizIds.clear()
@@ -106,6 +119,11 @@ export class CourseQuizProgress {
         (section) => Number.isInteger(section) && section >= 0,
       ),
     )
+  }
+
+  expectQuizTotal(total: number | null): void {
+    this.expectedQuizTotal =
+      total !== null && Number.isInteger(total) && total >= 0 ? total : null
   }
 
   catalogSection(
@@ -135,6 +153,18 @@ export class CourseQuizProgress {
 
   allSolved(): boolean {
     return this.allKnownQuizzesAre(this.solvedQuizzes)
+  }
+
+  progress(): CourseQuizProgressSnapshot {
+    let knownTotal = 0
+    for (const ids of this.quizIds.values()) knownTotal += ids.size
+    const total = Math.max(this.expectedQuizTotal ?? 0, knownTotal)
+    const completed = Math.min(total, this.completedQuizzes.size)
+    return {
+      completed,
+      percent: total > 0 ? Math.round((completed / total) * 100) : 0,
+      total,
+    }
   }
 
   private allKnownQuizzesAre(completed: ReadonlySet<string>): boolean {
@@ -333,6 +363,11 @@ export function installQuizEventTracking(handlers: QuizEventHandlers): void {
   let allSolvedReported = false
   let captureScheduled = false
   let reportAfterCapture = false
+  let sourceQuizCounts: Map<number, number> | null = null
+
+  const publishProgress = (): void => {
+    handlers.progress?.(courseProgress.progress())
+  }
 
   const captureCourseProgress = (): void => {
     const sections = new Set(
@@ -342,14 +377,28 @@ export function installQuizEventTracking(handlers: QuizEventHandlers): void {
     )
     if (sections.size === 0) return
     courseProgress.expectSections(sections)
+    if (sourceQuizCounts) {
+      let total = 0
+      for (const section of sections) {
+        total += sourceQuizCounts.get(section) ?? 0
+      }
+      courseProgress.expectQuizTotal(total)
+    }
 
     const activeSlide = document.querySelector<HTMLElement>(
       ".lia-slide__container > main.lia-slide__content:not([hidden])",
     )
-    if (!activeSlide) return
+    if (!activeSlide) {
+      publishProgress()
+      return
+    }
     const section = activeCourseSection(activeSlide, sections)
-    if (section === null) return
+    if (section === null) {
+      publishProgress()
+      return
+    }
     courseProgress.catalogSection(section, renderedQuizRecords(activeSlide))
+    publishProgress()
   }
 
   const reportCourseCompletion = (): void => {
@@ -386,6 +435,19 @@ export function installQuizEventTracking(handlers: QuizEventHandlers): void {
         })
       })
     }, 0)
+  }
+
+  const applyCourseMarkdown = (
+    markdown: string,
+    resetProgress: boolean,
+  ): void => {
+    sourceQuizCounts = parseCourseQuizCounts(markdown)
+    if (resetProgress) {
+      courseProgress.reset()
+      courseCompletionReported = false
+      allSolvedReported = false
+    }
+    scheduleCapture(false)
   }
 
   if (
@@ -425,11 +487,9 @@ export function installQuizEventTracking(handlers: QuizEventHandlers): void {
       childList: true,
       subtree: true,
     })
-    onCourseMarkdownChange(() => {
-      courseProgress.reset()
-      courseCompletionReported = false
-      allSolvedReported = false
-      scheduleCapture(false)
+    onCourseMarkdownChange((markdown) => applyCourseMarkdown(markdown, true))
+    void discoverCourseMarkdown().then((markdown) => {
+      if (markdown !== null) applyCourseMarkdown(markdown, false)
     })
     captureCourseProgress()
   }
