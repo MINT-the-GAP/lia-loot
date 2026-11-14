@@ -5,6 +5,8 @@ import { gardens, gardenIds, expectLockedGarden, navigateGarden, openGarden, per
 const courseUrl = 'https://raw.githubusercontent.com/MINT-the-GAP/Wochenaufgabe/refs/heads/main/5/Mathematik/Lia5_03.md'
 const published = 'https://liascript.github.io/course/?' + courseUrl
 
+test.use({ serviceWorkers: 'block' })
+
 // The published renderer and every original course import are real. Only this
 // repository's template and built bundle are replaced with the candidate fix.
 test('veroeffentlichter Originalkurs mit allen Importen: Garten und Navigation', async ({ page }, testInfo) => {
